@@ -11,14 +11,14 @@ import {
   getOnTheAirTVShows,
   type MediaItem,
 } from '@/lib/tmdb'
-import { auth } from '@/lib/auth'
+import { getSessionSafe } from '@/lib/auth'
 import { headers } from 'next/headers'
 
 export default async function HomePage() {
-  const session = await auth.api.getSession({ headers: await headers() }).catch(() => null)
+  const session = await getSessionSafe(await headers())
 
   const [trending, popularMovies, topRatedMovies, popularTV, nowPlaying, onTheAir] = await Promise.all([
-    getTrending('all', 'week'),
+    getTrending(),
     getPopularMovies(),
     getTopRatedMovies(),
     getPopularTVShows(),
@@ -47,7 +47,7 @@ export default async function HomePage() {
         {/* Now Playing Movies */}
         <MediaRow
           title="Now Playing"
-          items={nowPlaying.results}
+          items={nowPlaying.results.map(m => ({ ...m, media_type: 'movie' as const }))}
           mediaType="movie"
           viewAllHref="/movies?category=now_playing"
         />
@@ -55,7 +55,7 @@ export default async function HomePage() {
         {/* Popular Movies */}
         <MediaRow
           title="Popular Movies"
-          items={popularMovies.results}
+          items={popularMovies.results.map(m => ({ ...m, media_type: 'movie' as const }))}
           mediaType="movie"
           viewAllHref="/movies"
         />
@@ -63,7 +63,7 @@ export default async function HomePage() {
         {/* On The Air TV Shows */}
         <MediaRow
           title="On The Air"
-          items={onTheAir.results}
+          items={onTheAir.results.map(t => ({ ...t, title: t.name, media_type: 'tv' as const }))}
           mediaType="tv"
           viewAllHref="/tv-shows?category=on_the_air"
         />
@@ -71,7 +71,7 @@ export default async function HomePage() {
         {/* Popular TV Shows */}
         <MediaRow
           title="Popular TV Shows"
-          items={popularTV.results}
+          items={popularTV.results.map(t => ({ ...t, title: t.name, media_type: 'tv' as const }))}
           mediaType="tv"
           viewAllHref="/tv-shows"
         />
@@ -79,7 +79,7 @@ export default async function HomePage() {
         {/* Top Rated Movies */}
         <MediaRow
           title="Top Rated Movies"
-          items={topRatedMovies.results}
+          items={topRatedMovies.results.map(m => ({ ...m, media_type: 'movie' as const }))}
           mediaType="movie"
           viewAllHref="/movies?category=top_rated"
         />
@@ -93,7 +93,7 @@ export default async function HomePage() {
               StreamVibe - Your ultimate streaming destination
             </p>
             <p className="text-xs text-muted-foreground">
-              Powered by TMDB API. This is a demo application.
+              Demo application with mock data
             </p>
           </div>
         </div>

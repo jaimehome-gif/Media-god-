@@ -1,7 +1,12 @@
 import { betterAuth } from 'better-auth'
-import { pool } from '@/lib/db'
+import { Pool } from 'pg'
 
-export const auth = betterAuth({
+// Only create pool if DATABASE_URL is set
+const pool = process.env.DATABASE_URL 
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null
+
+export const auth = pool ? betterAuth({
   database: pool,
   baseURL:
     process.env.BETTER_AUTH_URL ??
@@ -35,4 +40,14 @@ export const auth = betterAuth({
         },
       }
     : {}),
-})
+}) : null
+
+// Helper to safely get session
+export async function getSessionSafe(headers: Headers) {
+  if (!auth) return null
+  try {
+    return await auth.api.getSession({ headers })
+  } catch {
+    return null
+  }
+}

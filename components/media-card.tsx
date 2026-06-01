@@ -1,10 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
-import { Play, Star, Plus, Heart, Users } from 'lucide-react'
+import { Play, Star, Plus, Heart, Users, Film, Tv } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getImageUrl, type MediaItem, type Movie, type TVShow } from '@/lib/tmdb'
+import { type MediaItem, type Movie, type TVShow } from '@/lib/tmdb'
 import { useSession } from '@/lib/auth-client'
 import { addToWatchlist, addToFavorites, createWatchParty } from '@/app/actions/media'
 import { toast } from 'sonner'
@@ -18,6 +17,23 @@ interface MediaCardProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
+// Generate consistent gradient based on item id
+function getGradient(id: number, type: string): string {
+  const gradients = [
+    'from-red-900 via-red-800 to-rose-900',
+    'from-blue-900 via-indigo-900 to-purple-900',
+    'from-emerald-900 via-teal-900 to-cyan-900',
+    'from-amber-900 via-orange-900 to-red-900',
+    'from-violet-900 via-purple-900 to-fuchsia-900',
+    'from-slate-900 via-zinc-800 to-neutral-900',
+    'from-cyan-900 via-sky-900 to-blue-900',
+    'from-pink-900 via-rose-900 to-red-900',
+    'from-lime-900 via-green-900 to-emerald-900',
+    'from-fuchsia-900 via-pink-900 to-rose-900',
+  ]
+  return gradients[id % gradients.length]
+}
+
 export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: MediaCardProps) {
   const { data: session } = useSession()
   const router = useRouter()
@@ -27,7 +43,7 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
   const title = 'title' in item ? item.title : item.name
   const date = 'release_date' in item ? item.release_date : ('first_air_date' in item ? item.first_air_date : undefined)
   const year = date ? new Date(date).getFullYear() : null
-  const posterUrl = getImageUrl(item.poster_path, 'w500')
+  const gradient = getGradient(item.id, type)
 
   const sizeClasses = {
     sm: 'w-[140px]',
@@ -124,19 +140,19 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
       className={`group flex-shrink-0 ${sizeClasses[size]}`}
     >
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-secondary">
-        {posterUrl ? (
-          <Image
-            src={posterUrl}
-            alt={title || 'Media poster'}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-            sizes="(max-width: 768px) 140px, 180px"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-secondary">
-            <Play className="w-12 h-12 text-muted-foreground" />
+        {/* Gradient poster placeholder */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+            {type === 'movie' ? (
+              <Film className="w-12 h-12 text-white/30 mb-3" />
+            ) : (
+              <Tv className="w-12 h-12 text-white/30 mb-3" />
+            )}
+            <p className="text-white/60 text-xs font-medium text-center line-clamp-3">
+              {title}
+            </p>
           </div>
-        )}
+        </div>
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -184,6 +200,11 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
             {item.vote_average.toFixed(1)}
           </div>
         )}
+
+        {/* Media type badge */}
+        <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-primary/80 backdrop-blur-sm text-xs font-medium uppercase">
+          {type}
+        </div>
       </div>
 
       <div className="mt-2 px-1">
