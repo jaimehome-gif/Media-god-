@@ -1,0 +1,48 @@
+export interface StreamOption {
+  id: string;
+  filename: string;
+  filesize: number;
+  resolution: '4K' | '1080p' | '720p' | 'SD' | 'CAM';
+  seeders?: number;
+  hash: string;
+}
+
+export function parseResolution(filename: string): '4K' | '1080p' | '720p' | 'SD' | 'CAM' {
+  const lower = filename.toLowerCase();
+  
+  if (
+    lower.includes('cam') || 
+    lower.includes('ts') || 
+    lower.includes('telesync') || 
+    lower.includes('scr') || 
+    lower.includes('screener') || 
+    lower.includes('r5') ||
+    lower.includes('hdcam')
+  ) {
+    return 'CAM';
+  }
+
+  if (lower.includes('2160p') || lower.includes('4k') || lower.includes('uhd')) return '4K';
+  if (lower.includes('1080p') || lower.includes('fhd')) return '1080p';
+  if (lower.includes('720p') || lower.includes('hd')) return '720p';
+  return 'SD';
+}
+
+export function selectBestQualityStream(streams: StreamOption[]): StreamOption | null {
+  if (!streams || streams.length === 0) return null;
+
+  const rankWeight = { '4K': 4, '1080p': 3, '720p': 2, 'SD': 1, 'CAM': 0 };
+
+  const sorted = [...streams].sort((a, b) => {
+    const resA = parseResolution(a.filename);
+    const resB = parseResolution(b.filename);
+
+    if (rankWeight[resA] !== rankWeight[resB]) {
+      return rankWeight[resB] - rankWeight[resA];
+    }
+
+    return b.filesize - a.filesize;
+  });
+
+  return sorted[0];
+}

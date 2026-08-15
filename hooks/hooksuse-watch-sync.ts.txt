@@ -1,0 +1,32 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+
+export function useWatchSync(partyId: string, isHost: boolean) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => {
+    if (!partyId) return;
+
+    const interval = setInterval(() => {
+      // Sync room state fetch logic
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [partyId]);
+
+  const handleTimeUpdate = (time: number) => {
+    if (isHost) {
+      setCurrentTime(time);
+    }
+  };
+
+  return {
+    isPlaying,
+    currentTime,
+    setIsPlaying,
+    setCurrentTime,
+    handleTimeUpdate,
+  };
+}
