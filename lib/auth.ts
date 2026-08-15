@@ -1,8 +1,11 @@
-import { betterAuth } from 'better-auth'
-import { pool } from '@/lib/db'
+ import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { db } from '@/lib/db' // Assuming your Drizzle db instance is exported from here
 
 export const auth = betterAuth({
-  database: pool,
+  database: drizzleAdapter(db, {
+    provider: 'pg', // PostgreSQL provider
+  }),
   baseURL:
     process.env.BETTER_AUTH_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
