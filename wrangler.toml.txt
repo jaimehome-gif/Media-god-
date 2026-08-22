@@ -1,4 +1,4 @@
- name = "media-god"
+name = "media-god"
 main = ".open-next/worker.js"
 compatibility_date = "2026-08-22"
 compatibility_flags = ["nodejs_compat"]
