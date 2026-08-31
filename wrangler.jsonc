@@ -1,0 +1,20 @@
+{
+  "name": "media-god",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "no_bundle": true,
+  "pages_build_output_dir": ".open-next/assets",
+  "assets": {
+    "directory": ".open-next/assets"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "media-god-database",
+      "database_id": "383763b7-def5-450f-a25d-f330338da73a"
+    }
+  ]
+}
