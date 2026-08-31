@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ServiceWorkerRegistrar } from './service-worker-registrar'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -52,6 +53,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <ServiceWorkerRegistrar />
           <Toaster position="bottom-right" theme="dark" />
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </ThemeProvider>
