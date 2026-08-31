@@ -1,3 +1,8 @@
+Package Breakdown
+ * Next.js & Cloudflare Adaptation: The current configuration uses Next.js 16.2.6, which triggers peer dependency conflicts with @opennextjs/cloudflare. Updating the package configuration ensures proper alignment with the build toolchain.
+ * Core Dependencies: Keeps all Radix UI components, Drizzle ORM, better-auth, Tailwind v4 postcss tools, and Lucide icons intact while updating the required target versions.
+Updated package.json
+Replace your current package.json file with this fully updated version, which adjusts the Next.js and React dependency version targets to clear the peer dependency mismatch and allow Cloudflare to render your pages properly:
 {
   "name": "my-project",
   "version": "0.1.0",
@@ -50,12 +55,12 @@
     "kysely": "^0.29.2",
     "lucide-react": "^0.564.0",
     "nanoid": "^5.1.11",
-    "next": "16.2.6",
+    "next": "^16.3.3",
     "next-themes": "^0.4.6",
     "pg": "^8.21.0",
-    "react": "^19",
+    "react": "19.2.4",
     "react-day-picker": "9.13.2",
-    "react-dom": "^19",
+    "react-dom": "19.2.4",
     "react-hook-form": "^7.54.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
@@ -63,17 +68,18 @@
     "swr": "^2.4.1",
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
-    "zod": "^3.24.1"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "^24",
     "@types/pg": "^8.20.0",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "postcss": "^8.5",
     "tailwindcss": "^4.2.0",
     "tw-animate-css": "1.3.3",
     "typescript": "5.7.3"
   }
 }
+
