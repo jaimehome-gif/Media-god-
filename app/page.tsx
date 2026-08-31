@@ -1,3 +1,8 @@
+lCode Breakdown
+ * Asynchronous Server Component: The page runs server-side, fetching multiple TMDB feeds concurrently via Promise.all (trending, movies, TV shows) and safely checking user session headers to conditionally display user-specific rows like "Continue Watching".
+ * Component Composition: It structures the streaming dashboard by feeding typed arrays into reusable layout blocks (Navbar, HeroSlider, and multiple variants of MediaRow), finishing with a responsive page footer.
+Section 1: Verified Home Page Entry (app/page.tsx)
+This clean, properly structured variant ensures everything integrates smoothly with your updated layout:
 import { Navbar } from '@/components/navbar'
 import { HeroSlider } from '@/components/hero-slider'
 import { MediaRow } from '@/components/media-row'
@@ -27,7 +32,7 @@ export default async function HomePage() {
   ])
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background text-foreground">
       <Navbar />
 
       {/* Hero Section */}
@@ -101,3 +106,4 @@ export default async function HomePage() {
     </main>
   )
 }
+
