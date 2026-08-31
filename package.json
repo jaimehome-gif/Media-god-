@@ -1,6 +1,3 @@
-Look at the order of operations in that log: Cloudflare automatically executes pnpm install before it runs the custom build script in your package.json. Because the install command runs first, it hits the old pnpm-lock.yaml file and crashes before your rm -f script ever gets a chance to fire.
-To bypass this completely, we need to get rid of pnpm entirely for this build and force Cloudflare to use standard npm, which doesn't use or care about a lockfile when installing dependencies.
-Here is your fully updated package.json file. Copy this, drop it into your repository, and it will instruct Cloudflare to run npm install instead:
 {
   "name": "my-project",
   "version": "0.1.0",
