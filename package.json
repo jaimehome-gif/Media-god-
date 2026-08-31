@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "pnpm config set enforce-lockfile false && next build",
+    "build": "rm -f pnpm-lock.yaml && next build",
     "start": "next start",
     "lint": "eslint ."
   },
