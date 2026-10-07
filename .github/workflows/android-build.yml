@@ -29,12 +29,12 @@ jobs:
           java-version: 21
 
       - name: Set up Android SDK
-        shell: bash
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
-          echo "PATH=${ANDROID_HOME:-$ANDROID_SDK_ROOT}/platform-tools:${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/35.0.0:$PATH" >> "$GITHUB_ENV"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
       # Optional: configure a real release keystore from repository secrets.
       # If the STREAMVIBE_KEYSTORE_BASE64 secret is not set, the build falls
