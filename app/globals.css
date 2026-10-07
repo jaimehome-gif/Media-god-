@@ -72,12 +72,44 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
+  * { @apply border-border outline-ring/50; }
+  html { min-width: 320px; background: var(--background); }
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
+  button, a, [role='button'], select { touch-action: manipulation; }
+  :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+}
+
+/* Fire TV / Android TV remote navigation */
+.tv-focus-target:focus-visible,
+.tv-focus-target:focus {
+  transform: scale(1.025);
+  box-shadow: 0 0 0 3px var(--ring), 0 8px 30px rgb(0 0 0 / 0.45);
+  z-index: 20;
+}
+
+@media (min-width: 1200px) and (hover: none), (min-width: 1200px) and (pointer: coarse) {
+  body.tv-mode button,
+  body.tv-mode a,
+  body.tv-mode [role='button'],
+  body.tv-mode select { min-height: 48px; }
+}
+
+@media (max-width: 640px) {
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+}
+
+@media (orientation: landscape) and (max-width: 900px) {
+  .mobile-landscape-compact { min-height: 100svh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
 /* Custom scrollbar for the app */
