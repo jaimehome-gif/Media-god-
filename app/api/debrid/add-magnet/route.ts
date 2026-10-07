@@ -31,7 +31,16 @@ export async function POST(request: Request) {
     if (!addResponse.ok) {
       const errText = await addResponse.text()
       console.error('Real-Debrid addMagnet error:', addResponse.status, errText)
-      return NextResponse.json({ error: `Failed to add torrent: ${addResponse.status}` }, { status: addResponse.status })
+      let message = `Failed to add torrent (${addResponse.status})`
+      try {
+        const errJson = JSON.parse(errText)
+        if (errJson.error_code === 35 || errJson.error === 'infringing_file') {
+          message = 'Real-Debrid blocked this torrent. Try a different one.'
+        } else if (errJson.error) {
+          message = `Real-Debrid error: ${errJson.error}`
+        }
+      } catch { /* keep default */ }
+      return NextResponse.json({ error: message }, { status: addResponse.status })
     }
 
     const added = await addResponse.json()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Play, Download, Loader2, ExternalLink, ChevronDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -41,6 +41,57 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   const [streamUrl, setStreamUrl] = useState<string | null>(null)
   const [selectedSeason, setSelectedSeason] = useState(1)
   const [selectedEpisode, setSelectedEpisode] = useState(1)
+  const [polling, setPolling] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current)
+      pollRef.current = null
+    }
+    setPolling(false)
+  }, [])
+
+  const pollTorrentStatus = useCallback(async (torrentId: number) => {
+    setPolling(true)
+    let attempts = 0
+    const maxAttempts = 40 // ~2 minutes at 3s intervals
+
+    const check = async () => {
+      attempts++
+      try {
+        const res = await fetch(`/api/debrid/torrent-status?id=${torrentId}`)
+        const data = await res.json()
+
+        if (data.error) {
+          stopPolling()
+          toast.error(data.error)
+          return
+        }
+
+        if (data.ready && data.streamingUrl) {
+          stopPolling()
+          setStreamUrl(data.streamingUrl)
+          toast.success('Stream ready!')
+          return
+        }
+
+        if (attempts >= maxAttempts) {
+          stopPolling()
+          toast.error('Torrent is taking too long to process. Try another one.')
+          return
+        }
+
+        pollRef.current = setTimeout(check, 3000)
+      } catch {
+        stopPolling()
+        toast.error('Failed to check torrent status')
+      }
+    }
+
+    check()
+  }, [stopPolling])
 
   const isTV = mediaType === 'tv'
   const validSeasons = seasons?.filter((s) => s.season_number > 0) || []
@@ -86,6 +137,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   const handleAddMagnet = async (torrent: TorrentResult) => {
     setAdding(torrent.infoHash)
     setStreamUrl(null)
+    setStreamError(null)
 
     try {
       const response = await fetch('/api/debrid/add-magnet', {
@@ -100,6 +152,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       const data: StreamResult = await response.json()
 
       if (data.error) {
+        setStreamError(data.error)
         toast.error(data.error)
         return
       }
@@ -107,10 +160,14 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       if (data.streamingUrl) {
         setStreamUrl(data.streamingUrl)
         toast.success('Stream ready!')
+      } else if (data.torrentId) {
+        toast.info('Torrent added — waiting for Real-Debrid to process...')
+        pollTorrentStatus(data.torrentId)
       } else {
         toast.info(data.message || 'Torrent added to Real-Debrid. Processing...')
       }
     } catch {
+      setStreamError('Failed to add torrent to Real-Debrid')
       toast.error('Failed to add torrent to Real-Debrid')
     } finally {
       setAdding(null)
@@ -124,6 +181,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         className="gap-2 w-full sm:w-auto"
         onClick={() => {
           setOpen(!open)
+          setStreamError(null)
           if (!open && results.length === 0) {
             handleSearch()
           }
@@ -189,6 +247,24 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               Searching for torrents...
+            </div>
+          )}
+
+          {/* Error state */}
+          {streamError && !streamUrl && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <X className="w-5 h-5 text-red-500" />
+              <span className="text-sm text-red-500 font-medium flex-1">{streamError}</span>
+            </div>
+          )}
+
+          {/* Polling — waiting for Real-Debrid to process */}
+          {polling && !streamUrl && (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-primary/10 border border-primary/30">
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <span className="text-sm text-primary font-medium flex-1">
+                Waiting for Real-Debrid to process the torrent...
+              </span>
             </div>
           )}
 
