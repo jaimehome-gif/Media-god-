@@ -55,6 +55,9 @@ jobs:
             echo "No release keystore secret — building debug-signed release APKs."
           fi
 
+      - name: Prepare Capacitor web directory
+        run: mkdir -p out
+
       - name: Sync Capacitor Android project
         run: pnpm cap:sync
 
