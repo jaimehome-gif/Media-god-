@@ -1,0 +1,74 @@
+name: Build Android APKs
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Optional: configure a real release keystore from repository secrets.
+      # If the STREAMVIBE_KEYSTORE_BASE64 secret is not set, the build falls
+      # back to the debug signing key (still produces installable APKs).
+      - name: Configure release keystore
+        env:
+          KS_B64: ${{ secrets.STREAMVIBE_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.STREAMVIBE_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.STREAMVIBE_KEY_ALIAS }}
+          KS_KEY_PASS: ${{ secrets.STREAMVIBE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > android/app/release.keystore
+            echo "STREAMVIBE_KEYSTORE_FILE=release.keystore" >> "$GITHUB_ENV"
+            echo "STREAMVIBE_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+            echo "STREAMVIBE_KEY_ALIAS=$KS_ALIAS" >> "$GITHUB_ENV"
+            echo "STREAMVIBE_KEY_PASSWORD=$KS_KEY_PASS" >> "$GITHUB_ENV"
+            echo "Release keystore configured."
+          else
+            echo "No release keystore secret — building debug-signed release APKs."
+          fi
+
+      - name: Sync Capacitor Android project
+        run: pnpm cap:sync
+
+      - name: Build release APKs (phone + Fire TV)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build debug APKs (phone + Fire TV)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: streamvibe-apks
+          path: |
+            android/app/build/outputs/apk/phone/release/*.apk
+            android/app/build/outputs/apk/firetv/release/*.apk
+            android/app/build/outputs/apk/phone/debug/*.apk
+            android/app/build/outputs/apk/firetv/debug/*.apk
+          if-no-files-found: error
