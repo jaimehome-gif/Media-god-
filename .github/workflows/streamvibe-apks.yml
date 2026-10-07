@@ -1,0 +1,33 @@
+name: Build StreamVibe APKs
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Sync Capacitor
+        run: npm run cap:sync
+      - name: Build Phone and Fire TV releases
+        working-directory: android
+        run: ./gradlew assemblePhoneRelease assembleFiretvRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StreamVibe-Phone-APK
+          path: android/app/build/outputs/apk/phone/release/app-phone-release.apk
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StreamVibe-Fire-TV-APK
+          path: android/app/build/outputs/apk/firetv/release/app-firetv-release.apk
+          if-no-files-found: error
+          retention-days: 30
