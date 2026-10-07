@@ -9,22 +9,49 @@ import {
   getPopularTVShows,
   getNowPlayingMovies,
   getOnTheAirTVShows,
+  getMovieGenres,
+  getTVGenres,
   type MediaItem,
 } from '@/lib/tmdb'
+import { HomeFilters } from '@/components/home-filters'
 import { getSessionSafe } from '@/lib/auth'
 import { headers } from 'next/headers'
 
 export default async function HomePage() {
   const session = await getSessionSafe(await headers())
 
-  const [trending, popularMovies, topRatedMovies, popularTV, nowPlaying, onTheAir] = await Promise.all([
+  const [trending, popularMovies, topRatedMovies, popularTV, nowPlaying, onTheAir, movieGenres, tvGenres] = await Promise.all([
     getTrending(),
     getPopularMovies(),
     getTopRatedMovies(),
     getPopularTVShows(),
     getNowPlayingMovies(),
     getOnTheAirTVShows(),
+    getMovieGenres().catch(() => []),
+    getTVGenres().catch(() => []),
   ])
+
+  // Combined pool for the Browse filter section (deduped by id+type)
+  const browsePool: MediaItem[] = (() => {
+    const seen = new Set<string>()
+    const add = (arr: MediaItem[]) => {
+      for (const item of arr) {
+        const key = `${item.id}-${item.media_type}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          pool.push(item)
+        }
+      }
+    }
+    const pool: MediaItem[] = []
+    add(trending as MediaItem[])
+    add(popularMovies.results.map((m) => ({ ...m, title: m.title, media_type: 'movie' as const })) as MediaItem[])
+    add(topRatedMovies.results.map((m) => ({ ...m, title: m.title, media_type: 'movie' as const })) as MediaItem[])
+    add(popularTV.results.map((t) => ({ ...t, title: t.name, media_type: 'tv' as const })) as MediaItem[])
+    add(nowPlaying.results.map((m) => ({ ...m, title: m.title, media_type: 'movie' as const })) as MediaItem[])
+    add(onTheAir.results.map((t) => ({ ...t, title: t.name, media_type: 'tv' as const })) as MediaItem[])
+    return pool
+  })()
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -34,6 +61,9 @@ export default async function HomePage() {
       <HeroSlider items={trending.slice(0, 6) as MediaItem[]} />
 
       <div className="flex flex-col gap-8 py-8">
+        {/* Browse with filters */}
+        <HomeFilters items={browsePool} movieGenres={movieGenres} tvGenres={tvGenres} />
+
         {/* Continue Watching - Only for logged in users */}
         {session?.user && <ContinueWatchingRow />}
 
