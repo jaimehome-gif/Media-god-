@@ -1,6 +1,6 @@
 import { Tv, Radio, Globe, Film, Music, Gamepad2, Newspaper, Trophy } from 'lucide-react'
 import Link from 'next/link'
-import Navbar from '@/components/navbar'
+import { Navbar } from '@/components/navbar'
 
 export const metadata = {
   title: 'Live TV - StreamVibe',
