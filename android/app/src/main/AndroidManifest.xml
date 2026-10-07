@@ -17,10 +17,9 @@
             android:launchMode="singleTask"
             android:exported="true">
 
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- Launcher intent-filters are declared per flavor
+                 (src/phone and src/firetv) so each device type gets the
+                 correct launcher category. -->
 
         </activity>
 
@@ -38,4 +37,5 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

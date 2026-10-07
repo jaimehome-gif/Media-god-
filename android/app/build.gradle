@@ -3,6 +3,7 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.streamvibe.app"
     compileSdk rootProject.ext.compileSdkVersion
+
     defaultConfig {
         applicationId "com.streamvibe.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -16,10 +17,67 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // Release signing configuration.
+    //
+    // Provide a real keystore via android/keystore.properties for Play Store /
+    // Appstore distribution:
+    //   storeFile=release.keystore
+    //   storePassword=...
+    //   keyAlias=...
+    //   keyPassword=...
+    //
+    // In CI you can instead set the STREAMVIBE_KEYSTORE_FILE / _PASSWORD /
+    // _ALIAS / _KEY_PASSWORD environment variables. When neither is present the
+    // release build falls back to the debug signing key, so a release APK is
+    // always produced and installable for local testing.
+    signingConfigs {
+        release {
+            def props = new Properties()
+            def propsFile = rootProject.file('keystore.properties')
+            if (propsFile.exists()) {
+                props.load(new FileInputStream(propsFile))
+            }
+            if (props.containsKey('storeFile')) {
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            } else if (System.env.STREAMVIBE_KEYSTORE_FILE) {
+                storeFile file(System.env.STREAMVIBE_KEYSTORE_FILE)
+                storePassword System.env.STREAMVIBE_KEYSTORE_PASSWORD
+                keyAlias System.env.STREAMVIBE_KEY_ALIAS
+                keyPassword System.env.STREAMVIBE_KEY_PASSWORD
+            } else {
+                // No release keystore configured — reuse the debug key so the
+                // release APK is still signed and installable for testing.
+                storeFile signingConfigs.debug.storeFile
+                storePassword signingConfigs.debug.storePassword
+                keyAlias signingConfigs.debug.keyAlias
+                keyPassword signingConfigs.debug.keyPassword
+            }
+        }
+    }
+
+    // Two build flavors: a touch-first phone/tablet build and a D-pad/remote
+    // Fire TV / Fire Stick build. Source sets live in src/phone and src/firetv.
+    flavorDimensions = ['device']
+    productFlavors {
+        phone {
+            dimension "device"
+            // Standard phone/tablet — full touch, any orientation.
+        }
+        firetv {
+            dimension "device"
+            // Amazon Fire TV / Fire Stick — D-pad/remote, landscape, leanback.
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }

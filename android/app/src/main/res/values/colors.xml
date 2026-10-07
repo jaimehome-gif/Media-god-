@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- StreamVibe brand colours (match the web app's cinematic dark theme). -->
+    <color name="colorPrimary">#e8553e</color>
+    <color name="colorPrimaryDark">#1a1625</color>
+    <color name="colorAccent">#e8553e</color>
+    <color name="ic_launcher_background">#1a1625</color>
+</resources>

@@ -34,12 +34,12 @@ export function useTvNavigation() {
     style.id = 'streamvibe-tv-focus'
     style.textContent = `
       .tv-mode *:focus-visible {
-        outline: 3px solid #8b5cf6 !important;
+        outline: 3px solid #e8553e !important;
         outline-offset: 2px !important;
         border-radius: 6px;
       }
       .tv-mode *:focus {
-        outline: 3px solid #8b5cf6 !important;
+        outline: 3px solid #e8553e !important;
         outline-offset: 2px !important;
       }
       .tv-mode .group-hover\\:opacity-100 { opacity: 1 !important; }
