@@ -36,7 +36,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["sh", "-ec", "npm install -g pnpm@9 && pnpm install && exec pnpm exec next dev -H 0.0.0.0 -p 3000"]
+    command: ["sh", "-ec", "npm install -g pnpm@9 && CI=true pnpm install --frozen-lockfile && exec pnpm exec next dev -H 0.0.0.0 -p 3000"]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
       interval: 10s

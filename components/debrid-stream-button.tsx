@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
-import { Play, Download, Loader2, ExternalLink, ChevronDown, X } from 'lucide-react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Play, Download, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { DebridVideoPlayer } from '@/components/debrid-video-player'
 
 interface DebridStreamButtonProps {
   title: string
@@ -17,20 +18,20 @@ interface TorrentResult {
   size: string
   quality: string
   infoHash: string
-  fileIdx: number
   seeders: number
   provider: string
   languages: string[]
 }
 
 interface StreamResult {
-  torrentId?: number
+  torrentId?: string
   status?: string
   downloadUrl?: string | null
   streamingUrl?: string
   filename?: string
   message?: string
   error?: string
+  code?: string
 }
 
 export function DebridStreamButton({ title, imdbId, mediaType, seasons }: DebridStreamButtonProps) {
@@ -43,9 +44,12 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   const [selectedEpisode, setSelectedEpisode] = useState(1)
   const [polling, setPolling] = useState(false)
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [blockedHashes, setBlockedHashes] = useState<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollRunRef = useRef(0)
 
   const stopPolling = useCallback(() => {
+    pollRunRef.current++
     if (pollRef.current) {
       clearTimeout(pollRef.current)
       pollRef.current = null
@@ -53,7 +57,13 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
     setPolling(false)
   }, [])
 
-  const pollTorrentStatus = useCallback(async (torrentId: number) => {
+  useEffect(() => () => {
+    pollRunRef.current++
+    if (pollRef.current) clearTimeout(pollRef.current)
+  }, [])
+
+  const pollTorrentStatus = useCallback(async (torrentId: string, infoHash: string) => {
+    const run = ++pollRunRef.current
     setPolling(true)
     let attempts = 0
     const maxAttempts = 40 // ~2 minutes at 3s intervals
@@ -63,9 +73,12 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       try {
         const res = await fetch(`/api/debrid/torrent-status?id=${torrentId}`)
         const data = await res.json()
+        if (run !== pollRunRef.current) return
 
         if (data.error) {
           stopPolling()
+          setStreamError(data.error)
+          if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, infoHash]))
           toast.error(data.error)
           return
         }
@@ -73,19 +86,22 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         if (data.ready && data.streamingUrl) {
           stopPolling()
           setStreamUrl(data.streamingUrl)
-          toast.success('Stream ready!')
+          toast.info('Video prepared — loading player...')
           return
         }
 
         if (attempts >= maxAttempts) {
           stopPolling()
-          toast.error('Torrent is taking too long to process. Try another one.')
+          setStreamError('Real-Debrid is still processing this torrent. Please try again later.')
+          toast.error('Real-Debrid is still processing this torrent. Please try again later.')
           return
         }
 
         pollRef.current = setTimeout(check, 3000)
       } catch {
+        if (run !== pollRunRef.current) return
         stopPolling()
+        setStreamError('Failed to check torrent status')
         toast.error('Failed to check torrent status')
       }
     }
@@ -104,6 +120,9 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       return
     }
 
+    stopPolling()
+    setStreamError(null)
+    setBlockedHashes(new Set())
     setSearching(true)
     setResults([])
     setStreamUrl(null)
@@ -122,7 +141,9 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       const response = await fetch(`/api/debrid/search?${params}`)
       const data = await response.json()
 
-      if (data.streams?.length > 0) {
+      if (!response.ok || data.error) {
+        setStreamError(data.error || 'Failed to search for torrents')
+      } else if (data.streams?.length > 0) {
         setResults(data.streams)
       } else {
         toast.info('No torrents found for this title')
@@ -135,6 +156,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   }
 
   const handleAddMagnet = async (torrent: TorrentResult) => {
+    stopPolling()
     setAdding(torrent.infoHash)
     setStreamUrl(null)
     setStreamError(null)
@@ -145,7 +167,6 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           infoHash: torrent.infoHash,
-          fileIdx: torrent.fileIdx,
         }),
       })
 
@@ -153,16 +174,17 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
 
       if (data.error) {
         setStreamError(data.error)
+        if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, torrent.infoHash]))
         toast.error(data.error)
         return
       }
 
       if (data.streamingUrl) {
         setStreamUrl(data.streamingUrl)
-        toast.success('Stream ready!')
+        toast.info('Video prepared — loading player...')
       } else if (data.torrentId) {
         toast.info('Torrent added — waiting for Real-Debrid to process...')
-        pollTorrentStatus(data.torrentId)
+        pollTorrentStatus(data.torrentId, torrent.infoHash)
       } else {
         toast.info(data.message || 'Torrent added to Real-Debrid. Processing...')
       }
@@ -181,6 +203,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         className="gap-2 w-full sm:w-auto"
         onClick={() => {
           setOpen(!open)
+          if (open) stopPolling()
           setStreamError(null)
           if (!open && results.length === 0) {
             handleSearch()
@@ -252,7 +275,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
 
           {/* Error state */}
           {streamError && !streamUrl && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+            <div role="alert" className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
               <X className="w-5 h-5 text-red-500" />
               <span className="text-sm text-red-500 font-medium flex-1">{streamError}</span>
             </div>
@@ -268,33 +291,13 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
             </div>
           )}
 
-          {/* Stream ready — in-app video player */}
-          {streamUrl && (
-            <div className="space-y-3">
-              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black">
-                <video
-                  src={streamUrl}
-                  controls
-                  autoPlay
-                  className="w-full h-full"
-                >
-                  Your browser does not support video playback.
-                </video>
-              </div>
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                <Play className="w-5 h-5 text-emerald-500 fill-current" />
-                <span className="text-sm text-emerald-500 font-medium flex-1">Stream ready!</span>
-                <a
-                  href={streamUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Open in new tab
-                </a>
-              </div>
-            </div>
+          {/* Accepted streams use Real-Debrid's browser-compatible video output. */}
+          {streamUrl && <DebridVideoPlayer key={streamUrl} src={streamUrl} />}
+
+          {results.length > 0 && results.every((torrent) => blockedHashes.has(torrent.infoHash)) && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Real-Debrid has blocked every source tried for this title. Playback requires an authorised source that Real-Debrid accepts.
+            </p>
           )}
 
           {/* Results list */}
@@ -324,9 +327,10 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                     </div>
                   </div>
                   <Button
+                    data-testid={`stream-${torrent.infoHash}`}
                     size="sm"
                     onClick={() => handleAddMagnet(torrent)}
-                    disabled={adding !== null}
+                    disabled={adding !== null || blockedHashes.has(torrent.infoHash)}
                     className="gap-1 flex-shrink-0"
                   >
                     {adding === torrent.infoHash ? (
@@ -334,7 +338,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                     ) : (
                       <Play className="w-4 h-4 fill-current" />
                     )}
-                    {adding === torrent.infoHash ? 'Adding...' : 'Stream'}
+                    {blockedHashes.has(torrent.infoHash) ? 'Blocked' : adding === torrent.infoHash ? 'Adding...' : 'Stream'}
                   </Button>
                 </div>
               ))}

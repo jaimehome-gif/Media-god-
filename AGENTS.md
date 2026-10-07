@@ -29,3 +29,11 @@ Next.js 16 app (StreamVibe / media-god) — a streaming UI for movies, TV shows,
 - `docker compose -f docker-compose.base44.yml up -d --build` then curl `http://localhost:3000/`.
 - The home page should render with mock movie/TV data.
 - Auth pages (`/sign-in`, `/sign-up`) require the DB to be up and `BETTER_AUTH_URL` to be set.
+
+## Real-Debrid Playback
+- Both add-magnet and torrent-status use `lib/real-debrid.ts`. Wait for metadata, select the actual largest video file ID (not a provider's zero-based index), and only resolve links after the torrent is downloaded.
+- `unrestrict/link` returns a `streamable` integer flag, not a streaming URL. MKV/HEVC downloads are not reliably browser-playable; obtain the official `streaming/transcode/{id}` HLS URL (`apple.medium`) and use `components/debrid-video-player.tsx` (native HLS on Safari, hls.js elsewhere).
+- Real-Debrid's live MP4 output returned `503 transcoding_error` during verification, while HLS manifests and video segments returned 200. Do not assume a generated URL proves successful video playback: check video readiness/time advancing in the browser.
+- Upstream `451 infringing_file` / error 35 is a provider copyright restriction. Preserve it as `CONTENT_BLOCKED`; never treat it as success or retry blocked files automatically. The UI disables each blocked result after its first rejection.
+- Full-project `pnpm exec tsc --noEmit` currently has pre-existing errors in nullable auth uses, home filters, and other media components. Check changed playback files separately as well as live routes.
+- The sandbox startup installs dependencies from the frozen pnpm lockfile, so new playback dependencies must update both package.json and pnpm-lock.yaml.
