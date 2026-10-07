@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Heart, Users, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useSession } from '@/lib/auth-client'
 import { addToWatchlist, addToFavorites, createWatchParty } from '@/app/actions/media'
 import { toast } from 'sonner'
 
@@ -16,18 +15,12 @@ interface MediaActionsProps {
 }
 
 export function MediaActions({ mediaId, mediaType, title, posterPath }: MediaActionsProps) {
-  const { data: session } = useSession()
   const router = useRouter()
   const [inWatchlist, setInWatchlist] = useState(false)
   const [inFavorites, setInFavorites] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleAddToWatchlist = async () => {
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await addToWatchlist({ mediaId, mediaType, title, posterPath })
@@ -45,11 +38,6 @@ export function MediaActions({ mediaId, mediaType, title, posterPath }: MediaAct
   }
 
   const handleAddToFavorites = async () => {
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await addToFavorites({ mediaId, mediaType, title, posterPath })
@@ -67,11 +55,6 @@ export function MediaActions({ mediaId, mediaType, title, posterPath }: MediaAct
   }
 
   const handleCreateWatchParty = async () => {
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await createWatchParty({ mediaId, mediaType, title, posterPath })

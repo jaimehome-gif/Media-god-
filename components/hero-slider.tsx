@@ -6,7 +6,6 @@ import { Play, Info, Plus, ChevronLeft, ChevronRight, Star, Film, Tv } from 'luc
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { type MediaItem, getImageUrl } from '@/lib/tmdb'
-import { useSession } from '@/lib/auth-client'
 import { addToWatchlist } from '@/app/actions/media'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -30,7 +29,6 @@ function getGradient(id: number): string {
 
 export function HeroSlider({ items }: HeroSliderProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const { data: session } = useSession()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
@@ -61,11 +59,6 @@ export function HeroSlider({ items }: HeroSliderProps) {
   const backdropUrl = getImageUrl(currentItem.backdrop_path, 'original')
 
   const handleAddToWatchlist = async () => {
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await addToWatchlist({

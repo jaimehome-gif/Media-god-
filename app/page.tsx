@@ -14,12 +14,8 @@ import {
   type MediaItem,
 } from '@/lib/tmdb'
 import { HomeFilters } from '@/components/home-filters'
-import { getSessionSafe } from '@/lib/auth'
-import { headers } from 'next/headers'
 
 export default async function HomePage() {
-  const session = await getSessionSafe(await headers())
-
   const [trending, popularMovies, topRatedMovies, popularTV, nowPlaying, onTheAir, movieGenres, tvGenres] = await Promise.all([
     getTrending(),
     getPopularMovies(),
@@ -64,8 +60,8 @@ export default async function HomePage() {
         {/* Browse with filters */}
         <HomeFilters items={browsePool} movieGenres={movieGenres} tvGenres={tvGenres} />
 
-        {/* Continue Watching - Only for logged in users */}
-        {session?.user && <ContinueWatchingRow />}
+        {/* Continue Watching */}
+        <ContinueWatchingRow />
 
         {/* Trending Now */}
         <MediaRow

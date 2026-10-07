@@ -5,7 +5,6 @@ import { Play, Star, Plus, Heart, Users, Film, Tv } from 'lucide-react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { type MediaItem, type Movie, type TVShow, getImageUrl } from '@/lib/tmdb'
-import { useSession } from '@/lib/auth-client'
 import { addToWatchlist, addToFavorites, createWatchParty } from '@/app/actions/media'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -36,7 +35,6 @@ function getGradient(id: number, type: string): string {
 }
 
 export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: MediaCardProps) {
-  const { data: session } = useSession()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
@@ -56,11 +54,6 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
   const handleAddToWatchlist = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await addToWatchlist({
@@ -84,11 +77,6 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
   const handleAddToFavorites = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await addToFavorites({
@@ -112,11 +100,6 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
   const handleCreateWatchParty = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!session?.user) {
-      router.push('/sign-in')
-      return
-    }
-
     setIsLoading(true)
     try {
       const result = await createWatchParty({
