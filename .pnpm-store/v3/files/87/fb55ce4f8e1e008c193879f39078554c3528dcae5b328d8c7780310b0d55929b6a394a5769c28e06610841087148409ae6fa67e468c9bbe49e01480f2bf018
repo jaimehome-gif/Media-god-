@@ -1,0 +1,2 @@
+export declare function signJWT(payload: any, secret: string, expiresIn?: number): Promise<string>;
+//# sourceMappingURL=jwt.d.ts.map

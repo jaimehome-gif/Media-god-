@@ -1,0 +1,216 @@
+import { z } from "zod";
+import type { FieldAttribute } from ".";
+import type { AuthPluginSchema } from "../types/plugins";
+import type { BetterAuthOptions } from "../types/options";
+import type { Account, Session, User } from "../types";
+export declare const accountSchema: z.ZodObject<{
+    id: z.ZodString;
+    providerId: z.ZodString;
+    accountId: z.ZodString;
+    userId: z.ZodString;
+    accessToken: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    refreshToken: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    idToken: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    /**
+     * Access token expires at
+     */
+    accessTokenExpiresAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
+    /**
+     * Refresh token expires at
+     */
+    refreshTokenExpiresAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
+    /**
+     * The scopes that the user has authorized
+     */
+    scope: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    /**
+     * Password is only stored in the credential provider
+     */
+    password: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    createdAt: z.ZodDefault<z.ZodDate>;
+    updatedAt: z.ZodDefault<z.ZodDate>;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    providerId: string;
+    accountId: string;
+    userId: string;
+    password?: string | null | undefined;
+    scope?: string | null | undefined;
+    accessToken?: string | null | undefined;
+    refreshToken?: string | null | undefined;
+    idToken?: string | null | undefined;
+    accessTokenExpiresAt?: Date | null | undefined;
+    refreshTokenExpiresAt?: Date | null | undefined;
+}, {
+    id: string;
+    providerId: string;
+    accountId: string;
+    userId: string;
+    password?: string | null | undefined;
+    scope?: string | null | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+    accessToken?: string | null | undefined;
+    refreshToken?: string | null | undefined;
+    idToken?: string | null | undefined;
+    accessTokenExpiresAt?: Date | null | undefined;
+    refreshTokenExpiresAt?: Date | null | undefined;
+}>;
+export declare const userSchema: z.ZodObject<{
+    id: z.ZodString;
+    email: z.ZodEffects<z.ZodString, string, string>;
+    emailVerified: z.ZodDefault<z.ZodBoolean>;
+    name: z.ZodString;
+    image: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    createdAt: z.ZodDefault<z.ZodDate>;
+    updatedAt: z.ZodDefault<z.ZodDate>;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    name: string;
+    email: string;
+    emailVerified: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    image?: string | null | undefined;
+}, {
+    id: string;
+    name: string;
+    email: string;
+    image?: string | null | undefined;
+    emailVerified?: boolean | undefined;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+}>;
+export declare const sessionSchema: z.ZodObject<{
+    id: z.ZodString;
+    userId: z.ZodString;
+    expiresAt: z.ZodDate;
+    createdAt: z.ZodDefault<z.ZodDate>;
+    updatedAt: z.ZodDefault<z.ZodDate>;
+    token: z.ZodString;
+    ipAddress: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    userAgent: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    userId: string;
+    expiresAt: Date;
+    token: string;
+    ipAddress?: string | null | undefined;
+    userAgent?: string | null | undefined;
+}, {
+    id: string;
+    userId: string;
+    expiresAt: Date;
+    token: string;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+    ipAddress?: string | null | undefined;
+    userAgent?: string | null | undefined;
+}>;
+export declare const verificationSchema: z.ZodObject<{
+    id: z.ZodString;
+    value: z.ZodString;
+    createdAt: z.ZodDefault<z.ZodDate>;
+    updatedAt: z.ZodDefault<z.ZodDate>;
+    expiresAt: z.ZodDate;
+    identifier: z.ZodString;
+    nonce: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    value: string;
+    createdAt: Date;
+    updatedAt: Date;
+    expiresAt: Date;
+    identifier: string;
+    nonce?: string | null | undefined;
+}, {
+    id: string;
+    value: string;
+    expiresAt: Date;
+    identifier: string;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+    nonce?: string | null | undefined;
+}>;
+export declare function parseOutputData<T extends Record<string, any>>(data: T, schema: {
+    fields: Record<string, FieldAttribute>;
+}): T;
+export declare function getAllFields(options: BetterAuthOptions, table: string): Record<string, FieldAttribute>;
+export declare function parseUserOutput(options: BetterAuthOptions, user: User): {
+    id: string;
+    name: string;
+    email: string;
+    emailVerified: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    image?: string | null | undefined;
+};
+export declare function parseAccountOutput(options: BetterAuthOptions, account: Account): {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    providerId: string;
+    accountId: string;
+    userId: string;
+    password?: string | null | undefined;
+    scope?: string | null | undefined;
+    accessToken?: string | null | undefined;
+    refreshToken?: string | null | undefined;
+    idToken?: string | null | undefined;
+    accessTokenExpiresAt?: Date | null | undefined;
+    refreshTokenExpiresAt?: Date | null | undefined;
+};
+export declare function parseSessionOutput(options: BetterAuthOptions, session: Session): {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    userId: string;
+    expiresAt: Date;
+    token: string;
+    ipAddress?: string | null | undefined;
+    userAgent?: string | null | undefined;
+};
+export declare function parseInputData<T extends Record<string, any>>(data: T, schema: {
+    fields: Record<string, FieldAttribute>;
+    action?: "create" | "update";
+}): Partial<T>;
+export declare function parseUserInput(options: BetterAuthOptions, user?: Record<string, any>, action?: "create" | "update"): Partial<Record<string, any>>;
+export declare function parseAdditionalUserInput(options: BetterAuthOptions, user?: Record<string, any>): Partial<Record<string, any>>;
+export declare function parseAccountInput(options: BetterAuthOptions, account: Partial<Account>): Partial<Partial<{
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    providerId: string;
+    accountId: string;
+    userId: string;
+    password?: string | null | undefined;
+    scope?: string | null | undefined;
+    accessToken?: string | null | undefined;
+    refreshToken?: string | null | undefined;
+    idToken?: string | null | undefined;
+    accessTokenExpiresAt?: Date | null | undefined;
+    refreshTokenExpiresAt?: Date | null | undefined;
+}>>;
+export declare function parseSessionInput(options: BetterAuthOptions, session: Partial<Session>): Partial<Partial<{
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    userId: string;
+    expiresAt: Date;
+    token: string;
+    ipAddress?: string | null | undefined;
+    userAgent?: string | null | undefined;
+}>>;
+export declare function mergeSchema<S extends AuthPluginSchema>(schema: S, newSchema?: {
+    [K in keyof S]?: {
+        modelName?: string;
+        fields?: {
+            [P: string]: string;
+        };
+    };
+}): S;
+//# sourceMappingURL=schema.d.ts.map

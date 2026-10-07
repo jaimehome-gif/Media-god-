@@ -1,0 +1,14 @@
+import type { ProviderOptions } from "./types";
+export declare function createAuthorizationURL({ id, options, authorizationEndpoint, state, codeVerifier, scopes, claims, redirectURI, duration, prompt, }: {
+    id: string;
+    options: ProviderOptions;
+    redirectURI: string;
+    authorizationEndpoint: string;
+    state: string;
+    codeVerifier?: string;
+    scopes: string[];
+    claims?: string[];
+    duration?: string;
+    prompt?: boolean;
+}): Promise<URL>;
+//# sourceMappingURL=create-authorization-url.d.ts.map

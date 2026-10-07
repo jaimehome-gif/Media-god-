@@ -1,0 +1,40 @@
+import type { Account } from "../types";
+import type { GenericEndpointContext, User } from "../types";
+export declare function handleOAuthUserInfo(c: GenericEndpointContext, { userInfo, account, callbackURL, }: {
+    userInfo: Omit<User, "createdAt" | "updatedAt">;
+    account: Omit<Account, "id" | "userId" | "createdAt" | "updatedAt">;
+    callbackURL?: string;
+}): Promise<{
+    error: string;
+    data: null;
+    isRegister?: undefined;
+} | {
+    error: string;
+    data: null;
+    isRegister: boolean;
+} | {
+    data: {
+        session: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+    };
+    error: null;
+    isRegister: boolean;
+}>;
+//# sourceMappingURL=link-account.d.ts.map

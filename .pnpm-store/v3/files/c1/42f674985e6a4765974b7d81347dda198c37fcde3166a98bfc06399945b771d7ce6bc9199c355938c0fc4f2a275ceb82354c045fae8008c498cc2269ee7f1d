@@ -1,0 +1,1143 @@
+import type { AuthContext } from "../init";
+export declare const optionsMiddleware: <InputCtx extends {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}>(inputContext: InputCtx) => Promise<AuthContext>;
+export declare const createAuthMiddleware: {
+    <Options extends import("better-call").MiddlewareOptions, R>(options: Options, handler: (ctx: import("better-call").MiddlewareContext<Options, AuthContext & {
+        returned?: unknown;
+        responseHeaders?: Headers;
+    }>) => Promise<R>): (inputContext: ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_3 ? { [K_1 in keyof T_3 as {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] ? never : K_1]: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1]; } : never) & ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_4 ? { [K_2 in keyof T_4 as undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] ? K_2 : never]?: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] | undefined; } : never) extends infer T ? { [K in keyof T]: (({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_1 ? { [K_1 in keyof T_1 as {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] ? never : K_1]: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1]; } : never) & ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_2 ? { [K_2 in keyof T_2 as undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] ? K_2 : never]?: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] | undefined; } : never))[K]; } : never) => Promise<R>;
+    <Options extends import("better-call").MiddlewareOptions, R_1>(handler: (ctx: import("better-call").MiddlewareContext<Options, AuthContext & {
+        returned?: unknown;
+        responseHeaders?: Headers;
+    }>) => Promise<R_1>): (inputContext: ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_3 ? { [K_1 in keyof T_3 as {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] ? never : K_1]: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1]; } : never) & ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_4 ? { [K_2 in keyof T_4 as undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] ? K_2 : never]?: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] | undefined; } : never) extends infer T ? { [K in keyof T]: (({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_1 ? { [K_1 in keyof T_1 as {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1] ? never : K_1]: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_1]; } : never) & ({
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    } extends infer T_2 ? { [K_2 in keyof T_2 as undefined extends {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] ? K_2 : never]?: {
+        body: import("better-call").InferBody<Options>;
+        query: import("better-call").InferQuery<Options>;
+        request: import("better-call").InferRequest<Options>;
+        headers: import("better-call").InferHeaders<Options>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+    }[K_2] | undefined; } : never))[K]; } : never) => Promise<R_1>;
+};
+export declare const createAuthEndpoint: <Path extends string, Opts extends import("better-call").EndpointOptions, R>(path: Path, options: Opts, handler: (ctx: import("better-call").EndpointContext<Path, Opts, AuthContext>) => Promise<R>) => {
+    <C extends import("better-call").HasRequiredKeys<({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T ? { [K_1 in keyof T as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] ? never : K_1]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_1 ? { [K_2 in keyof T_1 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] ? K_2 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] | undefined; } : never) extends infer T_2 ? { [K in keyof T_2]: (({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_3 ? { [K_1_1 in keyof T_3 as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] ? never : K_1_1]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_4 ? { [K_2_1 in keyof T_4 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] ? K_2_1 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] | undefined; } : never))[K]; } : never> extends true ? [({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_5 ? { [K_1_2 in keyof T_5 as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] ? never : K_1_2]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_6 ? { [K_2_2 in keyof T_6 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] ? K_2_2 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] | undefined; } : never) extends infer T_5_1 ? { [K_3 in keyof T_5_1]: (({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_7 ? { [K_1_3 in keyof T_7 as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] ? never : K_1_3]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_8 ? { [K_2_3 in keyof T_8 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] ? K_2_3 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] | undefined; } : never))[K_3]; } : never] : [((({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_9 ? { [K_1_4 in keyof T_9 as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] ? never : K_1_4]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_10 ? { [K_2_4 in keyof T_10 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] ? K_2_4 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] | undefined; } : never) extends infer T_10_1 ? { [K_4 in keyof T_10_1]: (({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_11 ? { [K_1_5 in keyof T_11 as {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] extends never ? never : undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] ? never : K_1_5]: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5]; } : never) & ({
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_12 ? { [K_2_5 in keyof T_12 as undefined extends {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] ? K_2_5 : never]?: {
+        body: import("better-call").InferBodyInput<Opts & {
+            use: any[];
+        }>;
+        method: import("better-call").InferInputMethod<Opts & {
+            use: any[];
+        }>;
+        query: import("better-call").InferQueryInput<Opts & {
+            use: any[];
+        }>;
+        params: import("better-call").InferParam<Path>;
+        request: import("better-call").InferRequest<Opts & {
+            use: any[];
+        }>;
+        headers: import("better-call").InferHeadersInput<Opts & {
+            use: any[];
+        }>;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] | undefined; } : never))[K_4]; } : never) | undefined)?]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: R;
+    } : R>;
+    options: Opts & {
+        use: any[];
+    };
+    path: Path;
+};
+export type AuthEndpoint = ReturnType<typeof createAuthEndpoint>;
+export type AuthMiddleware = ReturnType<typeof createAuthMiddleware>;
+//# sourceMappingURL=call.d.ts.map

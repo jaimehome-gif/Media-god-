@@ -1,0 +1,282 @@
+'use strict';
+
+const schema$1 = require('../../shared/better-auth.BG6vHVNT.cjs');
+const jose = require('jose');
+require('better-call');
+const account = require('../../shared/better-auth.CHh0hgk_.cjs');
+require('zod');
+require('../../shared/better-auth.DiSjtgs9.cjs');
+require('@better-auth/utils/base64');
+require('@better-auth/utils/hmac');
+const schema = require('../../shared/better-auth.CHyZMcYK.cjs');
+require('../../shared/better-auth.GpOOav9x.cjs');
+require('defu');
+const crypto_index = require('../../crypto/index.cjs');
+require('../../cookies/index.cjs');
+require('../../shared/better-auth.ANpbi45u.cjs');
+require('../../shared/better-auth.C1hdVENX.cjs');
+require('../../shared/better-auth.D3mtHEZg.cjs');
+require('../../social-providers/index.cjs');
+require('@better-fetch/fetch');
+require('@better-auth/utils/hash');
+require('../../shared/better-auth.DdjqxOIu.cjs');
+require('@noble/ciphers/chacha');
+require('@noble/ciphers/utils');
+require('@noble/ciphers/webcrypto');
+require('@noble/hashes/scrypt');
+require('@better-auth/utils');
+require('@better-auth/utils/hex');
+require('@noble/hashes/utils');
+require('../../shared/better-auth.CYeOI8C-.cjs');
+require('@better-auth/utils/random');
+require('../../shared/better-auth.CZu6g_Il.cjs');
+require('../../shared/better-auth.Bg6iw3ig.cjs');
+require('../../shared/better-auth.BMYo0QR-.cjs');
+require('../../shared/better-auth.DssCybTk.cjs');
+require('jose/errors');
+require('@better-auth/utils/binary');
+require('../../shared/better-auth.YUF6P-PB.cjs');
+
+const getJwksAdapter = (adapter) => {
+  return {
+    getAllKeys: async () => {
+      return await adapter.findMany({
+        model: "jwks"
+      });
+    },
+    getLatestKey: async () => {
+      const key = await adapter.findMany({
+        model: "jwks",
+        sortBy: {
+          field: "createdAt",
+          direction: "desc"
+        },
+        limit: 1
+      });
+      return key[0];
+    },
+    createJwk: async (webKey) => {
+      const jwk = await adapter.create({
+        model: "jwks",
+        data: {
+          ...webKey,
+          createdAt: /* @__PURE__ */ new Date()
+        }
+      });
+      return jwk;
+    }
+  };
+};
+
+const jwt = (options) => {
+  async function getJwtToken(ctx) {
+    const adapter = getJwksAdapter(ctx.context.adapter);
+    let key = await adapter.getLatestKey();
+    const privateKeyEncryptionEnabled = !options?.jwks?.disablePrivateKeyEncryption;
+    if (key === void 0) {
+      const { publicKey, privateKey: privateKey2 } = await jose.generateKeyPair(
+        options?.jwks?.keyPairConfig?.alg ?? "EdDSA",
+        options?.jwks?.keyPairConfig ?? {
+          crv: "Ed25519",
+          extractable: true
+        }
+      );
+      const publicWebKey = await jose.exportJWK(publicKey);
+      const privateWebKey2 = await jose.exportJWK(privateKey2);
+      const stringifiedPrivateWebKey = JSON.stringify(privateWebKey2);
+      let jwk = {
+        id: ctx.context.generateId({
+          model: "jwks"
+        }),
+        publicKey: JSON.stringify(publicWebKey),
+        privateKey: privateKeyEncryptionEnabled ? JSON.stringify(
+          await crypto_index.symmetricEncrypt({
+            key: ctx.context.options.secret,
+            data: stringifiedPrivateWebKey
+          })
+        ) : stringifiedPrivateWebKey,
+        createdAt: /* @__PURE__ */ new Date()
+      };
+      key = await adapter.createJwk(jwk);
+    }
+    let privateWebKey = privateKeyEncryptionEnabled ? await crypto_index.symmetricDecrypt({
+      key: ctx.context.options.secret,
+      data: JSON.parse(key.privateKey)
+    }) : key.privateKey;
+    const privateKey = await jose.importJWK(
+      JSON.parse(privateWebKey),
+      options?.jwks?.keyPairConfig?.alg ?? "EdDSA"
+    );
+    const payload = !options?.jwt?.definePayload ? ctx.context.session.user : await options?.jwt.definePayload(ctx.context.session);
+    const jwt2 = await new jose.SignJWT({
+      ...payload,
+      // I am aware that this is not the best way to handle this, but this is the only way I know to get the impersonatedBy field
+      ...ctx.context.session.session.impersonatedBy ? {
+        impersonatedBy: ctx.context.session.session.impersonatedBy
+      } : {}
+    }).setProtectedHeader({
+      alg: options?.jwks?.keyPairConfig?.alg ?? "EdDSA",
+      kid: key.id
+    }).setIssuedAt().setIssuer(options?.jwt?.issuer ?? ctx.context.options.baseURL).setAudience(options?.jwt?.audience ?? ctx.context.options.baseURL).setExpirationTime(options?.jwt?.expirationTime ?? "15m").setSubject(ctx.context.session.user.id).sign(privateKey);
+    return jwt2;
+  }
+  return {
+    id: "jwt",
+    endpoints: {
+      getJwks: account.createAuthEndpoint(
+        "/jwks",
+        {
+          method: "GET",
+          metadata: {
+            openapi: {
+              description: "Get the JSON Web Key Set",
+              responses: {
+                200: {
+                  description: "Success",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          keys: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                kid: {
+                                  type: "string"
+                                },
+                                kty: {
+                                  type: "string"
+                                },
+                                use: {
+                                  type: "string"
+                                },
+                                alg: {
+                                  type: "string"
+                                },
+                                n: {
+                                  type: "string"
+                                },
+                                e: {
+                                  type: "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        async (ctx) => {
+          const adapter = getJwksAdapter(ctx.context.adapter);
+          const keySets = await adapter.getAllKeys();
+          if (keySets.length === 0) {
+            const alg = options?.jwks?.keyPairConfig?.alg ?? "EdDSA";
+            const { publicKey, privateKey } = await jose.generateKeyPair(
+              alg,
+              options?.jwks?.keyPairConfig ?? {
+                crv: "Ed25519",
+                extractable: true
+              }
+            );
+            const publicWebKey = await jose.exportJWK(publicKey);
+            const privateWebKey = await jose.exportJWK(privateKey);
+            const stringifiedPrivateWebKey = JSON.stringify(privateWebKey);
+            const privateKeyEncryptionEnabled = !options?.jwks?.disablePrivateKeyEncryption;
+            let jwk = {
+              id: ctx.context.generateId({
+                model: "jwks"
+              }),
+              publicKey: JSON.stringify({ alg, ...publicWebKey }),
+              privateKey: privateKeyEncryptionEnabled ? JSON.stringify(
+                await crypto_index.symmetricEncrypt({
+                  key: ctx.context.options.secret,
+                  data: stringifiedPrivateWebKey
+                })
+              ) : stringifiedPrivateWebKey,
+              createdAt: /* @__PURE__ */ new Date()
+            };
+            await adapter.createJwk(jwk);
+            return ctx.json({
+              keys: [
+                {
+                  ...publicWebKey,
+                  alg,
+                  kid: jwk.id
+                }
+              ]
+            });
+          }
+          return ctx.json({
+            keys: keySets.map((keySet) => ({
+              ...JSON.parse(keySet.publicKey),
+              kid: keySet.id
+            }))
+          });
+        }
+      ),
+      getToken: account.createAuthEndpoint(
+        "/token",
+        {
+          method: "GET",
+          requireHeaders: true,
+          use: [account.sessionMiddleware],
+          metadata: {
+            openapi: {
+              description: "Get a JWT token",
+              responses: {
+                200: {
+                  description: "Success",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          token: {
+                            type: "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        async (ctx) => {
+          const jwt2 = await getJwtToken(ctx);
+          return ctx.json({
+            token: jwt2
+          });
+        }
+      )
+    },
+    hooks: {
+      after: [
+        {
+          matcher(context) {
+            return context.path === "/get-session";
+          },
+          handler: account.createAuthMiddleware(async (ctx) => {
+            const session = ctx.context.session;
+            if (session && session.session) {
+              const jwt2 = await getJwtToken(ctx);
+              ctx.setHeader("set-auth-jwt", jwt2);
+              ctx.setHeader("Access-Control-Expose-Headers", "set-auth-jwt");
+            }
+          })
+        }
+      ]
+    },
+    schema: schema.mergeSchema(schema$1.schema, options?.schema)
+  };
+};
+
+exports.jwt = jwt;

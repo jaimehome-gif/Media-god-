@@ -1,0 +1,6 @@
+import type { jwt } from "./index";
+export declare const jwtClient: () => {
+    id: "better-auth-client";
+    $InferServerPlugin: ReturnType<typeof jwt>;
+};
+//# sourceMappingURL=client.d.ts.map

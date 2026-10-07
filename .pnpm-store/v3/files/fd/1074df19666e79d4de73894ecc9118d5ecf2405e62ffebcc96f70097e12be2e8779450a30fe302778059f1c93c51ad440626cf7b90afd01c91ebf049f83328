@@ -1,0 +1,16 @@
+import type { BetterFetch } from "@better-fetch/fetch";
+import type { Session, User } from "../types";
+export declare function getSessionAtom($fetch: BetterFetch): {
+    session: import("nanostores").PreinitializedWritableAtom<{
+        data: {
+            user: User;
+            session: Session;
+        } | null;
+        error: null | import("@better-fetch/fetch").BetterFetchError;
+        isPending: boolean;
+        isRefetching: boolean;
+        refetch: () => void;
+    }>;
+    $sessionSignal: import("nanostores").PreinitializedWritableAtom<boolean>;
+};
+//# sourceMappingURL=session-atom.d.ts.map

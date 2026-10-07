@@ -1,0 +1,82 @@
+import type { BetterFetchOption } from "@better-fetch/fetch";
+declare global {
+    interface Window {
+        google?: {
+            accounts: {
+                id: {
+                    initialize: (config: any) => void;
+                    prompt: (callback?: (notification: any) => void) => void;
+                };
+            };
+        };
+        googleScriptInitialized?: boolean;
+    }
+}
+export interface GoogleOneTapOptions {
+    /**
+     * Google client ID
+     */
+    clientId: string;
+    /**
+     * Auto select the account if the user is already signed in
+     */
+    autoSelect?: boolean;
+    /**
+     * Cancel the flow when the user taps outside the prompt
+     */
+    cancelOnTapOutside?: boolean;
+    /**
+     * The mode to use for the Google One Tap flow
+     *
+     * popup: Use a popup window
+     * redirect: Redirect the user to the Google One Tap flow
+     *
+     * @default "popup"
+     */
+    uxMode?: "popup" | "redirect";
+    /**
+     * The context to use for the Google One Tap flow
+     *
+     * @default "signin"
+     */
+    context?: string;
+    /**
+     * Additional configuration options to pass to the Google One Tap API.
+     */
+    additionalOptions?: Record<string, any>;
+    /**
+     * Configuration options for the prompt and exponential backoff behavior.
+     */
+    promptOptions?: {
+        /**
+         * Base delay (in milliseconds) for exponential backoff.
+         * @default 1000
+         */
+        baseDelay?: number;
+        /**
+         * Maximum number of prompt attempts before calling onPromptNotification.
+         * @default 5
+         */
+        maxAttempts?: number;
+    };
+}
+export interface GoogleOneTapActionOptions extends Omit<GoogleOneTapOptions, "clientId" | "promptOptions"> {
+    fetchOptions?: BetterFetchOption;
+    /**
+     * Callback URL.
+     */
+    callbackURL?: string;
+    /**
+     * Optional callback that receives the prompt notification if (or when) the prompt is dismissed or skipped.
+     * This lets you render an alternative UI (e.g. a Google Sign-In button) to restart the process.
+     */
+    onPromptNotification?: (notification: any) => void;
+}
+export declare const oneTapClient: (options: GoogleOneTapOptions) => {
+    id: "one-tap";
+    getActions: ($fetch: import("@better-fetch/fetch").BetterFetch, _: import("../..").Store) => {
+        oneTap: (opts?: GoogleOneTapActionOptions, fetchOptions?: BetterFetchOption) => Promise<void>;
+    };
+    getAtoms($fetch: import("@better-fetch/fetch").BetterFetch): {};
+};
+//# sourceMappingURL=client.d.ts.map

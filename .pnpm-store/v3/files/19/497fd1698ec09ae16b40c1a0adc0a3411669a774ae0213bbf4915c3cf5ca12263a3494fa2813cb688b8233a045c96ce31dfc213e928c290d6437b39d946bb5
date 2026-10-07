@@ -1,0 +1,9 @@
+export declare const authorizeHTML: ({ scopes, clientIcon, clientName, redirectURI, cancelURI, }: {
+    scopes: string[];
+    clientIcon?: string;
+    clientName: string;
+    redirectURI: string;
+    cancelURI: string;
+    clientMetadata?: Record<string, any>;
+}) => string;
+//# sourceMappingURL=ui.d.ts.map

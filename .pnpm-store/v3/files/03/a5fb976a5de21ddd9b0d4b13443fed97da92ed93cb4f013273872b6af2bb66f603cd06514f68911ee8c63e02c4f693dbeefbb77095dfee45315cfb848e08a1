@@ -1,0 +1,4 @@
+import type { AuthEndpoint } from "./call";
+import type { AuthContext } from "../types";
+export declare function toAuthEndpoints<E extends Record<string, AuthEndpoint>>(endpoints: E, ctx: AuthContext | Promise<AuthContext>): E;
+//# sourceMappingURL=to-auth-endpoints.d.ts.map

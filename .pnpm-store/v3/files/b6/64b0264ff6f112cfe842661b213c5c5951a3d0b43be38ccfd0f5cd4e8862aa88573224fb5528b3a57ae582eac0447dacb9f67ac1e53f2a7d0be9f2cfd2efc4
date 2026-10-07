@@ -1,0 +1,477 @@
+import type { Prettify } from "../types/helper";
+import { z } from "zod";
+export declare const socialProviders: {
+    apple: (options: import("./apple").AppleOptions) => {
+        id: "apple";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): URL;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        verifyIdToken(token: string, nonce: string | undefined): Promise<boolean>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    discord: (options: import("./discord").DiscordOptions) => {
+        id: "discord";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): URL;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    facebook: (options: import("./facebook").FacebookOptions) => {
+        id: "facebook";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        verifyIdToken(token: string, nonce: string | undefined): Promise<boolean>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    github: (options: import("./github").GithubOptions) => {
+        id: "github";
+        name: string;
+        createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    microsoft: (options: import("./microsoft-entra-id").MicrosoftOptions) => {
+        id: "microsoft";
+        name: string;
+        createAuthorizationURL(data: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }): Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    google: (options: import("./google").GoogleOptions) => {
+        id: "google";
+        name: string;
+        createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        verifyIdToken(token: string, nonce: string | undefined): Promise<boolean>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    spotify: (options: import("./spotify").SpotifyOptions) => {
+        id: "spotify";
+        name: string;
+        createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    twitch: (options: import("./twitch").TwitchOptions) => {
+        id: "twitch";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    twitter: (options: import("./twitter").TwitterOption) => {
+        id: "twitter";
+        name: string;
+        createAuthorizationURL(data: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    dropbox: (options: import("./dropbox").DropboxOptions) => {
+        id: "dropbox";
+        name: string;
+        createAuthorizationURL: ({ state, scopes, codeVerifier, redirectURI, }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }) => Promise<URL>;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    linkedin: (options: import("./linkedin").LinkedInOptions) => {
+        id: "linkedin";
+        name: string;
+        createAuthorizationURL: ({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }) => Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name: string;
+                email: string;
+                emailVerified: boolean;
+                image: string;
+            } | {
+                id: string;
+                name: string;
+                email: string | null;
+                image: string;
+                emailVerified: boolean;
+            } | {
+                id: string;
+                name: string;
+                email: string | null;
+                image: string;
+                emailVerified: boolean;
+            };
+            data: import("./linkedin").LinkedInProfile;
+        } | null>;
+    };
+    gitlab: (options: import("./gitlab").GitlabOptions) => {
+        id: "gitlab";
+        name: string;
+        createAuthorizationURL: ({ state, scopes, codeVerifier, redirectURI, }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }) => Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI, codeVerifier }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    tiktok: (options: import("./tiktok").TiktokOptions) => {
+        id: "tiktok";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): URL;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                email: string;
+                id: string;
+                name: string;
+                image: string;
+                emailVerified: boolean;
+            };
+            data: import("./tiktok").TiktokProfile;
+        } | null>;
+    };
+    reddit: (options: import("./reddit").RedditOptions) => {
+        id: "reddit";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    roblox: (options: import("./roblox").RobloxOptions) => {
+        id: "roblox";
+        name: string;
+        createAuthorizationURL({ state, scopes, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): URL;
+        validateAuthorizationCode: ({ code, redirectURI }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                name?: string;
+                email?: string | null;
+                image?: string;
+                emailVerified: boolean;
+                [key: string]: any;
+            };
+            data: any;
+        } | null>;
+    };
+    vk: (options: import("./vk").VkOption) => {
+        id: "vk";
+        name: string;
+        createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+            state: string;
+            codeVerifier: string;
+            scopes?: string[];
+            redirectURI: string;
+        }): Promise<URL>;
+        validateAuthorizationCode: ({ code, codeVerifier, redirectURI, deviceId, }: {
+            code: string;
+            redirectURI: string;
+            codeVerifier?: string;
+            deviceId?: string;
+        }) => Promise<import("../oauth2").OAuth2Tokens>;
+        getUserInfo(data: import("../oauth2").OAuth2Tokens): Promise<{
+            user: {
+                id: string;
+                first_name: string;
+                last_name: string;
+                email: string;
+                image: string | undefined;
+                emailVerified: boolean;
+                birthday: string;
+                sex: number | undefined;
+            };
+            data: import("./vk").VkProfile;
+        } | null>;
+    };
+};
+export declare const socialProviderList: ["github", ...(keyof typeof socialProviders)[]];
+export declare const SocialProviderListEnum: z.ZodEnum<["github", ...("apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk")[]]>;
+export type SocialProvider = z.infer<typeof SocialProviderListEnum>;
+export type SocialProviders = {
+    [K in SocialProviderList[number]]?: Prettify<Parameters<(typeof socialProviders)[K]>[0] & {
+        enabled?: boolean;
+    }>;
+};
+export * from "./github";
+export * from "./google";
+export * from "./apple";
+export * from "./microsoft-entra-id";
+export * from "./discord";
+export * from "./spotify";
+export * from "./twitch";
+export * from "./facebook";
+export * from "./twitter";
+export * from "./dropbox";
+export * from "./linkedin";
+export * from "./gitlab";
+export * from "./tiktok";
+export * from "./reddit";
+export * from "./roblox";
+export * from "./vk";
+export type SocialProviderList = typeof socialProviderList;
+//# sourceMappingURL=index.d.ts.map

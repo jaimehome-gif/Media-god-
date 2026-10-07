@@ -1,0 +1,137 @@
+import { z } from "zod";
+import { apiKeySchema } from "../schema";
+import type { AuthContext } from "../../../types";
+import type { PredefinedApiKeyOptions } from ".";
+export declare function createApiKey({ keyGenerator, opts, schema, deleteAllExpiredApiKeys, }: {
+    keyGenerator: (options: {
+        length: number;
+        prefix: string | undefined;
+    }) => Promise<string> | string;
+    opts: PredefinedApiKeyOptions;
+    schema: ReturnType<typeof apiKeySchema>;
+    deleteAllExpiredApiKeys(ctx: AuthContext, byPassLastCheckTime?: boolean): Promise<number> | undefined;
+}): {
+    <C extends [{
+        body: {
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            prefix?: string | undefined;
+            expiresIn?: number | null | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            remaining?: number | null | undefined;
+            permissions?: Record<string, string[]> | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            key: string;
+            metadata: any;
+            permissions: any;
+            id: string;
+            name: string | null;
+            start: string | null;
+            prefix: string | null;
+            userId: string;
+            refillInterval: number | null;
+            refillAmount: number | null;
+            lastRefillAt: Date | null;
+            enabled: boolean;
+            rateLimitEnabled: boolean;
+            rateLimitTimeWindow: number | null;
+            rateLimitMax: number | null;
+            requestCount: number;
+            remaining: number | null;
+            lastRequest: Date | null;
+            expiresAt: Date | null;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    } : {
+        key: string;
+        metadata: any;
+        permissions: any;
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        refillInterval: number | null;
+        refillAmount: number | null;
+        lastRefillAt: Date | null;
+        enabled: boolean;
+        rateLimitEnabled: boolean;
+        rateLimitTimeWindow: number | null;
+        rateLimitMax: number | null;
+        requestCount: number;
+        remaining: number | null;
+        lastRequest: Date | null;
+        expiresAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            expiresIn: z.ZodDefault<z.ZodNullable<z.ZodOptional<z.ZodNumber>>>;
+            userId: z.ZodOptional<z.ZodString>;
+            prefix: z.ZodOptional<z.ZodString>;
+            remaining: z.ZodDefault<z.ZodNullable<z.ZodOptional<z.ZodNumber>>>;
+            metadata: z.ZodOptional<z.ZodAny>;
+            refillAmount: z.ZodOptional<z.ZodNumber>;
+            refillInterval: z.ZodOptional<z.ZodNumber>;
+            rateLimitTimeWindow: z.ZodOptional<z.ZodNumber>;
+            rateLimitMax: z.ZodOptional<z.ZodNumber>;
+            rateLimitEnabled: z.ZodOptional<z.ZodBoolean>;
+            permissions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodArray<z.ZodString, "many">>>;
+        }, "strip", z.ZodTypeAny, {
+            expiresIn: number | null;
+            remaining: number | null;
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            prefix?: string | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            permissions?: Record<string, string[]> | undefined;
+        }, {
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            prefix?: string | undefined;
+            expiresIn?: number | null | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            remaining?: number | null | undefined;
+            permissions?: Record<string, string[]> | undefined;
+        }>;
+    } & {
+        use: any[];
+    };
+    path: "/api-key/create";
+};
+//# sourceMappingURL=create-api-key.d.ts.map

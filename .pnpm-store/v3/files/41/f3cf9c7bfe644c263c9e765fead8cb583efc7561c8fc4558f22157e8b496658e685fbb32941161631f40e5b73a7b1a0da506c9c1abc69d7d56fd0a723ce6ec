@@ -1,0 +1,71 @@
+import { createInternalAdapter } from "./db";
+import { getAuthTables } from "./db/get-tables";
+import type { Adapter, BetterAuthOptions, Models, SecondaryStorage, Session, User } from "./types";
+import { type BetterAuthCookies, createCookieGetter } from "./cookies";
+import { createLogger } from "./utils/logger";
+import type { OAuthProvider } from "./oauth2";
+import { checkPassword } from "./utils/password";
+import type { LiteralUnion } from "./types/helper";
+export declare const init: (options: BetterAuthOptions) => Promise<AuthContext>;
+export type AuthContext = {
+    options: BetterAuthOptions;
+    appName: string;
+    baseURL: string;
+    trustedOrigins: string[];
+    /**
+     * New session that will be set after the request
+     * meaning: there is a `set-cookie` header that will set
+     * the session cookie. This is the fetched session. And it's set
+     * by `setNewSession` method.
+     */
+    newSession: {
+        session: Session & Record<string, any>;
+        user: User & Record<string, any>;
+    } | null;
+    session: {
+        session: Session & Record<string, any>;
+        user: User & Record<string, any>;
+    } | null;
+    setNewSession: (session: {
+        session: Session & Record<string, any>;
+        user: User & Record<string, any>;
+    } | null) => void;
+    socialProviders: OAuthProvider[];
+    authCookies: BetterAuthCookies;
+    logger: ReturnType<typeof createLogger>;
+    rateLimit: {
+        enabled: boolean;
+        window: number;
+        max: number;
+        storage: "memory" | "database" | "secondary-storage";
+    } & BetterAuthOptions["rateLimit"];
+    adapter: Adapter;
+    internalAdapter: ReturnType<typeof createInternalAdapter>;
+    createAuthCookie: ReturnType<typeof createCookieGetter>;
+    secret: string;
+    sessionConfig: {
+        updateAge: number;
+        expiresIn: number;
+        freshAge: number;
+    };
+    generateId: (options: {
+        model: LiteralUnion<Models, string>;
+        size?: number;
+    }) => string;
+    secondaryStorage: SecondaryStorage | undefined;
+    password: {
+        hash: (password: string) => Promise<string>;
+        verify: (data: {
+            password: string;
+            hash: string;
+        }) => Promise<boolean>;
+        config: {
+            minPasswordLength: number;
+            maxPasswordLength: number;
+        };
+        checkPassword: typeof checkPassword;
+    };
+    tables: ReturnType<typeof getAuthTables>;
+    runMigrations: () => Promise<void>;
+};
+//# sourceMappingURL=init.d.ts.map

@@ -1,0 +1,351 @@
+'use strict';
+
+const betterCall = require('better-call');
+const zod = require('zod');
+const account = require('./better-auth.CHh0hgk_.cjs');
+require('./better-auth.DiSjtgs9.cjs');
+require('@better-auth/utils/base64');
+require('@better-auth/utils/hmac');
+require('./better-auth.CHyZMcYK.cjs');
+const crudTeam = require('./better-auth.BPLoEepG.cjs');
+const statement = require('./better-auth.am4QbDex.cjs');
+
+const shimContext = (originalObject, newContext) => {
+  const shimmedObj = {};
+  for (const [key, value] of Object.entries(originalObject)) {
+    shimmedObj[key] = (ctx) => {
+      return value({
+        ...ctx,
+        context: {
+          ...newContext,
+          ...ctx.context
+        }
+      });
+    };
+    shimmedObj[key].path = value.path;
+    shimmedObj[key].method = value.method;
+    shimmedObj[key].options = value.options;
+    shimmedObj[key].headers = value.headers;
+  }
+  return shimmedObj;
+};
+
+const organization = (options) => {
+  let endpoints = {
+    createOrganization: crudTeam.createOrganization,
+    updateOrganization: crudTeam.updateOrganization,
+    deleteOrganization: crudTeam.deleteOrganization,
+    setActiveOrganization: crudTeam.setActiveOrganization(),
+    getFullOrganization: crudTeam.getFullOrganization(),
+    listOrganizations: crudTeam.listOrganizations,
+    createInvitation: crudTeam.createInvitation(),
+    cancelInvitation: crudTeam.cancelInvitation,
+    acceptInvitation: crudTeam.acceptInvitation,
+    getInvitation: crudTeam.getInvitation,
+    rejectInvitation: crudTeam.rejectInvitation,
+    checkOrganizationSlug: crudTeam.checkOrganizationSlug,
+    addMember: crudTeam.addMember(),
+    removeMember: crudTeam.removeMember,
+    updateMemberRole: crudTeam.updateMemberRole(),
+    getActiveMember: crudTeam.getActiveMember,
+    leaveOrganization: crudTeam.leaveOrganization
+  };
+  const teamSupport = options?.teams?.enabled;
+  const teamEndpoints = {
+    createTeam: crudTeam.createTeam(),
+    listOrganizationTeams: crudTeam.listOrganizationTeams,
+    removeTeam: crudTeam.removeTeam,
+    updateTeam: crudTeam.updateTeam
+  };
+  if (teamSupport) {
+    endpoints = {
+      ...endpoints,
+      ...teamEndpoints
+    };
+  }
+  const roles = {
+    ...statement.defaultRoles,
+    ...options?.roles
+  };
+  const teamSchema = teamSupport ? {
+    team: {
+      modelName: options?.schema?.team?.modelName,
+      fields: {
+        name: {
+          type: "string",
+          required: true,
+          fieldName: options?.schema?.team?.fields?.name
+        },
+        organizationId: {
+          type: "string",
+          required: true,
+          references: {
+            model: "organization",
+            field: "id"
+          },
+          fieldName: options?.schema?.team?.fields?.organizationId
+        },
+        createdAt: {
+          type: "date",
+          required: true,
+          fieldName: options?.schema?.team?.fields?.createdAt
+        },
+        updatedAt: {
+          type: "date",
+          required: false,
+          fieldName: options?.schema?.team?.fields?.updatedAt
+        }
+      }
+    }
+  } : void 0;
+  const api = shimContext(endpoints, {
+    orgOptions: options || {},
+    roles,
+    getSession: async (context) => {
+      return await account.getSessionFromCtx(context);
+    }
+  });
+  return {
+    id: "organization",
+    endpoints: {
+      ...api,
+      hasPermission: account.createAuthEndpoint(
+        "/organization/has-permission",
+        {
+          method: "POST",
+          requireHeaders: true,
+          body: zod.z.object({
+            organizationId: zod.z.string().optional(),
+            permission: zod.z.record(zod.z.string(), zod.z.array(zod.z.string()))
+          }),
+          use: [crudTeam.orgSessionMiddleware],
+          metadata: {
+            $Infer: {
+              body: {}
+            },
+            openapi: {
+              description: "Check if the user has permission",
+              requestBody: {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        permission: {
+                          type: "object",
+                          description: "The permission to check"
+                        }
+                      },
+                      required: ["permission"]
+                    }
+                  }
+                }
+              },
+              responses: {
+                "200": {
+                  description: "Success",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          error: {
+                            type: "string"
+                          },
+                          success: {
+                            type: "boolean"
+                          }
+                        },
+                        required: ["success"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        async (ctx) => {
+          if (!ctx.body.permission || Object.keys(ctx.body.permission).length > 1) {
+            throw new betterCall.APIError("BAD_REQUEST", {
+              message: "invalid permission check. you can only check one resource permission at a time."
+            });
+          }
+          const activeOrganizationId = ctx.body.organizationId || ctx.context.session.session.activeOrganizationId;
+          if (!activeOrganizationId) {
+            throw new betterCall.APIError("BAD_REQUEST", {
+              message: crudTeam.ORGANIZATION_ERROR_CODES.NO_ACTIVE_ORGANIZATION
+            });
+          }
+          const adapter = crudTeam.getOrgAdapter(ctx.context);
+          const member = await adapter.findMemberByOrgId({
+            userId: ctx.context.session.user.id,
+            organizationId: activeOrganizationId
+          });
+          if (!member) {
+            throw new betterCall.APIError("UNAUTHORIZED", {
+              message: crudTeam.ORGANIZATION_ERROR_CODES.USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION
+            });
+          }
+          const result = crudTeam.hasPermission({
+            role: member.role,
+            options,
+            permission: ctx.body.permission
+          });
+          return ctx.json({
+            error: null,
+            success: result
+          });
+        }
+      )
+    },
+    schema: {
+      session: {
+        fields: {
+          activeOrganizationId: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.session?.fields?.activeOrganizationId
+          }
+        }
+      },
+      organization: {
+        modelName: options?.schema?.organization?.modelName,
+        fields: {
+          name: {
+            type: "string",
+            required: true,
+            sortable: true,
+            fieldName: options?.schema?.organization?.fields?.name
+          },
+          slug: {
+            type: "string",
+            unique: true,
+            sortable: true,
+            fieldName: options?.schema?.organization?.fields?.slug
+          },
+          logo: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.organization?.fields?.logo
+          },
+          createdAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.organization?.fields?.createdAt
+          },
+          metadata: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.organization?.fields?.metadata
+          }
+        }
+      },
+      member: {
+        modelName: options?.schema?.member?.modelName,
+        fields: {
+          organizationId: {
+            type: "string",
+            required: true,
+            references: {
+              model: "organization",
+              field: "id"
+            },
+            fieldName: options?.schema?.member?.fields?.organizationId
+          },
+          userId: {
+            type: "string",
+            required: true,
+            fieldName: options?.schema?.member?.fields?.userId,
+            references: {
+              model: "user",
+              field: "id"
+            }
+          },
+          role: {
+            type: "string",
+            required: true,
+            sortable: true,
+            defaultValue: "member",
+            fieldName: options?.schema?.member?.fields?.role
+          },
+          teamId: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.member?.fields?.teamId
+          },
+          createdAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.member?.fields?.createdAt
+          }
+        }
+      },
+      invitation: {
+        modelName: options?.schema?.invitation?.modelName,
+        fields: {
+          organizationId: {
+            type: "string",
+            required: true,
+            references: {
+              model: "organization",
+              field: "id"
+            },
+            fieldName: options?.schema?.invitation?.fields?.organizationId
+          },
+          email: {
+            type: "string",
+            required: true,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.email
+          },
+          role: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.role
+          },
+          teamId: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.teamId
+          },
+          status: {
+            type: "string",
+            required: true,
+            sortable: true,
+            defaultValue: "pending",
+            fieldName: options?.schema?.invitation?.fields?.status
+          },
+          expiresAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.invitation?.fields?.expiresAt
+          },
+          inviterId: {
+            type: "string",
+            references: {
+              model: "user",
+              field: "id"
+            },
+            fieldName: options?.schema?.invitation?.fields?.inviterId,
+            required: true
+          }
+        }
+      },
+      ...teamSupport ? teamSchema : {}
+    },
+    $Infer: {
+      Organization: {},
+      Invitation: {},
+      Member: {},
+      Team: teamSupport ? {} : {},
+      ActiveOrganization: {}
+    },
+    $ERROR_CODES: crudTeam.ORGANIZATION_ERROR_CODES
+  };
+};
+
+exports.organization = organization;

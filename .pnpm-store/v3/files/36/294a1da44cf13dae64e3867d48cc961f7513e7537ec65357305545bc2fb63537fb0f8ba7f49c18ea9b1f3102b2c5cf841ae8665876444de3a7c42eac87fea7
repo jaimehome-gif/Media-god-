@@ -1,0 +1,21 @@
+export declare const schema: {
+    user: {
+        fields: {
+            username: {
+                type: "string";
+                required: false;
+                sortable: true;
+                unique: true;
+                returned: true;
+                transform: {
+                    input(value: string | number | boolean | string[] | Date | number[] | null | undefined): string | undefined;
+                };
+            };
+            displayUsername: {
+                type: "string";
+                required: false;
+            };
+        };
+    };
+};
+//# sourceMappingURL=schema.d.ts.map

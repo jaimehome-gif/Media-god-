@@ -1,0 +1,1 @@
+{"version":3,"file":"solid-store.d.ts","sourceRoot":"","sources":["../../../src/client/solid/solid-store.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,KAAK,EAAE,UAAU,EAAE,MAAM,YAAY,CAAC;AAEpD,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,UAAU,CAAC;AAGzC;;;;;GAKG;AACH,wBAAgB,QAAQ,CACvB,SAAS,SAAS,KAAK,EACvB,KAAK,SAAS,UAAU,CAAC,SAAS,CAAC,EAClC,KAAK,EAAE,SAAS,GAAG,QAAQ,CAAC,KAAK,CAAC,CAmBnC"}

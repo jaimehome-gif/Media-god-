@@ -1,0 +1,16 @@
+export type SymmetricEncryptOptions = {
+    key: string;
+    data: string;
+};
+export declare const symmetricEncrypt: ({ key, data, }: SymmetricEncryptOptions) => Promise<string>;
+export type SymmetricDecryptOptions = {
+    key: string;
+    data: string;
+};
+export declare const symmetricDecrypt: ({ key, data, }: SymmetricDecryptOptions) => Promise<string>;
+export * from "./buffer";
+export * from "./hash";
+export * from "./jwt";
+export * from "./password";
+export * from "./random";
+//# sourceMappingURL=index.d.ts.map

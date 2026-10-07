@@ -1,0 +1,1 @@
+{"version":3,"file":"cloudflare-turnstile.d.ts","sourceRoot":"","sources":["../../../../src/plugins/captcha/verify-handlers/cloudflare-turnstile.ts"],"names":[],"mappings":"AAKA,KAAK,MAAM,GAAG;IACb,aAAa,EAAE,MAAM,CAAC;IACtB,SAAS,EAAE,MAAM,CAAC;IAClB,eAAe,EAAE,MAAM,CAAC;CACxB,CAAC;AAEF,eAAO,MAAM,mBAAmB,GAAU,gDAIvC,MAAM;;cA4BR,CAAC"}

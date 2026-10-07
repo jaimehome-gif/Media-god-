@@ -1,0 +1,23 @@
+import type { Adapter } from "../../types";
+import type { Jwk } from "./schema";
+export declare const getJwksAdapter: (adapter: Adapter) => {
+    getAllKeys: () => Promise<{
+        id: string;
+        createdAt: Date;
+        publicKey: string;
+        privateKey: string;
+    }[]>;
+    getLatestKey: () => Promise<{
+        id: string;
+        createdAt: Date;
+        publicKey: string;
+        privateKey: string;
+    }>;
+    createJwk: (webKey: Jwk) => Promise<{
+        id: string;
+        createdAt: Date;
+        publicKey: string;
+        privateKey: string;
+    }>;
+};
+//# sourceMappingURL=adapter.d.ts.map

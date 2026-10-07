@@ -1,0 +1,329 @@
+import { z } from "zod";
+export declare const signInSocial: {
+    <C extends [{
+        body: {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            scopes?: string[] | undefined;
+            idToken?: {
+                token: string;
+                accessToken?: string | undefined;
+                refreshToken?: string | undefined;
+                expiresAt?: number | undefined;
+                nonce?: string | undefined;
+            } | undefined;
+            callbackURL?: string | undefined;
+            errorCallbackURL?: string | undefined;
+            newUserCallbackURL?: string | undefined;
+            disableRedirect?: boolean | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            redirect: boolean;
+            token: string;
+            url: undefined;
+            user: {
+                id: string;
+                email: string;
+                name: string;
+                image: string | null | undefined;
+                emailVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            };
+        } | {
+            url: string;
+            redirect: boolean;
+        };
+    } : {
+        redirect: boolean;
+        token: string;
+        url: undefined;
+        user: {
+            id: string;
+            email: string;
+            name: string;
+            image: string | null | undefined;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    } | {
+        url: string;
+        redirect: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            /**
+             * Callback URL to redirect to after the user
+             * has signed in.
+             */
+            callbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * callback url to redirect if the user is newly registered.
+             *
+             * useful if you have different routes for existing users and new users
+             */
+            newUserCallbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * Callback url to redirect to if an error happens
+             *
+             * If it's initiated from the client sdk this defaults to
+             * the current url.
+             */
+            errorCallbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * OAuth2 provider to use`
+             */
+            provider: z.ZodEnum<["github", ...("apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk")[]]>;
+            /**
+             * Disable automatic redirection to the provider
+             *
+             * This is useful if you want to handle the redirection
+             * yourself like in a popup or a different tab.
+             */
+            disableRedirect: z.ZodOptional<z.ZodBoolean>;
+            /**
+             * ID token from the provider
+             *
+             * This is used to sign in the user
+             * if the user is already signed in with the
+             * provider in the frontend.
+             *
+             * Only applicable if the provider supports
+             * it. Currently only `apple` and `google` is
+             * supported out of the box.
+             */
+            idToken: z.ZodOptional<z.ZodObject<{
+                /**
+                 * ID token from the provider
+                 */
+                token: z.ZodString;
+                /**
+                 * The nonce used to generate the token
+                 */
+                nonce: z.ZodOptional<z.ZodString>;
+                /**
+                 * Access token from the provider
+                 */
+                accessToken: z.ZodOptional<z.ZodString>;
+                /**
+                 * Refresh token from the provider
+                 */
+                refreshToken: z.ZodOptional<z.ZodString>;
+                /**
+                 * Expiry date of the token
+                 */
+                expiresAt: z.ZodOptional<z.ZodNumber>;
+            }, "strip", z.ZodTypeAny, {
+                token: string;
+                accessToken?: string | undefined;
+                refreshToken?: string | undefined;
+                expiresAt?: number | undefined;
+                nonce?: string | undefined;
+            }, {
+                token: string;
+                accessToken?: string | undefined;
+                refreshToken?: string | undefined;
+                expiresAt?: number | undefined;
+                nonce?: string | undefined;
+            }>>;
+            scopes: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
+        }, "strip", z.ZodTypeAny, {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            scopes?: string[] | undefined;
+            idToken?: {
+                token: string;
+                accessToken?: string | undefined;
+                refreshToken?: string | undefined;
+                expiresAt?: number | undefined;
+                nonce?: string | undefined;
+            } | undefined;
+            callbackURL?: string | undefined;
+            errorCallbackURL?: string | undefined;
+            newUserCallbackURL?: string | undefined;
+            disableRedirect?: boolean | undefined;
+        }, {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            scopes?: string[] | undefined;
+            idToken?: {
+                token: string;
+                accessToken?: string | undefined;
+                refreshToken?: string | undefined;
+                expiresAt?: number | undefined;
+                nonce?: string | undefined;
+            } | undefined;
+            callbackURL?: string | undefined;
+            errorCallbackURL?: string | undefined;
+            newUserCallbackURL?: string | undefined;
+            disableRedirect?: boolean | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        session: {
+                                            type: string;
+                                        };
+                                        user: {
+                                            type: string;
+                                        };
+                                        url: {
+                                            type: string;
+                                        };
+                                        redirect: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/sign-in/social";
+};
+export declare const signInEmail: {
+    <C extends [{
+        body: {
+            password: string;
+            email: string;
+            callbackURL?: string | undefined;
+            rememberMe?: boolean | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            redirect: boolean;
+            token: string;
+            url: string | undefined;
+            user: {
+                id: string;
+                email: string;
+                name: string;
+                image: string | null | undefined;
+                emailVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            };
+        };
+    } : {
+        redirect: boolean;
+        token: string;
+        url: string | undefined;
+        user: {
+            id: string;
+            email: string;
+            name: string;
+            image: string | null | undefined;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            /**
+             * Email of the user
+             */
+            email: z.ZodString;
+            /**
+             * Password of the user
+             */
+            password: z.ZodString;
+            /**
+             * Callback URL to use as a redirect for email
+             * verification and for possible redirects
+             */
+            callbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * If this is false, the session will not be remembered
+             * @default true
+             */
+            rememberMe: z.ZodOptional<z.ZodDefault<z.ZodBoolean>>;
+        }, "strip", z.ZodTypeAny, {
+            password: string;
+            email: string;
+            callbackURL?: string | undefined;
+            rememberMe?: boolean | undefined;
+        }, {
+            password: string;
+            email: string;
+            callbackURL?: string | undefined;
+            rememberMe?: boolean | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        user: {
+                                            type: string;
+                                        };
+                                        url: {
+                                            type: string;
+                                        };
+                                        redirect: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/sign-in/email";
+};
+//# sourceMappingURL=sign-in.d.ts.map

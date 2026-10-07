@@ -1,0 +1,6 @@
+import type { emailOTP } from ".";
+export declare const emailOTPClient: () => {
+    id: "email-otp";
+    $InferServerPlugin: ReturnType<typeof emailOTP>;
+};
+//# sourceMappingURL=client.d.ts.map

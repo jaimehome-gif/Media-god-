@@ -1,0 +1,10 @@
+import type { phoneNumber } from ".";
+export declare const phoneNumberClient: () => {
+    id: "phoneNumber";
+    $InferServerPlugin: ReturnType<typeof phoneNumber>;
+    atomListeners: {
+        matcher(path: string): path is "/phone-number/verify" | "/phone-number/update";
+        signal: "$sessionSignal";
+    }[];
+};
+//# sourceMappingURL=client.d.ts.map

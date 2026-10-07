@@ -1,0 +1,37 @@
+import { z } from "zod";
+export declare const schema: {
+    jwks: {
+        fields: {
+            publicKey: {
+                type: "string";
+                required: true;
+            };
+            privateKey: {
+                type: "string";
+                required: true;
+            };
+            createdAt: {
+                type: "date";
+                required: true;
+            };
+        };
+    };
+};
+export declare const jwk: z.ZodObject<{
+    id: z.ZodString;
+    publicKey: z.ZodString;
+    privateKey: z.ZodString;
+    createdAt: z.ZodDate;
+}, "strip", z.ZodTypeAny, {
+    id: string;
+    createdAt: Date;
+    publicKey: string;
+    privateKey: string;
+}, {
+    id: string;
+    createdAt: Date;
+    publicKey: string;
+    privateKey: string;
+}>;
+export type Jwk = z.infer<typeof jwk>;
+//# sourceMappingURL=schema.d.ts.map

@@ -1,0 +1,205 @@
+import { z } from "zod";
+import type { GenericEndpointContext, User } from "../../types";
+export declare function createEmailVerificationToken(secret: string, email: string, 
+/**
+ * The email to update from
+ */
+updateTo?: string, 
+/**
+ * The time in seconds for the token to expire
+ */
+expiresIn?: number): Promise<string>;
+/**
+ * A function to send a verification email to the user
+ */
+export declare function sendVerificationEmailFn(ctx: GenericEndpointContext, user: User): Promise<void>;
+export declare const sendVerificationEmail: {
+    <C extends [{
+        body: {
+            email: string;
+            callbackURL?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            email: z.ZodString;
+            callbackURL: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            email: string;
+            callbackURL?: string | undefined;
+        }, {
+            email: string;
+            callbackURL?: string | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                requestBody: {
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object";
+                                properties: {
+                                    email: {
+                                        type: string;
+                                        description: string;
+                                    };
+                                    callbackURL: {
+                                        type: string;
+                                        description: string;
+                                    };
+                                };
+                                required: string[];
+                            };
+                        };
+                    };
+                };
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/send-verification-email";
+};
+export declare const verifyEmail: {
+    <C extends [{
+        query: {
+            token: string;
+            callbackURL?: string | undefined;
+        };
+        body?: undefined;
+        method?: "GET" | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: void | {
+            status: boolean;
+            user: {
+                id: any;
+                email: any;
+                name: any;
+                image: any;
+                emailVerified: any;
+                createdAt: any;
+                updatedAt: any;
+            };
+        } | {
+            status: boolean;
+            user: null;
+        };
+    } : void | {
+        status: boolean;
+        user: {
+            id: any;
+            email: any;
+            name: any;
+            image: any;
+            emailVerified: any;
+            createdAt: any;
+            updatedAt: any;
+        };
+    } | {
+        status: boolean;
+        user: null;
+    }>;
+    options: {
+        method: "GET";
+        query: z.ZodObject<{
+            token: z.ZodString;
+            callbackURL: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            token: string;
+            callbackURL?: string | undefined;
+        }, {
+            token: string;
+            callbackURL?: string | undefined;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<void>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        user: {
+                                            type: string;
+                                        };
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/verify-email";
+};
+//# sourceMappingURL=email-verification.d.ts.map

@@ -1,0 +1,4 @@
+import type { AuthContext } from "../init";
+export declare const shimContext: <T extends Record<string, any>>(originalObject: T, newContext: Record<string, any>) => T;
+export declare const shimEndpoint: (ctx: AuthContext, value: any) => (context: any) => Promise<any>;
+//# sourceMappingURL=shim.d.ts.map

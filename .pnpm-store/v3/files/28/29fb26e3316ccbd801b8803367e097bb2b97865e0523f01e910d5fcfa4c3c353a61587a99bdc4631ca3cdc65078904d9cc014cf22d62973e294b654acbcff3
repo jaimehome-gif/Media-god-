@@ -1,0 +1,2 @@
+export declare function capitalizeFirstLetter(str: string): string;
+//# sourceMappingURL=misc.d.ts.map

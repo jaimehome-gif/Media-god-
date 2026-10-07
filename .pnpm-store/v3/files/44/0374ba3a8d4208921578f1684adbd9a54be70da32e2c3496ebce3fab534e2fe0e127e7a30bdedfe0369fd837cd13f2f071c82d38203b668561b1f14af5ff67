@@ -1,0 +1,6 @@
+import type { oidcProvider } from ".";
+export declare const oidcClient: () => {
+    id: "oidc-client";
+    $InferServerPlugin: ReturnType<typeof oidcProvider>;
+};
+//# sourceMappingURL=client.d.ts.map

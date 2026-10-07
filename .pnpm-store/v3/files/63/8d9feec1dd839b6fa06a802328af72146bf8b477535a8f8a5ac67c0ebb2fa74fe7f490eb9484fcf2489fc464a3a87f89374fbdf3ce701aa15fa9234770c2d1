@@ -1,0 +1,12 @@
+import type { ProviderOptions } from "./types";
+export declare function validateAuthorizationCode({ code, codeVerifier, redirectURI, options, tokenEndpoint, authentication, deviceId, }: {
+    code: string;
+    redirectURI: string;
+    options: ProviderOptions;
+    codeVerifier?: string;
+    deviceId?: string;
+    tokenEndpoint: string;
+    authentication?: "basic" | "post";
+}): Promise<import("./types").OAuth2Tokens>;
+export declare function validateToken(token: string, jwksEndpoint: string): Promise<import("jose").JWTVerifyResult<import("jose").JWTPayload>>;
+//# sourceMappingURL=validate-authorization-code.d.ts.map

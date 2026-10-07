@@ -1,0 +1,19 @@
+import type { Adapter, BetterAuthOptions, GenericEndpointContext, Where } from "../types";
+export declare function getWithHooks(adapter: Adapter, ctx: {
+    options: BetterAuthOptions;
+    hooks: Exclude<BetterAuthOptions["databaseHooks"], undefined>[];
+}): {
+    createWithHooks: <T extends Record<string, any>>(data: T, model: "session" | "user" | "account" | "verification", customCreateFn?: {
+        fn: (data: Record<string, any>) => void | Promise<any>;
+        executeMainFn?: boolean;
+    }, context?: GenericEndpointContext) => Promise<any>;
+    updateWithHooks: <T extends Record<string, any>>(data: any, where: Where[], model: "session" | "user" | "account" | "verification", customUpdateFn?: {
+        fn: (data: Record<string, any>) => void | Promise<any>;
+        executeMainFn?: boolean;
+    }, context?: GenericEndpointContext) => Promise<any>;
+    updateManyWithHooks: <T extends Record<string, any>>(data: any, where: Where[], model: "session" | "user" | "account" | "verification", customUpdateFn?: {
+        fn: (data: Record<string, any>) => void | Promise<any>;
+        executeMainFn?: boolean;
+    }, context?: GenericEndpointContext) => Promise<any>;
+};
+//# sourceMappingURL=with-hooks.d.ts.map

@@ -1,0 +1,29 @@
+type TimeFormat = "ms" | "s" | "m" | "h" | "d" | "w" | "y";
+type Time = `${number}${TimeFormat}`;
+interface TimeObject {
+    t: Time;
+    value: number;
+    tFormat: TimeFormat;
+    toMilliseconds: () => number;
+    toSeconds: () => number;
+    toMinutes: () => number;
+    toHours: () => number;
+    toDays: () => number;
+    toWeeks: () => number;
+    toYears: () => number;
+    getDate: () => Date;
+    add: (other: Time | TimeObject) => TimeObject;
+    subtract: (other: Time | TimeObject) => TimeObject;
+    multiply: (factor: number) => TimeObject;
+    divide: (divisor: number) => TimeObject;
+    equals: (other: Time | TimeObject) => boolean;
+    lessThan: (other: Time | TimeObject) => boolean;
+    greaterThan: (other: Time | TimeObject) => boolean;
+    format: (pattern: string) => string;
+    fromNow: () => string;
+    ago: () => string;
+}
+export declare const createTime: (value: number, format: TimeFormat) => TimeObject;
+export declare const parseTime: (time: Time) => TimeObject;
+export {};
+//# sourceMappingURL=time.d.ts.map

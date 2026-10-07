@@ -1,0 +1,20 @@
+import type { GenericEndpointContext } from "../types";
+export declare function generateState(c: GenericEndpointContext, link?: {
+    email: string;
+    userId: string;
+}): Promise<{
+    state: string;
+    codeVerifier: string;
+}>;
+export declare function parseState(c: GenericEndpointContext): Promise<{
+    codeVerifier: string;
+    expiresAt: number;
+    callbackURL: string;
+    errorURL?: string | undefined;
+    newUserURL?: string | undefined;
+    link?: {
+        email: string;
+        userId: string;
+    } | undefined;
+}>;
+//# sourceMappingURL=state.d.ts.map

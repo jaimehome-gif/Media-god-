@@ -1,0 +1,14 @@
+import { BetterFetchError, type BetterFetch, type BetterFetchOption } from "@better-fetch/fetch";
+import { type PreinitializedWritableAtom } from "nanostores";
+export declare const useAuthQuery: <T>(initializedAtom: PreinitializedWritableAtom<any> | PreinitializedWritableAtom<any>[], path: string, $fetch: BetterFetch, options?: ((value: {
+    data: null | T;
+    error: null | BetterFetchError;
+    isPending: boolean;
+}) => BetterFetchOption) | BetterFetchOption) => PreinitializedWritableAtom<{
+    data: null | T;
+    error: null | BetterFetchError;
+    isPending: boolean;
+    isRefetching: boolean;
+    refetch: () => void;
+}>;
+//# sourceMappingURL=query.d.ts.map

@@ -1,0 +1,219 @@
+import { type Account, type Session, type User, type Verification } from "../types";
+import type { Adapter, AuthContext, BetterAuthOptions, GenericEndpointContext, Where } from "../types";
+export declare const createInternalAdapter: (adapter: Adapter, ctx: {
+    options: BetterAuthOptions;
+    hooks: Exclude<BetterAuthOptions["databaseHooks"], undefined>[];
+    generateId: AuthContext["generateId"];
+}) => {
+    createOAuthUser: (user: Omit<User, "id" | "createdAt" | "updatedAt"> & Partial<User>, account: Omit<Account, "userId" | "id" | "createdAt" | "updatedAt"> & Partial<Account>, context?: GenericEndpointContext) => Promise<{
+        user: any;
+        account: any;
+    }>;
+    createUser: <T>(user: Omit<User, "id" | "createdAt" | "updatedAt" | "emailVerified"> & Partial<User> & Record<string, any>, context?: GenericEndpointContext) => Promise<T & {
+        id: string;
+        name: string;
+        email: string;
+        emailVerified: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        image?: string | null | undefined;
+    }>;
+    createAccount: <T>(account: Omit<Account, "id" | "createdAt" | "updatedAt"> & Partial<Account> & Record<string, any>, context?: GenericEndpointContext) => Promise<T & {
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        providerId: string;
+        accountId: string;
+        userId: string;
+        password?: string | null | undefined;
+        scope?: string | null | undefined;
+        accessToken?: string | null | undefined;
+        refreshToken?: string | null | undefined;
+        idToken?: string | null | undefined;
+        accessTokenExpiresAt?: Date | null | undefined;
+        refreshTokenExpiresAt?: Date | null | undefined;
+    }>;
+    listSessions: (userId: string) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        expiresAt: Date;
+        token: string;
+        ipAddress?: string | null | undefined;
+        userAgent?: string | null | undefined;
+    }[]>;
+    listUsers: (limit?: number, offset?: number, sortBy?: {
+        field: string;
+        direction: "asc" | "desc";
+    }, where?: Where[]) => Promise<{
+        id: string;
+        name: string;
+        email: string;
+        emailVerified: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        image?: string | null | undefined;
+    }[]>;
+    countTotalUsers: () => Promise<number>;
+    deleteUser: (userId: string) => Promise<void>;
+    createSession: (userId: string, request: Request | Headers | undefined, dontRememberMe?: boolean, override?: Partial<Session> & Record<string, any>, context?: GenericEndpointContext, overrideAll?: boolean) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        expiresAt: Date;
+        token: string;
+        ipAddress?: string | null | undefined;
+        userAgent?: string | null | undefined;
+    }>;
+    findSession: (token: string) => Promise<{
+        session: Session & Record<string, any>;
+        user: User & Record<string, any>;
+    } | null>;
+    findSessions: (sessionTokens: string[]) => Promise<{
+        session: Session;
+        user: User;
+    }[]>;
+    updateSession: (sessionToken: string, session: Partial<Session> & Record<string, any>, context?: GenericEndpointContext) => Promise<any>;
+    deleteSession: (token: string) => Promise<void>;
+    deleteAccounts: (userId: string) => Promise<void>;
+    deleteAccount: (providerId: string, userId: string) => Promise<void>;
+    deleteSessions: (userIdOrSessionTokens: string | string[]) => Promise<void>;
+    findOAuthUser: (email: string, accountId: string, providerId: string) => Promise<{
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+        accounts: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            providerId: string;
+            accountId: string;
+            userId: string;
+            password?: string | null | undefined;
+            scope?: string | null | undefined;
+            accessToken?: string | null | undefined;
+            refreshToken?: string | null | undefined;
+            idToken?: string | null | undefined;
+            accessTokenExpiresAt?: Date | null | undefined;
+            refreshTokenExpiresAt?: Date | null | undefined;
+        }[];
+    } | null>;
+    findUserByEmail: (email: string, options?: {
+        includeAccounts: boolean;
+    }) => Promise<{
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+        accounts: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            providerId: string;
+            accountId: string;
+            userId: string;
+            password?: string | null | undefined;
+            scope?: string | null | undefined;
+            accessToken?: string | null | undefined;
+            refreshToken?: string | null | undefined;
+            idToken?: string | null | undefined;
+            accessTokenExpiresAt?: Date | null | undefined;
+            refreshTokenExpiresAt?: Date | null | undefined;
+        }[];
+    } | null>;
+    findUserById: (userId: string) => Promise<{
+        id: string;
+        name: string;
+        email: string;
+        emailVerified: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        image?: string | null | undefined;
+    } | null>;
+    linkAccount: (account: Omit<Account, "id" | "createdAt" | "updatedAt"> & Partial<Account>, context?: GenericEndpointContext) => Promise<any>;
+    updateUser: (userId: string, data: Partial<User> & Record<string, any>, context?: GenericEndpointContext) => Promise<any>;
+    updateUserByEmail: (email: string, data: Partial<User & Record<string, any>>, context?: GenericEndpointContext) => Promise<any>;
+    updatePassword: (userId: string, password: string, context?: GenericEndpointContext) => Promise<void>;
+    findAccounts: (userId: string) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        providerId: string;
+        accountId: string;
+        userId: string;
+        password?: string | null | undefined;
+        scope?: string | null | undefined;
+        accessToken?: string | null | undefined;
+        refreshToken?: string | null | undefined;
+        idToken?: string | null | undefined;
+        accessTokenExpiresAt?: Date | null | undefined;
+        refreshTokenExpiresAt?: Date | null | undefined;
+    }[]>;
+    findAccount: (accountId: string) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        providerId: string;
+        accountId: string;
+        userId: string;
+        password?: string | null | undefined;
+        scope?: string | null | undefined;
+        accessToken?: string | null | undefined;
+        refreshToken?: string | null | undefined;
+        idToken?: string | null | undefined;
+        accessTokenExpiresAt?: Date | null | undefined;
+        refreshTokenExpiresAt?: Date | null | undefined;
+    } | null>;
+    findAccountByUserId: (userId: string) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        providerId: string;
+        accountId: string;
+        userId: string;
+        password?: string | null | undefined;
+        scope?: string | null | undefined;
+        accessToken?: string | null | undefined;
+        refreshToken?: string | null | undefined;
+        idToken?: string | null | undefined;
+        accessTokenExpiresAt?: Date | null | undefined;
+        refreshTokenExpiresAt?: Date | null | undefined;
+    }[]>;
+    updateAccount: (accountId: string, data: Partial<Account>, context?: GenericEndpointContext) => Promise<any>;
+    createVerificationValue: (data: Omit<Verification, "createdAt" | "id" | "updatedAt"> & Partial<Verification>, context?: GenericEndpointContext) => Promise<{
+        id: string;
+        value: string;
+        createdAt: Date;
+        updatedAt: Date;
+        expiresAt: Date;
+        identifier: string;
+        nonce?: string | null | undefined;
+    }>;
+    findVerificationValue: (identifier: string) => Promise<{
+        id: string;
+        value: string;
+        createdAt: Date;
+        updatedAt: Date;
+        expiresAt: Date;
+        identifier: string;
+        nonce?: string | null | undefined;
+    } | null>;
+    deleteVerificationValue: (id: string) => Promise<void>;
+    deleteVerificationByIdentifier: (identifier: string) => Promise<void>;
+    updateVerificationValue: (id: string, data: Partial<Verification>, context?: GenericEndpointContext) => Promise<any>;
+};
+export type InternalAdapter = ReturnType<typeof createInternalAdapter>;
+//# sourceMappingURL=internal-adapter.d.ts.map

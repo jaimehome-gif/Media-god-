@@ -1,0 +1,578 @@
+import { z } from "zod";
+import type { InferRolesFromOption } from "../schema";
+import type { OrganizationOptions } from "../organization";
+export declare const addMember: <O extends OrganizationOptions>() => {
+    <C extends [{
+        body: {
+            userId: string;
+            role: InferRolesFromOption<O>;
+            organizationId?: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            userId: string;
+            organizationId: string;
+            role: string;
+            id?: string | undefined;
+            createdAt?: Date | undefined;
+            teamId?: string | undefined;
+        } | null;
+    } : {
+        userId: string;
+        organizationId: string;
+        role: string;
+        id?: string | undefined;
+        createdAt?: Date | undefined;
+        teamId?: string | undefined;
+    } | null>;
+    options: {
+        method: "POST";
+        body: z.ZodRecord<z.ZodString, z.ZodString>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>)[];
+        metadata: {
+            SERVER_ONLY: true;
+            $Infer: {
+                body: {
+                    userId: string;
+                    role: InferRolesFromOption<O>;
+                    organizationId?: string;
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/add-member";
+};
+export declare const removeMember: {
+    <C extends [{
+        body: {
+            memberIdOrEmail: string;
+            organizationId?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            member: {
+                id: string;
+                createdAt: Date;
+                userId: string;
+                organizationId: string;
+                role: string;
+                teamId?: string | undefined;
+            };
+        } | null;
+    } : {
+        member: {
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        };
+    } | null>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            memberIdOrEmail: z.ZodString;
+            /**
+             * If not provided, the active organization will be used
+             */
+            organizationId: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            memberIdOrEmail: string;
+            organizationId?: string | undefined;
+        }, {
+            memberIdOrEmail: string;
+            organizationId?: string | undefined;
+        }>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        member: {
+                                            type: string;
+                                            properties: {
+                                                id: {
+                                                    type: string;
+                                                };
+                                                userId: {
+                                                    type: string;
+                                                };
+                                                organizationId: {
+                                                    type: string;
+                                                };
+                                                role: {
+                                                    type: string;
+                                                };
+                                            };
+                                            required: string[];
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/remove-member";
+};
+export declare const updateMemberRole: <O extends OrganizationOptions>(option: O) => {
+    <C extends [{
+        body: {
+            role: InferRolesFromOption<O> | InferRolesFromOption<O>[];
+            memberId: string;
+            /**
+             * If not provided, the active organization will be used
+             */
+            organizationId?: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        };
+    } : {
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodRecord<z.ZodString, z.ZodAny>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        metadata: {
+            $Infer: {
+                body: {
+                    role: InferRolesFromOption<O> | InferRolesFromOption<O>[];
+                    memberId: string;
+                    /**
+                     * If not provided, the active organization will be used
+                     */
+                    organizationId?: string;
+                };
+            };
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        member: {
+                                            type: string;
+                                            properties: {
+                                                id: {
+                                                    type: string;
+                                                };
+                                                userId: {
+                                                    type: string;
+                                                };
+                                                organizationId: {
+                                                    type: string;
+                                                };
+                                                role: {
+                                                    type: string;
+                                                };
+                                            };
+                                            required: string[];
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/update-member-role";
+};
+export declare const getActiveMember: {
+    <C extends [({
+        body?: undefined;
+        method?: "GET" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            user: {
+                id: string;
+                name: string;
+                email: string;
+                image: string | null | undefined;
+            };
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        } | null;
+    } : {
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null | undefined;
+        };
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    } | null>;
+    options: {
+        method: "GET";
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        id: {
+                                            type: string;
+                                        };
+                                        userId: {
+                                            type: string;
+                                        };
+                                        organizationId: {
+                                            type: string;
+                                        };
+                                        role: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/get-active-member";
+};
+export declare const leaveOrganization: {
+    <C extends [{
+        body: {
+            organizationId: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            user: {
+                id: string;
+                name: string;
+                email: string;
+                image: string | null | undefined;
+            };
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        };
+    } : {
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null | undefined;
+        };
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            organizationId: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            organizationId: string;
+        }, {
+            organizationId: string;
+        }>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>))[];
+    } & {
+        use: any[];
+    };
+    path: "/organization/leave";
+};
+//# sourceMappingURL=crud-members.d.ts.map

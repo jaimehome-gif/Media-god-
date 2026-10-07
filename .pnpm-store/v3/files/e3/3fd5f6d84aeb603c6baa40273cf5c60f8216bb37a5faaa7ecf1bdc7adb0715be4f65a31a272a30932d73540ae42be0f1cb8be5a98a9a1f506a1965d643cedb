@@ -1,0 +1,1199 @@
+import { z } from "zod";
+import type { TwoFactorOptions, UserWithTwoFactor } from "./types";
+export declare const twoFactor: (options?: TwoFactorOptions) => {
+    id: "two-factor";
+    endpoints: {
+        enableTwoFactor: {
+            <C extends [{
+                body: {
+                    password: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    totpURI: string;
+                    backupCodes: string[];
+                };
+            } : {
+                totpURI: string;
+                backupCodes: string[];
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    password: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                }, {
+                    password: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                totpURI: {
+                                                    type: string;
+                                                    description: string;
+                                                };
+                                                backupCodes: {
+                                                    type: string;
+                                                    items: {
+                                                        type: string;
+                                                    };
+                                                    description: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/enable";
+        };
+        disableTwoFactor: {
+            <C extends [{
+                body: {
+                    password: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    status: boolean;
+                };
+            } : {
+                status: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    password: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                }, {
+                    password: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                status: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/disable";
+        };
+        verifyBackupCode: {
+            <C extends [{
+                body: {
+                    code: string;
+                    disableSession?: boolean | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    user: UserWithTwoFactor;
+                    session: {
+                        session: import("../..").Session & Record<string, any>;
+                        user: import("../..").User & Record<string, any>;
+                    } & {
+                        session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: UserWithTwoFactor;
+                    } & {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                };
+            } : {
+                user: UserWithTwoFactor;
+                session: {
+                    session: import("../..").Session & Record<string, any>;
+                    user: import("../..").User & Record<string, any>;
+                } & {
+                    session: {
+                        id: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        userId: string;
+                        expiresAt: Date;
+                        token: string;
+                        ipAddress?: string | null | undefined;
+                        userAgent?: string | null | undefined;
+                    };
+                    user: UserWithTwoFactor;
+                } & {
+                    session: Record<string, any> & {
+                        id: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        userId: string;
+                        expiresAt: Date;
+                        token: string;
+                        ipAddress?: string | null | undefined;
+                        userAgent?: string | null | undefined;
+                    };
+                    user: Record<string, any> & {
+                        id: string;
+                        name: string;
+                        email: string;
+                        emailVerified: boolean;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        image?: string | null | undefined;
+                    };
+                };
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    code: z.ZodString;
+                    disableSession: z.ZodOptional<z.ZodBoolean>;
+                }, "strip", z.ZodTypeAny, {
+                    code: string;
+                    disableSession?: boolean | undefined;
+                }, {
+                    code: string;
+                    disableSession?: boolean | undefined;
+                }>;
+                use: ((inputContext: {
+                    body: {
+                        trustDevice?: boolean | undefined;
+                    };
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: UserWithTwoFactor;
+                    };
+                } | {
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/verify-backup-code";
+        };
+        generateBackupCodes: {
+            <C extends [{
+                body: {
+                    password: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    status: boolean;
+                    backupCodes: string[];
+                };
+            } : {
+                status: boolean;
+                backupCodes: string[];
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    password: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                }, {
+                    password: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/generate-backup-codes";
+        };
+        viewBackupCodes: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "GET" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    status: boolean;
+                    backupCodes: string[];
+                };
+            } : {
+                status: boolean;
+                backupCodes: string[];
+            }>;
+            options: {
+                method: "GET";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                metadata: {
+                    SERVER_ONLY: true;
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/view-backup-codes";
+        };
+        sendTwoFactorOTP: {
+            <C extends [({
+                body?: {
+                    trustDevice?: boolean | undefined;
+                } | undefined;
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    status: boolean;
+                };
+            } : {
+                status: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodOptional<z.ZodObject<{
+                    trustDevice: z.ZodOptional<z.ZodBoolean>;
+                }, "strip", z.ZodTypeAny, {
+                    trustDevice?: boolean | undefined;
+                }, {
+                    trustDevice?: boolean | undefined;
+                }>>;
+                use: ((inputContext: {
+                    body: {
+                        trustDevice?: boolean | undefined;
+                    };
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: UserWithTwoFactor;
+                    };
+                } | {
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                status: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/send-otp";
+        };
+        verifyTwoFactorOTP: {
+            <C extends [{
+                body: {
+                    code: string;
+                    trustDevice?: boolean | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    token: string;
+                    user: {
+                        id: string;
+                        email: string;
+                        emailVerified: boolean;
+                        name: string;
+                        image: string | null | undefined;
+                        createdAt: Date;
+                        updatedAt: Date;
+                    };
+                };
+            } : {
+                token: string;
+                user: {
+                    id: string;
+                    email: string;
+                    emailVerified: boolean;
+                    name: string;
+                    image: string | null | undefined;
+                    createdAt: Date;
+                    updatedAt: Date;
+                };
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    code: z.ZodString;
+                    trustDevice: z.ZodOptional<z.ZodBoolean>;
+                }, "strip", z.ZodTypeAny, {
+                    code: string;
+                    trustDevice?: boolean | undefined;
+                }, {
+                    code: string;
+                    trustDevice?: boolean | undefined;
+                }>;
+                use: ((inputContext: {
+                    body: {
+                        trustDevice?: boolean | undefined;
+                    };
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: UserWithTwoFactor;
+                    };
+                } | {
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                status: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/verify-otp";
+        };
+        generateTOTP: {
+            <C extends [({
+                body?: undefined;
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    code: string;
+                };
+            } : {
+                code: string;
+            }>;
+            options: {
+                method: "POST";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                code: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/totp/generate";
+        };
+        getTOTPURI: {
+            <C extends [{
+                body: {
+                    password: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    totpURI: string;
+                };
+            } : {
+                totpURI: string;
+            }>;
+            options: {
+                method: "POST";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                body: z.ZodObject<{
+                    password: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                }, {
+                    password: string;
+                }>;
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                totpURI: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/get-totp-uri";
+        };
+        verifyTOTP: {
+            <C extends [{
+                body: {
+                    code: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    token: string;
+                    user: {
+                        id: string;
+                        email: string;
+                        emailVerified: boolean;
+                        name: string;
+                        image: string | null | undefined;
+                        createdAt: Date;
+                        updatedAt: Date;
+                    };
+                };
+            } : {
+                token: string;
+                user: {
+                    id: string;
+                    email: string;
+                    emailVerified: boolean;
+                    name: string;
+                    image: string | null | undefined;
+                    createdAt: Date;
+                    updatedAt: Date;
+                };
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    code: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    code: string;
+                }, {
+                    code: string;
+                }>;
+                use: ((inputContext: {
+                    body: {
+                        trustDevice?: boolean | undefined;
+                    };
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: UserWithTwoFactor;
+                    };
+                } | {
+                    valid: (ctx: import("../..").GenericEndpointContext) => Promise<{
+                        token: string;
+                        user: {
+                            id: string;
+                            email: string;
+                            emailVerified: boolean;
+                            name: string;
+                            image: string | null | undefined;
+                            createdAt: Date;
+                            updatedAt: Date;
+                        };
+                    }>;
+                    invalid: () => Promise<never>;
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                status: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/two-factor/verify-totp";
+        };
+    };
+    options: TwoFactorOptions | undefined;
+    hooks: {
+        after: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<{
+                twoFactorRedirect: boolean;
+            } | undefined>;
+        }[];
+    };
+    schema: {
+        user: {
+            fields: {
+                twoFactorEnabled: {
+                    type: "boolean";
+                    required: false;
+                    defaultValue: false;
+                    input: false;
+                };
+            };
+        };
+        twoFactor: {
+            fields: {
+                secret: {
+                    type: "string";
+                    required: true;
+                    returned: false;
+                };
+                backupCodes: {
+                    type: "string";
+                    required: true;
+                    returned: false;
+                };
+                userId: {
+                    type: "string";
+                    required: true;
+                    returned: false;
+                    references: {
+                        model: string;
+                        field: string;
+                    };
+                };
+            };
+        };
+    };
+    rateLimit: {
+        pathMatcher(path: string): boolean;
+        window: number;
+        max: number;
+    }[];
+};
+export * from "./client";
+export * from "./types";
+//# sourceMappingURL=index.d.ts.map

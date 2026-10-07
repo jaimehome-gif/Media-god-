@@ -1,0 +1,93 @@
+import type { FieldAttribute } from "../../db";
+import type { BetterAuthOptions } from "../../types";
+import type { BetterAuthPlugin } from "../../types";
+export declare const inferAdditionalFields: <T, S extends {
+    user?: {
+        [key: string]: FieldAttribute;
+    };
+    session?: {
+        [key: string]: FieldAttribute;
+    };
+} = {}>(schema?: S) => {
+    id: "additional-fields-client";
+    $InferServerPlugin: ((T extends BetterAuthOptions ? T : T extends {
+        options: BetterAuthOptions;
+    } ? T["options"] : never) extends never ? S extends {
+        user?: {
+            [key: string]: FieldAttribute;
+        };
+        session?: {
+            [key: string]: FieldAttribute;
+        };
+    } ? {
+        id: "additional-fields-client";
+        schema: {
+            user: {
+                fields: S["user"] extends object ? S["user"] : {};
+            };
+            session: {
+                fields: S["session"] extends object ? S["session"] : {};
+            };
+        };
+    } : never : (T extends BetterAuthOptions ? T : T extends {
+        options: BetterAuthOptions;
+    } ? T["options"] : never) extends BetterAuthOptions ? {
+        id: "additional-fields";
+        schema: {
+            user: {
+                fields: (T extends BetterAuthOptions ? T : T extends {
+                    options: BetterAuthOptions;
+                } ? T["options"] : never)["user"] extends {
+                    additionalFields: infer U;
+                } ? U : {};
+            };
+            session: {
+                fields: (T extends BetterAuthOptions ? T : T extends {
+                    options: BetterAuthOptions;
+                } ? T["options"] : never)["session"] extends {
+                    additionalFields: infer U;
+                } ? U : {};
+            };
+        };
+    } : never) extends BetterAuthPlugin ? (T extends BetterAuthOptions ? T : T extends {
+        options: BetterAuthOptions;
+    } ? T["options"] : never) extends never ? S extends {
+        user?: {
+            [key: string]: FieldAttribute;
+        };
+        session?: {
+            [key: string]: FieldAttribute;
+        };
+    } ? {
+        id: "additional-fields-client";
+        schema: {
+            user: {
+                fields: S["user"] extends object ? S["user"] : {};
+            };
+            session: {
+                fields: S["session"] extends object ? S["session"] : {};
+            };
+        };
+    } : never : (T extends BetterAuthOptions ? T : T extends {
+        options: BetterAuthOptions;
+    } ? T["options"] : never) extends BetterAuthOptions ? {
+        id: "additional-fields";
+        schema: {
+            user: {
+                fields: (T extends BetterAuthOptions ? T : T extends {
+                    options: BetterAuthOptions;
+                } ? T["options"] : never)["user"] extends {
+                    additionalFields: infer U;
+                } ? U : {};
+            };
+            session: {
+                fields: (T extends BetterAuthOptions ? T : T extends {
+                    options: BetterAuthOptions;
+                } ? T["options"] : never)["session"] extends {
+                    additionalFields: infer U;
+                } ? U : {};
+            };
+        };
+    } : never : undefined;
+};
+//# sourceMappingURL=client.d.ts.map

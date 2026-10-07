@@ -1,0 +1,4 @@
+import type { GenericEndpointContext } from "../../types";
+import type { OIDCOptions } from "./types";
+export declare function authorize(ctx: GenericEndpointContext, options: OIDCOptions): Promise<Response>;
+//# sourceMappingURL=authorize.d.ts.map

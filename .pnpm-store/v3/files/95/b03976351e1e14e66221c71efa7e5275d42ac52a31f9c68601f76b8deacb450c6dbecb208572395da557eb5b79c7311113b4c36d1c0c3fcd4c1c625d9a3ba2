@@ -1,0 +1,24 @@
+import type { GenericEndpointContext } from "../../types";
+/**
+ * A middleware to validate callbackURL and origin against
+ * trustedOrigins.
+ */
+export declare const originCheckMiddleware: (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<void>;
+export declare const originCheck: (getValue: (ctx: GenericEndpointContext) => string | string[]) => (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<void>;
+//# sourceMappingURL=origin-check.d.ts.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"authorize.d.ts","sourceRoot":"","sources":["../../../src/plugins/oidc-provider/authorize.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,sBAAsB,EAAE,MAAM,aAAa,CAAC;AAE1D,OAAO,KAAK,EAA8B,WAAW,EAAE,MAAM,SAAS,CAAC;AASvE,wBAAsB,SAAS,CAC9B,GAAG,EAAE,sBAAsB,EAC3B,OAAO,EAAE,WAAW,qBA+PpB"}

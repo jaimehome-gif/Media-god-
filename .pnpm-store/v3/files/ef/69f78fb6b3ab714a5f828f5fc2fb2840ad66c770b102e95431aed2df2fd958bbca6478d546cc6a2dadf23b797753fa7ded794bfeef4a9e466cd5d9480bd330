@@ -1,0 +1,334 @@
+import type { InferInvitation, InferMember, Invitation, Member, Organization, Team } from "../../plugins/organization/schema";
+import type { Prettify } from "../../types/helper";
+import { type AccessControl, type Role } from "../access";
+import type { organization } from "./organization";
+interface OrganizationClientOptions {
+    ac?: AccessControl;
+    roles?: {
+        [key in string]: Role;
+    };
+    teams?: {
+        enabled: boolean;
+    };
+}
+export declare const organizationClient: (<O extends OrganizationClientOptions>(options?: O) => {
+    id: "organization";
+    $InferServerPlugin: ReturnType<typeof organization<{
+        ac: O["ac"] extends AccessControl ? O["ac"] : AccessControl<{
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+        roles: O["roles"] extends Record<string, Role> ? O["roles"] : {
+            admin: Role;
+            member: Role;
+            owner: Role;
+        };
+        teams: {
+            enabled: O["teams"] extends {
+                enabled: true;
+            } ? true : false;
+        };
+    }>>;
+    getActions: ($fetch: import("@better-fetch/fetch").BetterFetch) => {
+        $Infer: {
+            ActiveOrganization: O["teams"] extends {
+                enabled: true;
+            } ? {
+                members: InferMember<O>[];
+                invitations: InferInvitation<O>[];
+                teams: Team[];
+            } & {
+                id: string;
+                name: string;
+                createdAt: Date;
+                slug: string;
+                metadata?: any;
+                logo?: string | null | undefined;
+            } & Record<string, any> : {
+                members: InferMember<O>[];
+                invitations: InferInvitation<O>[];
+            } & {
+                id: string;
+                name: string;
+                createdAt: Date;
+                slug: string;
+                metadata?: any;
+                logo?: string | null | undefined;
+            } & Record<string, any>;
+            Organization: Organization;
+            Invitation: InferInvitation<O>;
+            Member: InferInvitation<O>;
+            Team: Team;
+        };
+        organization: {
+            checkRolePermission: <R extends O extends {
+                roles: any;
+            } ? keyof O["roles"] : "admin" | "member" | "owner">(data: {
+                role: R;
+                permission: { [key in keyof (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S & {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                } : {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                })]?: (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S & {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                } : {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                })[key][number][]; };
+            }) => boolean;
+        };
+    };
+    getAtoms: ($fetch: import("@better-fetch/fetch").BetterFetch) => {
+        $listOrg: import("nanostores").PreinitializedWritableAtom<boolean>;
+        $activeOrgSignal: import("nanostores").PreinitializedWritableAtom<boolean>;
+        $activeMemberSignal: import("nanostores").PreinitializedWritableAtom<boolean>;
+        activeOrganization: import("nanostores").PreinitializedWritableAtom<{
+            data: Prettify<{
+                id: string;
+                name: string;
+                createdAt: Date;
+                slug: string;
+                metadata?: any;
+                logo?: string | null | undefined;
+            } & Record<string, any> & {
+                members: (Member & {
+                    user: {
+                        id: string;
+                        name: string;
+                        email: string;
+                        image: string | undefined;
+                    };
+                })[];
+                invitations: Invitation[];
+            }> | null;
+            error: null | import("@better-fetch/fetch").BetterFetchError;
+            isPending: boolean;
+            isRefetching: boolean;
+            refetch: () => void;
+        }>;
+        listOrganizations: import("nanostores").PreinitializedWritableAtom<{
+            data: Organization[] | null;
+            error: null | import("@better-fetch/fetch").BetterFetchError;
+            isPending: boolean;
+            isRefetching: boolean;
+            refetch: () => void;
+        }>;
+        activeMember: import("nanostores").PreinitializedWritableAtom<{
+            data: {
+                id: string;
+                createdAt: Date;
+                userId: string;
+                organizationId: string;
+                role: string;
+                teamId?: string | undefined;
+            } | null;
+            error: null | import("@better-fetch/fetch").BetterFetchError;
+            isPending: boolean;
+            isRefetching: boolean;
+            refetch: () => void;
+        }>;
+    };
+    pathMethods: {
+        "/organization/get-full-organization": "GET";
+    };
+    atomListeners: ({
+        matcher(path: string): path is "/organization/create" | "/organization/update" | "/organization/delete";
+        signal: "$listOrg";
+    } | {
+        matcher(path: string): boolean;
+        signal: "$activeOrgSignal";
+    } | {
+        matcher(path: string): boolean;
+        signal: "$activeMemberSignal";
+    })[];
+}) & {
+    defaultStatements: {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    };
+    defaultRoles: {
+        admin: {
+            authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key] | {
+                actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                }>[key];
+                connector: "OR" | "AND";
+            } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+            statements: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>;
+        };
+        owner: {
+            authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key] | {
+                actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                }>[key];
+                connector: "OR" | "AND";
+            } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+            statements: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>;
+        };
+        member: {
+            authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key] | {
+                actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                }>[key];
+                connector: "OR" | "AND";
+            } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+            statements: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>;
+        };
+    };
+    defaultAc: {
+        newRole<K extends "organization" | "member" | "invitation">(statements: import("../access").Subset<K, {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>): {
+            authorize<K_1 extends K>(request: K_1 extends infer T extends keyof import("../access").Subset<K, {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }> ? { [key in T]?: import("../access").Subset<K, {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key] | {
+                actions: import("../access").Subset<K, {
+                    readonly organization: readonly ["update", "delete"];
+                    readonly member: readonly ["create", "update", "delete"];
+                    readonly invitation: readonly ["create", "cancel"];
+                }>[key];
+                connector: "OR" | "AND";
+            } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+            statements: import("../access").Subset<K, {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>;
+        };
+        statements: {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        };
+    };
+    ownerAc: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+        statements: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+    adminAc: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+        statements: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+    memberAc: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../access").AuthortizeResponse;
+        statements: import("../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+};
+export {};
+//# sourceMappingURL=client.d.ts.map

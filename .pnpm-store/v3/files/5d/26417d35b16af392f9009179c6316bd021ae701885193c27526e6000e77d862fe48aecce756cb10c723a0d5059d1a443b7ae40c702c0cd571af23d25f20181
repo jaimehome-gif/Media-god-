@@ -1,0 +1,135 @@
+import { z } from "zod";
+import type { apiKeySchema } from "../schema";
+import type { AuthContext } from "../../../types";
+import type { PredefinedApiKeyOptions } from ".";
+export declare function updateApiKey({ opts, schema, deleteAllExpiredApiKeys, }: {
+    opts: PredefinedApiKeyOptions;
+    schema: ReturnType<typeof apiKeySchema>;
+    deleteAllExpiredApiKeys(ctx: AuthContext, byPassLastCheckTime?: boolean): Promise<number> | undefined;
+}): {
+    <C extends [{
+        body: {
+            keyId: string;
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            enabled?: boolean | undefined;
+            expiresIn?: number | null | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            remaining?: number | undefined;
+            permissions?: Record<string, string[]> | null | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            name: string | null;
+            start: string | null;
+            prefix: string | null;
+            userId: string;
+            refillInterval: number | null;
+            refillAmount: number | null;
+            lastRefillAt: Date | null;
+            enabled: boolean;
+            rateLimitEnabled: boolean;
+            rateLimitTimeWindow: number | null;
+            rateLimitMax: number | null;
+            requestCount: number;
+            remaining: number | null;
+            lastRequest: Date | null;
+            expiresAt: Date | null;
+            createdAt: Date;
+            updatedAt: Date;
+            metadata: Record<string, any> | null;
+            permissions?: string;
+        };
+    } : {
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        refillInterval: number | null;
+        refillAmount: number | null;
+        lastRefillAt: Date | null;
+        enabled: boolean;
+        rateLimitEnabled: boolean;
+        rateLimitTimeWindow: number | null;
+        rateLimitMax: number | null;
+        requestCount: number;
+        remaining: number | null;
+        lastRequest: Date | null;
+        expiresAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        metadata: Record<string, any> | null;
+        permissions?: string;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            keyId: z.ZodString;
+            userId: z.ZodOptional<z.ZodString>;
+            name: z.ZodOptional<z.ZodString>;
+            enabled: z.ZodOptional<z.ZodBoolean>;
+            remaining: z.ZodOptional<z.ZodNumber>;
+            refillAmount: z.ZodOptional<z.ZodNumber>;
+            refillInterval: z.ZodOptional<z.ZodNumber>;
+            metadata: z.ZodOptional<z.ZodAny>;
+            expiresIn: z.ZodNullable<z.ZodOptional<z.ZodNumber>>;
+            rateLimitEnabled: z.ZodOptional<z.ZodBoolean>;
+            rateLimitTimeWindow: z.ZodOptional<z.ZodNumber>;
+            rateLimitMax: z.ZodOptional<z.ZodNumber>;
+            permissions: z.ZodNullable<z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodArray<z.ZodString, "many">>>>;
+        }, "strip", z.ZodTypeAny, {
+            keyId: string;
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            enabled?: boolean | undefined;
+            expiresIn?: number | null | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            remaining?: number | undefined;
+            permissions?: Record<string, string[]> | null | undefined;
+        }, {
+            keyId: string;
+            metadata?: any;
+            name?: string | undefined;
+            userId?: string | undefined;
+            enabled?: boolean | undefined;
+            expiresIn?: number | null | undefined;
+            rateLimitMax?: number | undefined;
+            refillInterval?: number | undefined;
+            refillAmount?: number | undefined;
+            rateLimitEnabled?: boolean | undefined;
+            rateLimitTimeWindow?: number | undefined;
+            remaining?: number | undefined;
+            permissions?: Record<string, string[]> | null | undefined;
+        }>;
+    } & {
+        use: any[];
+    };
+    path: "/api-key/update";
+};
+//# sourceMappingURL=update-api-key.d.ts.map

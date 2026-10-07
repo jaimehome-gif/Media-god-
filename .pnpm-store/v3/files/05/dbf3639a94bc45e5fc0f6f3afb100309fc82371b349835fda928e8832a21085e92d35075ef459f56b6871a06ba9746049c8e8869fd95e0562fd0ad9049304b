@@ -1,0 +1,6 @@
+export declare function getBaseURL(url?: string, path?: string): string | undefined;
+export declare function getOrigin(url: string): string | null;
+export declare function getProtocol(url: string): string | null;
+export declare const checkURLValidity: (url: string) => boolean;
+export declare function getHost(url: string): string;
+//# sourceMappingURL=url.d.ts.map

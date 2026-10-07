@@ -1,0 +1,3 @@
+export declare function hashToBase64(data: string | ArrayBuffer): Promise<string>;
+export declare function compareHash(data: string | ArrayBuffer, hash: string): Promise<boolean>;
+//# sourceMappingURL=hash.d.ts.map

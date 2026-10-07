@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_USER: mediagod
+      POSTGRES_PASSWORD: mediagod_dev
+      POSTGRES_DB: mediagod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediagod -d mediagod"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    image: node:22
+    restart: on-failure
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://mediagod:mediagod_dev@postgres:5432/mediagod
+      - BETTER_AUTH_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - BASE44_PREVIEW_MODE
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - BASE44_SANDBOX_HOST_DOMAIN
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-ec", "npm install -g pnpm@9 && pnpm install && exec pnpm exec next dev -H 0.0.0.0 -p 3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+volumes:
+  postgres_data:

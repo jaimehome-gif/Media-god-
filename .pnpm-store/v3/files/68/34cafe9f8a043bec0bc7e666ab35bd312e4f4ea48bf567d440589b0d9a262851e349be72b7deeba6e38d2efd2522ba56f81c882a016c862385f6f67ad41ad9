@@ -1,0 +1,291 @@
+import type { User } from "../../types";
+import type { OrganizationOptions } from "./organization";
+import type { MemberInput, Organization, OrganizationInput, TeamInput } from "./schema";
+import type { AuthContext } from "../../types";
+export declare const getOrgAdapter: (context: AuthContext, options?: OrganizationOptions) => {
+    findOrganizationBySlug: (slug: string) => Promise<Organization | null>;
+    createOrganization: (data: {
+        organization: OrganizationInput;
+        user: User;
+    }) => Promise<{
+        metadata: any;
+        members: {
+            user: {
+                id: string;
+                name: string;
+                email: string;
+                image: string | null | undefined;
+            };
+            userId: string;
+            organizationId: string;
+            role: string;
+            id?: string | undefined;
+            createdAt?: Date | undefined;
+            teamId?: string | undefined;
+        }[];
+        id: string;
+        name: string;
+        createdAt: Date;
+        slug: string;
+        logo?: string | null | undefined;
+    }>;
+    findMemberByEmail: (data: {
+        email: string;
+        organizationId: string;
+    }) => Promise<{
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null | undefined;
+        };
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    } | null>;
+    listMembers: (data: {
+        organizationId: string;
+    }) => Promise<{
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    }[]>;
+    findMemberByOrgId: (data: {
+        userId: string;
+        organizationId: string;
+    }) => Promise<{
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null | undefined;
+        };
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    } | null>;
+    findMemberById: (memberId: string) => Promise<{
+        user: {
+            id: string;
+            name: string;
+            email: string;
+            image: string | null | undefined;
+        };
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    } | null>;
+    createMember: (data: MemberInput) => Promise<{
+        userId: string;
+        organizationId: string;
+        role: string;
+        id?: string | undefined;
+        createdAt?: Date | undefined;
+        teamId?: string | undefined;
+    }>;
+    updateMember: (memberId: string, role: string) => Promise<{
+        id: string;
+        createdAt: Date;
+        userId: string;
+        organizationId: string;
+        role: string;
+        teamId?: string | undefined;
+    } | null>;
+    deleteMember: (memberId: string) => Promise<void>;
+    updateOrganization: (organizationId: string, data: Partial<Organization>) => Promise<{
+        metadata: Record<string, any> | undefined;
+        id: string;
+        name: string;
+        createdAt: Date;
+        slug: string;
+        logo?: string | null | undefined;
+    } | null>;
+    deleteOrganization: (organizationId: string) => Promise<string>;
+    setActiveOrganization: (sessionToken: string, organizationId: string | null) => Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        expiresAt: Date;
+        token: string;
+        ipAddress?: string | null | undefined;
+        userAgent?: string | null | undefined;
+    }>;
+    findOrganizationById: (organizationId: string) => Promise<Organization | null>;
+    /**
+     * @requires db
+     */
+    findFullOrganization: ({ organizationId, isSlug, includeTeams, }: {
+        organizationId: string;
+        isSlug?: boolean;
+        includeTeams?: boolean;
+    }) => Promise<{
+        invitations: {
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        }[];
+        members: {
+            user: {
+                id: string;
+                name: string;
+                email: string;
+                image: string | null | undefined;
+            };
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        }[];
+        teams: {
+            id: string;
+            name: string;
+            createdAt: Date;
+            organizationId: string;
+            updatedAt?: Date | undefined;
+        }[] | null;
+        id: string;
+        name: string;
+        createdAt: Date;
+        slug: string;
+        metadata?: any;
+        logo?: string | null | undefined;
+    } | null>;
+    listOrganizations: (userId: string) => Promise<Organization[]>;
+    createTeam: (data: TeamInput) => Promise<{
+        id: string;
+        name: string;
+        createdAt: Date;
+        organizationId: string;
+        updatedAt?: Date | undefined;
+    }>;
+    findTeamById: (teamId: string) => Promise<{
+        members: {
+            id: string;
+            createdAt: Date;
+            userId: string;
+            organizationId: string;
+            role: string;
+            teamId?: string | undefined;
+        }[];
+        id: string;
+        name: string;
+        createdAt: Date;
+        organizationId: string;
+        updatedAt?: Date | undefined;
+    } | null>;
+    updateTeam: (teamId: string, data: {
+        name?: string;
+        description?: string;
+        status?: string;
+    }) => Promise<{
+        id: string;
+        name: string;
+        createdAt: Date;
+        organizationId: string;
+        updatedAt?: Date | undefined;
+    } | null>;
+    deleteTeam: (teamId: string) => Promise<void>;
+    listTeams: (organizationId: string) => Promise<unknown[]>;
+    createTeamInvitation: ({ email, role, teamId, organizationId, inviterId, expiresIn, }: {
+        email: string;
+        role: string;
+        teamId: string;
+        organizationId: string;
+        inviterId: string;
+        expiresIn?: number;
+    }) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }>;
+    findInvitationsByTeamId: (teamId: string) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }[]>;
+    createInvitation: ({ invitation, user, }: {
+        invitation: {
+            email: string;
+            role: string;
+            organizationId: string;
+            teamId?: string;
+        };
+        user: User;
+    }) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }>;
+    findInvitationById: (id: string) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    } | null>;
+    findPendingInvitation: (data: {
+        email: string;
+        organizationId: string;
+    }) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }[]>;
+    updateInvitation: (data: {
+        invitationId: string;
+        status: "accepted" | "canceled" | "rejected";
+    }) => Promise<{
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    } | null>;
+};
+//# sourceMappingURL=adapter.d.ts.map

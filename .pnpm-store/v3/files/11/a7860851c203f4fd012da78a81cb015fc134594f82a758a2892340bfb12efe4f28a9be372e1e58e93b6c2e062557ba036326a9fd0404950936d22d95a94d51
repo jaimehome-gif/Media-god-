@@ -1,0 +1,48 @@
+interface BearerOptions {
+    /**
+     * If true, only signed tokens
+     * will be converted to session
+     * cookies
+     *
+     * @default false
+     */
+    requireSignature?: boolean;
+}
+/**
+ * Converts bearer token to session cookie
+ */
+export declare const bearer: (options?: BearerOptions) => {
+    id: "bearer";
+    hooks: {
+        before: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<{
+                context: {
+                    headers: Headers;
+                };
+            } | undefined>;
+        }[];
+        after: {
+            matcher(context: import("../..").HookEndpointContext): true;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<void>;
+        }[];
+    };
+};
+export {};
+//# sourceMappingURL=index.d.ts.map

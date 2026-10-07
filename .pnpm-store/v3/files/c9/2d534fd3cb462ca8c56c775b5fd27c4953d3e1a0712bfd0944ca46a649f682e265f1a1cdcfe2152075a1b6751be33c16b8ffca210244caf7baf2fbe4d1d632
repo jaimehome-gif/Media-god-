@@ -1,0 +1,62 @@
+import type { ProviderOptions } from "../oauth2";
+export interface GoogleProfile {
+    aud: string;
+    azp: string;
+    email: string;
+    email_verified: boolean;
+    exp: number;
+    /**
+     * The family name of the user, or last name in most
+     * Western languages.
+     */
+    family_name: string;
+    /**
+     * The given name of the user, or first name in most
+     * Western languages.
+     */
+    given_name: string;
+    hd?: string;
+    iat: number;
+    iss: string;
+    jti?: string;
+    locale?: string;
+    name: string;
+    nbf?: number;
+    picture: string;
+    sub: string;
+}
+export interface GoogleOptions extends ProviderOptions<GoogleProfile> {
+    accessType?: "offline" | "online";
+    prompt?: "none" | "consent" | "select_account";
+    display?: "page" | "popup" | "touch" | "wap";
+    hd?: string;
+}
+export declare const google: (options: GoogleOptions) => {
+    id: "google";
+    name: string;
+    createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }) => Promise<import("../oauth2").OAuth2Tokens>;
+    verifyIdToken(token: string, nonce: string | undefined): Promise<boolean>;
+    getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            name?: string;
+            email?: string | null;
+            image?: string;
+            emailVerified: boolean;
+            [key: string]: any;
+        };
+        data: any;
+    } | null>;
+};
+//# sourceMappingURL=google.d.ts.map

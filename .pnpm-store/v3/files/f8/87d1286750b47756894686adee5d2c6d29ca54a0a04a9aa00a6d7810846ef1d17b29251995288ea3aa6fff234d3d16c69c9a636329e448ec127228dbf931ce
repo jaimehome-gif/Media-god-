@@ -1,0 +1,9 @@
+import type { BetterFetch } from "@better-fetch/fetch";
+import type { Atom, PreinitializedWritableAtom } from "nanostores";
+import type { BetterAuthClientPlugin } from "./types";
+export type AuthProxySignal = {
+    atom: PreinitializedWritableAtom<boolean>;
+    matcher: (path: string) => boolean;
+};
+export declare function createDynamicPathProxy<T extends Record<string, any>>(routes: T, client: BetterFetch, knownPathMethods: Record<string, "POST" | "GET">, atoms: Record<string, Atom>, atomListeners: BetterAuthClientPlugin["atomListeners"]): T;
+//# sourceMappingURL=proxy.d.ts.map

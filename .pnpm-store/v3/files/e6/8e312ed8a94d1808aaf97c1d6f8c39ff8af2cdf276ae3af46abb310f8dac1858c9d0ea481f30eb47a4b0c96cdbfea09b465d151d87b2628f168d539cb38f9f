@@ -1,0 +1,6 @@
+import type { magicLink } from ".";
+export declare const magicLinkClient: () => {
+    id: "magic-link";
+    $InferServerPlugin: ReturnType<typeof magicLink>;
+};
+//# sourceMappingURL=client.d.ts.map

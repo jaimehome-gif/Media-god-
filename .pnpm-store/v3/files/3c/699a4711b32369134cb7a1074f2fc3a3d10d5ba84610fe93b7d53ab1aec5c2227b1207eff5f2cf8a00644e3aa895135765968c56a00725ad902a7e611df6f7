@@ -1,0 +1,606 @@
+import { z } from "zod";
+import type { BetterAuthOptions, GenericEndpointContext, Session, User } from "../../types";
+import type { Prettify } from "../../types/helper";
+export declare const getSession: <Option extends BetterAuthOptions>() => {
+    <C extends [{
+        headers: HeadersInit;
+        body?: undefined;
+        method?: "GET" | undefined;
+        query?: {
+            disableCookieCache?: string | boolean | undefined;
+            disableRefresh?: string | boolean | undefined;
+        } | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            session: import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+                id: string;
+                createdAt: Date;
+                updatedAt: Date;
+                userId: string;
+                expiresAt: Date;
+                token: string;
+                ipAddress?: string | null | undefined;
+                userAgent?: string | null | undefined;
+            } & (Option extends BetterAuthOptions ? import("../..").AdditionalSessionFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalSessionFieldsOutput<Option["options"]> : {})>>;
+            user: import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+                id: string;
+                name: string;
+                email: string;
+                emailVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+                image?: string | null | undefined;
+            } & (Option extends BetterAuthOptions ? import("../..").AdditionalUserFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalUserFieldsOutput<Option["options"]> : {})>>;
+        } | null;
+    } : {
+        session: import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        } & (Option extends BetterAuthOptions ? import("../..").AdditionalSessionFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalSessionFieldsOutput<Option["options"]> : {})>>;
+        user: import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        } & (Option extends BetterAuthOptions ? import("../..").AdditionalUserFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalUserFieldsOutput<Option["options"]> : {})>>;
+    } | null>;
+    options: {
+        method: "GET";
+        query: z.ZodOptional<z.ZodObject<{
+            /**
+             * If cookie cache is enabled, it will disable the cache
+             * and fetch the session from the database
+             */
+            disableCookieCache: z.ZodOptional<z.ZodOptional<z.ZodUnion<[z.ZodBoolean, z.ZodEffects<z.ZodString, boolean, string>]>>>;
+            disableRefresh: z.ZodOptional<z.ZodUnion<[z.ZodBoolean, z.ZodEffects<z.ZodString, boolean, string>]>>;
+        }, "strip", z.ZodTypeAny, {
+            disableCookieCache?: boolean | undefined;
+            disableRefresh?: boolean | undefined;
+        }, {
+            disableCookieCache?: string | boolean | undefined;
+            disableRefresh?: string | boolean | undefined;
+        }>>;
+        requireHeaders: true;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        session: {
+                                            type: string;
+                                            properties: {
+                                                token: {
+                                                    type: string;
+                                                };
+                                                userId: {
+                                                    type: string;
+                                                };
+                                                expiresAt: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                        user: {
+                                            type: string;
+                                            $ref: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/get-session";
+};
+export declare const getSessionFromCtx: <U extends Record<string, any> = Record<string, any>, S extends Record<string, any> = Record<string, any>>(ctx: GenericEndpointContext, config?: {
+    disableCookieCache?: boolean;
+    disableRefresh?: boolean;
+}) => Promise<{
+    session: S & Session;
+    user: U & User;
+} | null>;
+export declare const sessionMiddleware: (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<{
+    session: {
+        session: Record<string, any> & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: Record<string, any> & {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+    };
+}>;
+export declare const requestOnlySessionMiddleware: (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<{
+    session: {
+        session: Record<string, any> & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: Record<string, any> & {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+    } | null;
+}>;
+export declare const freshSessionMiddleware: (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<{
+    session: {
+        session: Record<string, any> & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: Record<string, any> & {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+    };
+}>;
+/**
+ * user active sessions list
+ */
+export declare const listSessions: <Option extends BetterAuthOptions>() => {
+    <C extends [{
+        headers: HeadersInit;
+        body?: undefined;
+        method?: "GET" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: Prettify<import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        } & (Option extends BetterAuthOptions ? import("../..").AdditionalSessionFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalSessionFieldsOutput<Option["options"]> : {})>>>[];
+    } : Prettify<import("../../types/helper").UnionToIntersection<import("../../types/helper").StripEmptyObjects<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        userId: string;
+        expiresAt: Date;
+        token: string;
+        ipAddress?: string | null | undefined;
+        userAgent?: string | null | undefined;
+    } & (Option extends BetterAuthOptions ? import("../..").AdditionalSessionFieldsOutput<Option> : Option extends import("../..").Auth ? import("../..").AdditionalSessionFieldsOutput<Option["options"]> : {})>>>[]>;
+    options: {
+        method: "GET";
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        requireHeaders: true;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "array";
+                                    items: {
+                                        type: string;
+                                        properties: {
+                                            token: {
+                                                type: string;
+                                            };
+                                            userId: {
+                                                type: string;
+                                            };
+                                            expiresAt: {
+                                                type: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/list-sessions";
+};
+/**
+ * revoke a single session
+ */
+export declare const revokeSession: {
+    <C extends [{
+        body: {
+            token: string;
+        };
+        headers: HeadersInit;
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            token: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            token: string;
+        }, {
+            token: string;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        requireHeaders: true;
+        metadata: {
+            openapi: {
+                description: string;
+                requestBody: {
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object";
+                                properties: {
+                                    token: {
+                                        type: string;
+                                    };
+                                };
+                                required: string[];
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/revoke-session";
+};
+/**
+ * revoke all user sessions
+ */
+export declare const revokeSessions: {
+    <C extends [{
+        headers: HeadersInit;
+        body?: undefined;
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        requireHeaders: true;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/revoke-sessions";
+};
+export declare const revokeOtherSessions: {
+    <C extends [{
+        headers: HeadersInit;
+        body?: undefined;
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        requireHeaders: true;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/revoke-other-sessions";
+};
+//# sourceMappingURL=session.d.ts.map

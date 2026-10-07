@@ -1,0 +1,1 @@
+{"version":3,"file":"dialect.d.ts","sourceRoot":"","sources":["../../../src/adapters/kysely-adapter/dialect.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAgB,MAAM,QAAQ,CAAC;AAO9C,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,aAAa,CAAC;AACrD,OAAO,KAAK,EAAE,kBAAkB,EAAE,MAAM,SAAS,CAAC;AAuClD,eAAO,MAAM,mBAAmB,GAAU,QAAQ,iBAAiB;;;EAqDlE,CAAC"}

@@ -1,0 +1,1390 @@
+import { z } from "zod";
+import { type InferOptionSchema, type Session, type User } from "../../types";
+import { type AccessControl, type Role } from "../access";
+export interface UserWithRole extends User {
+    role?: string;
+    banned?: boolean | null;
+    banReason?: string | null;
+    banExpires?: Date | null;
+}
+export interface SessionWithImpersonatedBy extends Session {
+    impersonatedBy?: string;
+}
+export interface AdminOptions {
+    /**
+     * The default role for a user
+     *
+     * @default "user"
+     */
+    defaultRole?: string;
+    /**
+     * A default ban reason
+     *
+     * By default, no reason is provided
+     */
+    defaultBanReason?: string;
+    /**
+     * Number of seconds until the ban expires
+     *
+     * By default, the ban never expires
+     */
+    defaultBanExpiresIn?: number;
+    /**
+     * Duration of the impersonation session in seconds
+     *
+     * By default, the impersonation session lasts 1 hour
+     */
+    impersonationSessionDuration?: number;
+    /**
+     * Custom schema for the admin plugin
+     */
+    schema?: InferOptionSchema<typeof schema>;
+    /**
+     * Configure the roles and permissions for the admin
+     * plugin.
+     */
+    ac?: AccessControl;
+    /**
+     * Custom permissions for roles.
+     */
+    roles?: {
+        [key in string]?: Role;
+    };
+    /**
+     * List of user ids that should have admin access
+     *
+     * If this is set, the `adminRole` option is ignored
+     */
+    adminUserIds?: string[];
+}
+export declare const admin: <O extends AdminOptions>(options?: O) => {
+    id: "admin";
+    init(ctx: import("../..").AuthContext): {
+        options: {
+            databaseHooks: {
+                user: {
+                    create: {
+                        before(user: {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        }): Promise<{
+                            data: {
+                                id: string;
+                                name: string;
+                                email: string;
+                                emailVerified: boolean;
+                                createdAt: Date;
+                                updatedAt: Date;
+                                image?: string | null | undefined;
+                                role: string;
+                            };
+                        }>;
+                    };
+                };
+                session: {
+                    create: {
+                        before(session: {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        }): Promise<false | undefined>;
+                    };
+                };
+            };
+        };
+    };
+    hooks: {
+        after: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<SessionWithImpersonatedBy[] | undefined>;
+        }[];
+    };
+    endpoints: {
+        setRole: {
+            <C extends [{
+                body: {
+                    userId: string;
+                    role: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    user: UserWithRole;
+                };
+            } : {
+                user: UserWithRole;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                    role: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                    role: string;
+                }, {
+                    userId: string;
+                    role: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/set-role";
+        };
+        createUser: {
+            <C extends [{
+                body: {
+                    password: string;
+                    name: string;
+                    email: string;
+                    role: string;
+                    data?: Record<string, any> | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    user: UserWithRole;
+                };
+            } : {
+                user: UserWithRole;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    email: z.ZodString;
+                    password: z.ZodString;
+                    name: z.ZodString;
+                    role: z.ZodString;
+                    /**
+                     * extra fields for user
+                     */
+                    data: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                    name: string;
+                    email: string;
+                    role: string;
+                    data?: Record<string, any> | undefined;
+                }, {
+                    password: string;
+                    name: string;
+                    email: string;
+                    role: string;
+                    data?: Record<string, any> | undefined;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/create-user";
+        };
+        listUsers: {
+            <C extends [{
+                query: {
+                    searchValue?: string | undefined;
+                    searchField?: "name" | "email" | undefined;
+                    searchOperator?: "contains" | "starts_with" | "ends_with" | undefined;
+                    limit?: string | number | undefined;
+                    offset?: string | number | undefined;
+                    sortBy?: string | undefined;
+                    sortDirection?: "asc" | "desc" | undefined;
+                    filterField?: string | undefined;
+                    filterValue?: string | number | boolean | undefined;
+                    filterOperator?: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | undefined;
+                };
+                body?: undefined;
+                method?: "GET" | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    users: UserWithRole[];
+                    total: number;
+                    limit: number | undefined;
+                    offset: number | undefined;
+                } | {
+                    users: never[];
+                    total: number;
+                };
+            } : {
+                users: UserWithRole[];
+                total: number;
+                limit: number | undefined;
+                offset: number | undefined;
+            } | {
+                users: never[];
+                total: number;
+            }>;
+            options: {
+                method: "GET";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                query: z.ZodObject<{
+                    searchValue: z.ZodOptional<z.ZodString>;
+                    searchField: z.ZodOptional<z.ZodEnum<["email", "name"]>>;
+                    searchOperator: z.ZodOptional<z.ZodEnum<["contains", "starts_with", "ends_with"]>>;
+                    limit: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodNumber]>>;
+                    offset: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodNumber]>>;
+                    sortBy: z.ZodOptional<z.ZodString>;
+                    sortDirection: z.ZodOptional<z.ZodEnum<["asc", "desc"]>>;
+                    filterField: z.ZodOptional<z.ZodString>;
+                    filterValue: z.ZodOptional<z.ZodUnion<[z.ZodUnion<[z.ZodString, z.ZodNumber]>, z.ZodBoolean]>>;
+                    filterOperator: z.ZodOptional<z.ZodEnum<["eq", "ne", "lt", "lte", "gt", "gte"]>>;
+                }, "strip", z.ZodTypeAny, {
+                    searchValue?: string | undefined;
+                    searchField?: "name" | "email" | undefined;
+                    searchOperator?: "contains" | "starts_with" | "ends_with" | undefined;
+                    limit?: string | number | undefined;
+                    offset?: string | number | undefined;
+                    sortBy?: string | undefined;
+                    sortDirection?: "asc" | "desc" | undefined;
+                    filterField?: string | undefined;
+                    filterValue?: string | number | boolean | undefined;
+                    filterOperator?: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | undefined;
+                }, {
+                    searchValue?: string | undefined;
+                    searchField?: "name" | "email" | undefined;
+                    searchOperator?: "contains" | "starts_with" | "ends_with" | undefined;
+                    limit?: string | number | undefined;
+                    offset?: string | number | undefined;
+                    sortBy?: string | undefined;
+                    sortDirection?: "asc" | "desc" | undefined;
+                    filterField?: string | undefined;
+                    filterValue?: string | number | boolean | undefined;
+                    filterOperator?: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | undefined;
+                }>;
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                users: {
+                                                    type: string;
+                                                    items: {
+                                                        $ref: string;
+                                                    };
+                                                };
+                                                total: {
+                                                    type: string;
+                                                };
+                                                limit: {
+                                                    type: string[];
+                                                };
+                                                offset: {
+                                                    type: string[];
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/list-users";
+        };
+        listUserSessions: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    sessions: {
+                        id: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        userId: string;
+                        expiresAt: Date;
+                        token: string;
+                        ipAddress?: string | null | undefined;
+                        userAgent?: string | null | undefined;
+                    }[];
+                };
+            } : {
+                sessions: {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                }[];
+            }>;
+            options: {
+                method: "POST";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                sessions: {
+                                                    type: string;
+                                                    items: {
+                                                        $ref: string;
+                                                    };
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/list-user-sessions";
+        };
+        unbanUser: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    user: any;
+                };
+            } : {
+                user: any;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/unban-user";
+        };
+        banUser: {
+            <C extends [{
+                body: {
+                    userId: string;
+                    banReason?: string | undefined;
+                    banExpiresIn?: number | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    user: any;
+                };
+            } : {
+                user: any;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                    /**
+                     * Reason for the ban
+                     */
+                    banReason: z.ZodOptional<z.ZodString>;
+                    /**
+                     * Number of seconds until the ban expires
+                     */
+                    banExpiresIn: z.ZodOptional<z.ZodNumber>;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                    banReason?: string | undefined;
+                    banExpiresIn?: number | undefined;
+                }, {
+                    userId: string;
+                    banReason?: string | undefined;
+                    banExpiresIn?: number | undefined;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/ban-user";
+        };
+        impersonateUser: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    session: {
+                        id: string;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        userId: string;
+                        expiresAt: Date;
+                        token: string;
+                        ipAddress?: string | null | undefined;
+                        userAgent?: string | null | undefined;
+                    };
+                    user: {
+                        id: string;
+                        name: string;
+                        email: string;
+                        emailVerified: boolean;
+                        createdAt: Date;
+                        updatedAt: Date;
+                        image?: string | null | undefined;
+                    };
+                };
+            } : {
+                session: {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                session: {
+                                                    $ref: string;
+                                                };
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/impersonate-user";
+        };
+        stopImpersonating: {
+            <C extends [({
+                body?: undefined;
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    session: Session & Record<string, any>;
+                    user: User & Record<string, any>;
+                };
+            } : {
+                session: Session & Record<string, any>;
+                user: User & Record<string, any>;
+            }>;
+            options: {
+                method: "POST";
+            } & {
+                use: any[];
+            };
+            path: "/admin/stop-impersonating";
+        };
+        revokeUserSession: {
+            <C extends [{
+                body: {
+                    sessionToken: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    success: boolean;
+                };
+            } : {
+                success: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    sessionToken: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    sessionToken: string;
+                }, {
+                    sessionToken: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                success: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/revoke-user-session";
+        };
+        revokeUserSessions: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    success: boolean;
+                };
+            } : {
+                success: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                success: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/revoke-user-sessions";
+        };
+        removeUser: {
+            <C extends [{
+                body: {
+                    userId: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    success: boolean;
+                };
+            } : {
+                success: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                }, {
+                    userId: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+                metadata: {
+                    openapi: {
+                        operationId: string;
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                success: {
+                                                    type: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/remove-user";
+        };
+        setUserPassword: {
+            <C extends [{
+                body: {
+                    userId: string;
+                    newPassword: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    status: boolean;
+                };
+            } : {
+                status: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    newPassword: z.ZodString;
+                    userId: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    userId: string;
+                    newPassword: string;
+                }, {
+                    userId: string;
+                    newPassword: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    adminOptions: AdminOptions;
+                    session: {
+                        user: UserWithRole;
+                        session: Session;
+                    };
+                    roles: typeof import("./access").defaultRoles & {
+                        [key: string]: Role;
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/admin/set-user-password";
+        };
+        userHasPermission: {
+            <C extends [{
+                body: {
+                    permission: { [key in keyof (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                        readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                        readonly session: readonly ["list", "revoke", "delete"];
+                    })]?: Array<(O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                        readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                        readonly session: readonly ["list", "revoke", "delete"];
+                    })[key][number]>; };
+                    userId?: string;
+                    role?: string;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    error: null;
+                    success: boolean;
+                };
+            } : {
+                error: null;
+                success: boolean;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    permission: z.ZodRecord<z.ZodString, z.ZodArray<z.ZodString, "many">>;
+                    userId: z.ZodOptional<z.ZodString>;
+                    role: z.ZodOptional<z.ZodString>;
+                }, "strip", z.ZodTypeAny, {
+                    permission: Record<string, string[]>;
+                    userId?: string | undefined;
+                    role?: string | undefined;
+                }, {
+                    permission: Record<string, string[]>;
+                    userId?: string | undefined;
+                    role?: string | undefined;
+                }>;
+                metadata: {
+                    openapi: {
+                        description: string;
+                        requestBody: {
+                            content: {
+                                "application/json": {
+                                    schema: {
+                                        type: "object";
+                                        properties: {
+                                            permission: {
+                                                type: string;
+                                                description: string;
+                                            };
+                                        };
+                                        required: string[];
+                                    };
+                                };
+                            };
+                        };
+                        responses: {
+                            "200": {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                error: {
+                                                    type: string;
+                                                };
+                                                success: {
+                                                    type: string;
+                                                };
+                                            };
+                                            required: string[];
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                    $Infer: {
+                        body: {
+                            permission: { [key in keyof (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                                readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                                readonly session: readonly ["list", "revoke", "delete"];
+                            })]?: Array<(O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                                readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                                readonly session: readonly ["list", "revoke", "delete"];
+                            })[key][number]>; };
+                            userId?: string;
+                            role?: string;
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/admin/has-permission";
+        };
+    };
+    $ERROR_CODES: {
+        readonly FAILED_TO_CREATE_USER: "Failed to create user";
+        readonly USER_ALREADY_EXISTS: "User already exists";
+        readonly YOU_CANNOT_BAN_YOURSELF: "You cannot ban yourself";
+        readonly YOU_ARE_NOT_ALLOWED_TO_CHANGE_USERS_ROLE: "You are not allowed to change users role";
+        readonly YOU_ARE_NOT_ALLOWED_TO_CREATE_USERS: "You are not allowed to create users";
+        readonly YOU_ARE_NOT_ALLOWED_TO_LIST_USERS: "You are not allowed to list users";
+        readonly YOU_ARE_NOT_ALLOWED_TO_LIST_USERS_SESSIONS: "You are not allowed to list users sessions";
+        readonly YOU_ARE_NOT_ALLOWED_TO_BAN_USERS: "You are not allowed to ban users";
+        readonly YOU_ARE_NOT_ALLOWED_TO_IMPERSONATE_USERS: "You are not allowed to impersonate users";
+        readonly YOU_ARE_NOT_ALLOWED_TO_REVOKE_USERS_SESSIONS: "You are not allowed to revoke users sessions";
+        readonly YOU_ARE_NOT_ALLOWED_TO_DELETE_USERS: "You are not allowed to delete users";
+    };
+    schema: {
+        user: {
+            fields: {
+                role: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                banned: {
+                    type: "boolean";
+                    defaultValue: false;
+                    required: false;
+                    input: false;
+                };
+                banReason: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                banExpires: {
+                    type: "date";
+                    required: false;
+                    input: false;
+                };
+            };
+        };
+        session: {
+            fields: {
+                impersonatedBy: {
+                    type: "string";
+                    required: false;
+                };
+            };
+        };
+    };
+};
+declare const schema: {
+    user: {
+        fields: {
+            role: {
+                type: "string";
+                required: false;
+                input: false;
+            };
+            banned: {
+                type: "boolean";
+                defaultValue: false;
+                required: false;
+                input: false;
+            };
+            banReason: {
+                type: "string";
+                required: false;
+                input: false;
+            };
+            banExpires: {
+                type: "date";
+                required: false;
+                input: false;
+            };
+        };
+    };
+    session: {
+        fields: {
+            impersonatedBy: {
+                type: "string";
+                required: false;
+            };
+        };
+    };
+};
+export {};
+//# sourceMappingURL=admin.d.ts.map

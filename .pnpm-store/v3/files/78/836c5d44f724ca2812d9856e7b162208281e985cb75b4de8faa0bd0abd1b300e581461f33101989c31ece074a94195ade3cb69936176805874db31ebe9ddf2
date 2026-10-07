@@ -1,0 +1,221 @@
+import { z } from "zod";
+export declare const forgetPassword: {
+    <C extends [{
+        body: {
+            email: string;
+            redirectTo?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            /**
+             * The email address of the user to send a password reset email to.
+             */
+            email: z.ZodString;
+            /**
+             * The URL to redirect the user to reset their password.
+             * If the token isn't valid or expired, it'll be redirected with a query parameter `?
+             * error=INVALID_TOKEN`. If the token is valid, it'll be redirected with a query parameter `?
+             * token=VALID_TOKEN
+             */
+            redirectTo: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            email: string;
+            redirectTo?: string | undefined;
+        }, {
+            email: string;
+            redirectTo?: string | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/forget-password";
+};
+export declare const forgetPasswordCallback: {
+    <C extends [{
+        query: {
+            callbackURL: string;
+        };
+        params: {
+            token: string;
+        };
+        body?: undefined;
+        method?: "GET" | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: never;
+    } : never>;
+    options: {
+        method: "GET";
+        query: z.ZodObject<{
+            callbackURL: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            callbackURL: string;
+        }, {
+            callbackURL: string;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<void>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        token: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/reset-password/:token";
+};
+export declare const resetPassword: {
+    <C extends [{
+        body: {
+            newPassword: string;
+            token?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: {
+            token?: string | undefined;
+        } | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        query: z.ZodOptional<z.ZodObject<{
+            token: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            token?: string | undefined;
+        }, {
+            token?: string | undefined;
+        }>>;
+        body: z.ZodObject<{
+            newPassword: z.ZodString;
+            token: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            newPassword: string;
+            token?: string | undefined;
+        }, {
+            newPassword: string;
+            token?: string | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/reset-password";
+};
+//# sourceMappingURL=forget-password.d.ts.map

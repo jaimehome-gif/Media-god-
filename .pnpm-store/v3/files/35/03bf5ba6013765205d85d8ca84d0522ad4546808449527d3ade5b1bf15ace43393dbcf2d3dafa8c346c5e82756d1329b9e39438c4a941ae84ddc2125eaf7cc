@@ -1,0 +1,43 @@
+import { type AccessControl, type Role } from "../access";
+import type { admin } from "./admin";
+interface AdminClientOptions {
+    ac: AccessControl;
+    roles: {
+        [key in string]: Role;
+    };
+}
+export declare const adminClient: <O extends AdminClientOptions>(options?: O) => {
+    id: "better-auth-client";
+    $InferServerPlugin: ReturnType<typeof admin<{
+        ac: O["ac"] extends AccessControl ? O["ac"] : AccessControl<{
+            readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+            readonly session: readonly ["list", "revoke", "delete"];
+        }>;
+        roles: O["roles"] extends Record<string, Role> ? O["roles"] : {
+            admin: Role;
+            user: Role;
+        };
+    }>>;
+    getActions: ($fetch: import("@better-fetch/fetch").BetterFetch) => {
+        admin: {
+            checkRolePermission: <R extends O extends {
+                roles: any;
+            } ? keyof O["roles"] : "admin" | "user">(data: {
+                role: R;
+                permission: { [key in keyof (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                    readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                    readonly session: readonly ["list", "revoke", "delete"];
+                })]?: (O["ac"] extends AccessControl<infer S extends import("../access").Statements> ? S : {
+                    readonly user: readonly ["create", "list", "set-role", "ban", "impersonate", "delete"];
+                    readonly session: readonly ["list", "revoke", "delete"];
+                })[key][number][]; };
+            }) => boolean;
+        };
+    };
+    pathMethods: {
+        "/admin/list-users": "GET";
+        "/admin/stop-impersonating": "POST";
+    };
+};
+export {};
+//# sourceMappingURL=client.d.ts.map

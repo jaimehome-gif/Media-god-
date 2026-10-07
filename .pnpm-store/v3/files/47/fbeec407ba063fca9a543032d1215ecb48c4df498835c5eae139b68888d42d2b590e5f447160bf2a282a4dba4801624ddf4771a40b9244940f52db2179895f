@@ -1,0 +1,8 @@
+import type { Provider } from "./types";
+export declare const defaultEndpoints: string[];
+export declare const Providers: {
+    readonly CLOUDFLARE_TURNSTILE: "cloudflare-turnstile";
+    readonly GOOGLE_RECAPTCHA: "google-recaptcha";
+};
+export declare const siteVerifyMap: Record<Provider, string>;
+//# sourceMappingURL=constants.d.ts.map

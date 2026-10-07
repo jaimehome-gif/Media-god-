@@ -1,0 +1,8 @@
+import type { Adapter, BetterAuthOptions } from "../types";
+interface AdapterTestOptions {
+    getAdapter: (customOptions?: Omit<BetterAuthOptions, "database">) => Promise<Adapter>;
+    skipGenerateIdTest?: boolean;
+}
+export declare function runAdapterTest(opts: AdapterTestOptions): Promise<void>;
+export {};
+//# sourceMappingURL=test.d.ts.map

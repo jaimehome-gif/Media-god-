@@ -1,0 +1,10 @@
+import type { AdminOptions } from "./admin";
+export declare const hasPermission: (input: {
+    userId: string;
+    role?: string;
+    options?: AdminOptions;
+    permission: {
+        [key: string]: string[];
+    };
+}) => boolean;
+//# sourceMappingURL=has-permission.d.ts.map

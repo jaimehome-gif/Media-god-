@@ -1,0 +1,11 @@
+import type { BetterAuthPlugin } from "../types";
+export * from "./vanilla";
+export * from "./query";
+export * from "./types";
+export declare const InferPlugin: <T extends BetterAuthPlugin>() => {
+    id: "infer-server-plugin";
+    $InferServerPlugin: T;
+};
+export type * from "@better-fetch/fetch";
+export type * from "zod";
+//# sourceMappingURL=index.d.ts.map

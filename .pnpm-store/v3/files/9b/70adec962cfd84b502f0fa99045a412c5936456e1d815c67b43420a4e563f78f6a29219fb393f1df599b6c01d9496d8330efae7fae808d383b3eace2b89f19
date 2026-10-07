@@ -1,0 +1,10 @@
+import type { multiSession } from ".";
+export declare const multiSessionClient: () => {
+    id: "multi-session";
+    $InferServerPlugin: ReturnType<typeof multiSession>;
+    atomListeners: {
+        matcher(path: string): path is "/multi-session/set-active";
+        signal: "$sessionSignal";
+    }[];
+};
+//# sourceMappingURL=client.d.ts.map

@@ -1,0 +1,6 @@
+import type { sso } from ".";
+export declare const ssoClient: () => {
+    id: "sso-client";
+    $InferServerPlugin: ReturnType<typeof sso>;
+};
+//# sourceMappingURL=client.d.ts.map
