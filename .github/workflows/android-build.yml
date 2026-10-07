@@ -30,11 +30,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+          log-accepted-android-sdk-licenses: true
 
       # Optional: configure a real release keystore from repository secrets.
       # If the STREAMVIBE_KEYSTORE_BASE64 secret is not set, the build falls
