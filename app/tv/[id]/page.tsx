@@ -9,10 +9,12 @@ import {
   getTVShowCredits,
   getTVShowVideos,
   getSimilarTVShows,
+  getTVShowExternalIds,
   getImageUrl,
 } from '@/lib/tmdb'
 import { Star, Calendar, Tv } from 'lucide-react'
 import { VideoPlayer } from '@/components/video-player'
+import { DebridStreamButton } from '@/components/debrid-stream-button'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -28,11 +30,12 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
   const { id } = await params
   const showId = parseInt(id)
 
-  const [show, cast, videos, similar] = await Promise.all([
+  const [show, cast, videos, similar, externalIds] = await Promise.all([
     getTVShowDetails(showId).catch(() => null),
     getTVShowCredits(showId).catch(() => []),
     getTVShowVideos(showId).catch(() => []),
     getSimilarTVShows(showId).catch(() => []),
+    getTVShowExternalIds(showId).catch(() => ({ imdb_id: null })),
   ])
 
   if (!show) notFound()
@@ -138,12 +141,22 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
               </p>
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-3 mb-8">
+              <div className="flex flex-wrap gap-3 mb-4">
                 <MediaActions
                   mediaId={show.id}
                   mediaType="tv"
                   title={show.name}
                   posterPath={show.poster_path}
+                />
+              </div>
+
+              {/* Debrid Stream */}
+              <div className="mb-8">
+                <DebridStreamButton
+                  title={show.name}
+                  imdbId={externalIds.imdb_id}
+                  mediaType="tv"
+                  seasons={show.seasons}
                 />
               </div>
             </div>

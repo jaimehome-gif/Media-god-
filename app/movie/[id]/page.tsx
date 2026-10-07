@@ -9,10 +9,12 @@ import {
   getMovieCredits,
   getMovieVideos,
   getSimilarMovies,
+  getMovieExternalIds,
   getImageUrl,
 } from '@/lib/tmdb'
 import { Play, Star, Clock, Calendar, DollarSign } from 'lucide-react'
 import { VideoPlayer } from '@/components/video-player'
+import { DebridStreamButton } from '@/components/debrid-stream-button'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -28,11 +30,12 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const movieId = parseInt(id)
 
-  const [movie, cast, videos, similar] = await Promise.all([
+  const [movie, cast, videos, similar, externalIds] = await Promise.all([
     getMovieDetails(movieId).catch(() => null),
     getMovieCredits(movieId).catch(() => []),
     getMovieVideos(movieId).catch(() => []),
     getSimilarMovies(movieId).catch(() => []),
+    getMovieExternalIds(movieId).catch(() => ({ imdb_id: null })),
   ])
 
   if (!movie) notFound()
@@ -151,12 +154,21 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
               </p>
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-3 mb-8">
+              <div className="flex flex-wrap gap-3 mb-4">
                 <MediaActions
                   mediaId={movie.id}
                   mediaType="movie"
                   title={movie.title}
                   posterPath={movie.poster_path}
+                />
+              </div>
+
+              {/* Debrid Stream */}
+              <div className="mb-8">
+                <DebridStreamButton
+                  title={movie.title}
+                  imdbId={externalIds.imdb_id}
+                  mediaType="movie"
                 />
               </div>
 

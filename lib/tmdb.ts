@@ -190,6 +190,15 @@ export async function getSimilarTVShows(id: number): Promise<TVShow[]> {
   return data.results.slice(0, 10)
 }
 
+// External IDs
+export async function getMovieExternalIds(id: number): Promise<{ imdb_id: string | null }> {
+  return tmdbFetch(`/movie/${id}/external_ids`)
+}
+
+export async function getTVShowExternalIds(id: number): Promise<{ imdb_id: string | null }> {
+  return tmdbFetch(`/tv/${id}/external_ids`)
+}
+
 // Search
 export async function searchMulti(query: string, page = 1): Promise<TMDBPagedResult<MediaItem>> {
   const data = await tmdbFetch<TMDBPagedResult<any>>('/search/multi', { query, page })
