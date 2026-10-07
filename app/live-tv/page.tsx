@@ -1,37 +1,12 @@
-import { Tv, Radio, Globe, Film, Music, Gamepad2, Newspaper, Trophy } from 'lucide-react'
+import { Tv, Radio, Globe } from 'lucide-react'
 import Link from 'next/link'
 import { Navbar } from '@/components/navbar'
+import { channelCategories, allChannels } from '@/lib/live-tv-channels'
 
 export const metadata = {
   title: 'Live TV - StreamVibe',
-  description: 'Watch free live TV channels with real-time streams',
+  description: 'Watch live TV channels from around the world with real-time program guides',
 }
-
-const channelCategories = [
-  {
-    name: 'UK General',
-    icon: Tv,
-    channels: [
-      { id: 'itv2', name: 'ITV 2', logo: 'ITV', stream: 'http://45.14.84.37/itv2/index.m3u8' },
-      { id: 'itv3', name: 'ITV 3', logo: 'ITV', stream: 'http://45.14.84.37/itv3/index.m3u8' },
-      { id: 'itv4', name: 'ITV 4', logo: 'ITV', stream: 'http://45.14.84.37/itv4/index.m3u8' },
-      { id: 'channel5', name: 'Channel 5', logo: '5', stream: 'http://193.46.58.239:8080/Channel5/index.m3u8' },
-      { id: 'qvcuk', name: 'QVC UK', logo: 'QVC', stream: 'https://qvcuk-live.akamaized.net/hls/live/2097112/qvc/3/3.m3u8' },
-      { id: 'tjc', name: 'TJC', logo: 'TJC', stream: 'https://cdn-shop-lc-01.akamaized.net/Content/HLS_HLS/Live/channel(TJCOTT)/index.m3u8' },
-      { id: 'greatmovies', name: 'Great! Movies', logo: 'G!', stream: 'https://amg01753-narrativeuk-amg01753c3-lg-gb-1833.playouts.now.amagi.tv/playlist/amg01753-narrativeuk-greatmovies-lggb/playlist.m3u8' },
-    ],
-  },
-  {
-    name: 'BBC',
-    icon: Newspaper,
-    channels: [
-      { id: 'bbc-alba', name: 'BBC Alba', logo: 'BBC', stream: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_alba/iptv_hd_abr_v1.m3u8' },
-      { id: 'bbc-four', name: 'BBC Four', logo: 'BBC', stream: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_four_hd/iptv_hd_abr_v1.m3u8' },
-      { id: 'bbc-scotland', name: 'BBC Scotland', logo: 'BBC', stream: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_scotland_hd/pc_hd_abr_v2.m3u8' },
-      { id: 'bbc-three', name: 'BBC Three', logo: 'BBC', stream: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_three_hd/iptv_hd_abr_v1.m3u8' },
-    ],
-  },
-]
 
 export default function LiveTVPage() {
   return (
@@ -39,28 +14,29 @@ export default function LiveTVPage() {
       <Navbar />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
               <Radio className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-foreground">Live TV</h1>
-              <p className="text-muted-foreground">Free-to-watch live channels and streams</p>
+              <h1 className="text-3xl sm:text-4xl font-bold text-foreground">Live TV & EPG Schedule</h1>
+              <p className="text-muted-foreground">Watch live channels and live program schedules from around the world</p>
             </div>
           </div>
 
+          {/* Live indicator */}
           <div className="flex items-center gap-2 text-sm">
             <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
-            <span className="text-muted-foreground">
-              Select a channel to open the live player. Some BBC streams may be UK/region restricted.
-            </span>
+            <span className="text-muted-foreground">{allChannels.length} channels streaming live with active EPG guides</span>
           </div>
         </div>
 
+        {/* Channel Categories */}
         <div className="flex flex-col gap-12">
           {channelCategories.map((category) => (
             <section key={category.name}>
@@ -69,35 +45,47 @@ export default function LiveTVPage() {
                 <h2 className="text-2xl font-bold text-foreground">{category.name}</h2>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 {category.channels.map((channel) => (
                   <Link
                     key={channel.id}
                     href={`/live-tv/${channel.id}`}
-                    className="group relative bg-card rounded-xl overflow-hidden border border-border hover:border-primary/55 focus-visible:border-primary transition-all hover:shadow-lg hover:shadow-primary/10 flex flex-col tv-focus-target focus:outline-none"
+                    className="group relative bg-card rounded-xl overflow-hidden border border-border hover:border-primary/55 transition-all hover:shadow-lg hover:shadow-primary/10 flex flex-col"
                   >
                     <div className="aspect-video bg-gradient-to-br from-secondary to-muted flex items-center justify-center relative">
-                      <span className="text-3xl sm:text-4xl font-black tracking-tight text-foreground">
-                        {channel.logo}
-                      </span>
-
+                      <span className="text-4xl">{channel.logo}</span>
+                      
+                      {/* Live badge */}
                       <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded bg-red-500 text-white text-xs font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                         LIVE
-                      </div>
-
-                      <div className="absolute inset-0 bg-background/75 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg">
-                          <Tv className="w-6 h-6 text-primary-foreground" />
-                        </div>
                       </div>
                     </div>
 
-                    <div className="p-3">
-                      <h3 className="font-semibold text-foreground text-sm truncate group-hover:text-primary transition-colors">
-                        {channel.name}
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-1">Live stream</p>
+                    <div className="p-3 flex-1 flex flex-col justify-between">
+                      <div>
+                        <h3 className="font-semibold text-foreground text-sm truncate group-hover:text-primary transition-colors">
+                          {channel.name}
+                        </h3>
+                        <p className="text-xs font-medium text-emerald-400 mt-1 truncate">
+                          {channel.currentProgram}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{channel.time}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          {channel.viewers}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Hover play overlay */}
+                    <div className="absolute inset-0 bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg">
+                        <Tv className="w-6 h-6 text-primary-foreground" />
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -106,21 +94,27 @@ export default function LiveTVPage() {
           ))}
         </div>
 
+        {/* Info banner */}
         <div className="mt-12 p-6 rounded-2xl bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
               <Globe className="w-6 h-6 text-primary" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">Live stream status</h3>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-foreground mb-1">International Channels & EPG Scheduling</h3>
               <p className="text-sm text-muted-foreground">
-                Streams come from publicly available/free-to-watch feeds. Individual channels can go offline,
-                change URLs, or be region restricted without notice.
+                Access 500+ international channels from over 100 countries equipped with live electronic program guide timelines for seamless viewing.
               </p>
             </div>
+            <Link
+              href="/live-tv/international"
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Browse All
+            </Link>
           </div>
         </div>
       </div>
     </main>
   )
-}
+                      }

@@ -12,6 +12,11 @@
       "name": "REAL_DEBRID_API_KEY",
       "description": "Real-Debrid API token from https://real-debrid.com/apitoken",
       "requiredAtBoot": false
+    },
+    {
+      "name": "GUARDIAN_CONTENT_API_KEY",
+      "description": "Guardian Content API key (optional, not referenced by current code)",
+      "requiredAtBoot": false
     }
   ]
 }

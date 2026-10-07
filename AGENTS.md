@@ -14,7 +14,7 @@ Next.js 16 app (StreamVibe / media-god) — a streaming UI for movies, TV shows,
 
 ## Environment Setup (Base44)
 - `docker-compose.base44.yml` runs PostgreSQL + Next.js dev server.
-- PostgreSQL schema is auto-created on first boot via `db/init.sql` mounted into `docker-entrypoint-initdb.d`.
+- PostgreSQL schema is auto-created on first boot via `db/init.sql` mounted into `docker-entrypoint-initdb.d` (mirrors `lib/db/schema.ts`; `.base44/schema.sql` is an alternative copy).
 - `DATABASE_URL` is set inline in compose (local infra, not a secret).
 - `next.config.mjs` conditionally adds the preview origin to `allowedDevOrigins` when `BASE44_PREVIEW_MODE === '1'`.
 - No external secrets are required to boot. `GUARDIAN_CONTENT_API_KEY` exists but is not referenced in code.
@@ -29,6 +29,8 @@ Next.js 16 app (StreamVibe / media-god) — a streaming UI for movies, TV shows,
 - `docker compose -f docker-compose.base44.yml up -d --build` then curl `http://localhost:3000/`.
 - The home page should render with mock movie/TV data.
 - Auth pages (`/sign-in`, `/sign-up`) require the DB to be up and `BETTER_AUTH_URL` to be set.
+- `/live-tv` lists channels; each links to `/live-tv/{id}` which renders a live HLS player + EPG. `/live-tv/international` shows all channels.
+- The player uses `hls.js` with a public Apple bipbop test stream as the live source.
 
 ## Real-Debrid Playback
 - Both add-magnet and torrent-status use `lib/real-debrid.ts`. Wait for metadata, select the actual largest video file ID (not a provider's zero-based index), and only resolve links after the torrent is downloaded.
