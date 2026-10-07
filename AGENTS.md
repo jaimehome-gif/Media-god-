@@ -39,3 +39,11 @@ Next.js 16 app (StreamVibe / media-god) — a streaming UI for movies, TV shows,
 - Upstream `451 infringing_file` / error 35 is a provider copyright restriction. Preserve it as `CONTENT_BLOCKED`; never treat it as success or retry blocked files automatically. The UI disables each blocked result after its first rejection.
 - Full-project `pnpm exec tsc --noEmit` currently has pre-existing errors in nullable auth uses, home filters, and other media components. Check changed playback files separately as well as live routes.
 - The sandbox startup installs dependencies from the frozen pnpm lockfile, so new playback dependencies must update both package.json and pnpm-lock.yaml.
+
+## Android Packaging (Capacitor)
+- The Android app is a thin Capacitor WebView wrapper that loads the deployed web app (`server.url` in `capacitor.config.ts`), so all server-side features (auth, DB, server actions, Live TV/Real-Debrid playback) work unchanged inside the native shell.
+- `@capacitor/core` + `@capacitor/app` are runtime deps; `@capacitor/cli` + `@capacitor/android` are dev deps. The web app never imports Capacitor packages statically — `lib/capacitor.ts` checks the `window.Capacitor` global, and `hooks/use-tv-navigation.ts` dynamically imports `@capacitor/app` only when running on a TV. This keeps the web bundle clean and web behaviour unchanged.
+- Two Gradle product flavors in `android/app/build.gradle`: `phone` (touch, LAUNCHER) and `firetv` (D-pad/remote, LEANBACK_LAUNCHER, landscape). Release signing falls back to the debug key when no keystore is configured.
+- TV remote navigation (D-pad spatial focus, Select/OK, Back, auto-fullscreen playback, landscape lock, focus ring) lives in `hooks/use-tv-navigation.ts` and only activates when `isTvDevice()` is true. Test with `?tvMode=1`.
+- `cap sync` regenerates git-ignored files under `android/app/src/main/assets/` and `android/app/src/main/res/xml/`. The committed `android/` project is incomplete until `pnpm cap:sync` runs (standard Capacitor workflow).
+- The Android project is NOT built in the sandbox (no Android SDK); it builds on a developer machine or via `.github/workflows/android-build.yml`. See `ANDROID_BUILD.md`.

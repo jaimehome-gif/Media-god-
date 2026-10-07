@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fire TV / Fire Stick build: D-pad/remote, landscape, leanback launcher. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Leanback (TV) feature is optional so the APK can still be inspected on
+         non-TV devices, but the leanback launcher makes it appear on the Fire
+         TV home row. Touchscreen is not required for remote navigation. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:banner="@drawable/banner">
+
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="landscape"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
