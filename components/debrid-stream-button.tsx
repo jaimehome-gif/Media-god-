@@ -192,20 +192,32 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
             </div>
           )}
 
-          {/* Stream ready */}
+          {/* Stream ready — in-app video player */}
           {streamUrl && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <Play className="w-5 h-5 text-emerald-500 fill-current" />
-              <span className="text-sm text-emerald-500 font-medium flex-1">Stream ready!</span>
-              <a
-                href={streamUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Open Stream
-              </a>
+            <div className="space-y-3">
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black">
+                <video
+                  src={streamUrl}
+                  controls
+                  autoPlay
+                  className="w-full h-full"
+                >
+                  Your browser does not support video playback.
+                </video>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                <Play className="w-5 h-5 text-emerald-500 fill-current" />
+                <span className="text-sm text-emerald-500 font-medium flex-1">Stream ready!</span>
+                <a
+                  href={streamUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open in new tab
+                </a>
+              </div>
             </div>
           )}
 
