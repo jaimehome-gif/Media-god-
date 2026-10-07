@@ -24,7 +24,7 @@ export function VideoPlayer({ videoKey, title }: VideoPlayerProps) {
         />
         <button
           onClick={() => setPlaying(false)}
-          className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+          className="absolute top-3 right-3 w-12 h-12 rounded-full bg-black/70 flex items-center justify-center text-white hover:bg-black/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
