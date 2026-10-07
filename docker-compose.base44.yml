@@ -31,6 +31,8 @@ services:
       - BASE44_PREVIEW_MODE
       - BASE44_PUBLIC_HOST_SUFFIX
       - BASE44_SANDBOX_HOST_DOMAIN
+    env_file:
+      - /run/base44/app.env
     depends_on:
       postgres:
         condition: service_healthy

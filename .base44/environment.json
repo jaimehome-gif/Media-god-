@@ -2,5 +2,16 @@
   "previewPort": 3000,
   "healthPath": "/",
   "startCommand": "docker compose -f docker-compose.base44.yml up -d",
-  "secrets": []
+  "secrets": [
+    {
+      "name": "TMDB_API_KEY",
+      "description": "TMDB v3 API key from https://www.themoviedb.org/settings/api",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "REAL_DEBRID_API_KEY",
+      "description": "Real-Debrid API token from https://real-debrid.com/apitoken",
+      "requiredAtBoot": false
+    }
+  ]
 }
