@@ -29,11 +29,15 @@ export type ChannelCategory = {
 }
 
 // ---------------------------------------------------------------------------
-// UK Channels — streams sourced from the Free-TV/IPTV public playlist
-// (https://github.com/Free-TV/IPTV).  HTTPS endpoints are preferred; a small
-// number of channels only publish HTTP endpoints and are included because the
-// user explicitly requested them — the player will show a graceful error if
-// the browser blocks mixed content.
+// Channel data — sourced from the Free-TV/IPTV public playlist
+// (https://github.com/Free-TV/IPTV).  To add or update a channel, edit the
+// relevant array below.  The UK list mirrors playlists/playlist_uk.m3u8;
+// international channels mirror the "News", "Music (EN)" and
+// "Documentaries (EN)" groups in the root playlist.m3u8.
+//
+// HTTPS endpoints are preferred; a small number of channels only publish HTTP
+// endpoints and are included because the user explicitly requested them — the
+// player will show a graceful error if the browser blocks mixed content.
 // ---------------------------------------------------------------------------
 
 const ukChannels: Channel[] = [
@@ -66,7 +70,12 @@ const newsChannels: Channel[] = [
   { id: 30, name: 'TRT World', logo: '🇹🇷', url: 'https://tv-trtworld.medya.trt.com.tr/master.m3u8', currentProgram: 'TRT World Live', time: '24/7', viewers: '1.4M', country: 'TR' },
   { id: 31, name: 'Bloomberg TV', logo: '💼', url: 'https://bloomberg.com/media-manifest/streams/eu.m3u8', currentProgram: 'Bloomberg Live', time: '24/7', viewers: '1.9M', country: 'US' },
   { id: 32, name: 'Euronews English', logo: '🇪🇺', url: 'https://dash4.antik.sk/live/test_euronews/playlist.m3u8', currentProgram: 'Euronews Live', time: '24/7', viewers: '2.7M', country: 'FR' },
-  { id: 33, name: 'Arirang TV', logo: '🇰🇷', url: 'http://amdlive-ch01.ctnd.com.edgesuite.net/arirang_1ch/smil:arirang_1ch.smil/playlist.m3u8', currentProgram: 'Arirang Live', time: '24/7', viewers: '890K', country: 'KR' },
+  { id: 33, name: 'Arirang World', logo: '🇰🇷', url: 'http://amdlive.ctnd.com.edgesuite.net/arirang_1ch/smil:arirang_1ch.smil/chunklist_b2256000_sleng.m3u8', currentProgram: 'Arirang World Live', time: '24/7', viewers: '890K', country: 'KR' },
+  { id: 34, name: 'NBC News NOW', logo: '🇺🇸', url: 'https://d1si3n1st4nkgb.cloudfront.net/10502/88896001/hls/master.m3u8?ads.xumo_channelId=88896001', currentProgram: 'NBC News NOW Live', time: '24/7', viewers: '1.5M', country: 'US' },
+  { id: 35, name: 'Reuters', logo: '📰', url: 'https://amg00453-reuters-amg00453c1-rakuten-uk-2110.playouts.now.amagi.tv/playlist/amg00453-reuters-reuters-rakutenuk/playlist.m3u8', currentProgram: 'Reuters Live', time: '24/7', viewers: '920K', country: 'US' },
+  { id: 36, name: 'CBS News', logo: '🇺🇸', url: 'https://dai.google.com/linear/hls/event/Sid4xiTQTkCT1SLu6rjUSQ/master.m3u8', currentProgram: 'CBS News Live', time: '24/7', viewers: '1.3M', country: 'US' },
+  { id: 37, name: 'The Guardian', logo: '📰', url: 'https://rakuten-guardian-1-ie.samsung.wurl.tv/playlist.m3u8', currentProgram: 'The Guardian Live', time: '24/7', viewers: '480K', country: 'UK' },
+  { id: 38, name: 'Cheddar', logo: '💼', url: 'https://hls.livecdn.io/cheddar.com/cheddar/playlist.m3u8', currentProgram: 'Cheddar Business Live', time: '24/7', viewers: '650K', country: 'US' },
 ]
 
 const entertainmentChannels: Channel[] = [
@@ -93,11 +102,13 @@ const shoppingChannels: Channel[] = [
 const musicChannels: Channel[] = [
   { id: 60, name: 'Now 70s', logo: '🎵', url: 'https://lightning-now70s-samsungnz.amagi.tv/playlist.m3u8', currentProgram: 'Now 70s Music', time: '24/7', viewers: '450K', country: 'UK' },
   { id: 61, name: 'Now 80s', logo: '🎸', url: 'https://lightning-now80s-samsunguk.amagi.tv/playlist.m3u8', currentProgram: 'Now 80s Music', time: '24/7', viewers: '620K', country: 'UK' },
+  { id: 62, name: 'Now Rock', logo: '🤘', url: 'https://lightning-now90s-samsungnz.amagi.tv/playlist.m3u8', currentProgram: 'Now Rock Music', time: '24/7', viewers: '380K', country: 'UK' },
 ]
 
 const documentaryChannels: Channel[] = [
   { id: 70, name: 'CGTN Documentary', logo: '🌍', url: 'https://news.cgtn.com/resource/live/document/cgtn-doc.m3u8', currentProgram: 'CGTN Documentary Live', time: '24/7', viewers: '340K', country: 'CN' },
   { id: 71, name: 'RT Documentary', logo: '🎬', url: 'https://rt-rtd.rttv.com/dvr/rtdoc/playlist.m3u8', currentProgram: 'RT Documentary Live', time: '24/7', viewers: '520K', country: 'RU' },
+  { id: 72, name: 'Peer TV South Tyrol', logo: '🏔️', url: 'https://iptv.peer.biz/live/peertv-en.m3u8', currentProgram: 'Peer TV Live', time: '24/7', viewers: '85K', country: 'IT' },
 ]
 
 const kidsChannels: Channel[] = [
