@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { Play, Star, Plus, Heart, Users, Film, Tv } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
-import { type MediaItem, type Movie, type TVShow } from '@/lib/tmdb'
+import { type MediaItem, type Movie, type TVShow, getImageUrl } from '@/lib/tmdb'
 import { useSession } from '@/lib/auth-client'
 import { addToWatchlist, addToFavorites, createWatchParty } from '@/app/actions/media'
 import { toast } from 'sonner'
@@ -44,6 +45,7 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
   const date = 'release_date' in item ? item.release_date : ('first_air_date' in item ? item.first_air_date : undefined)
   const year = date ? new Date(date).getFullYear() : null
   const gradient = getGradient(item.id, type)
+  const posterUrl = getImageUrl(item.poster_path, 'w500')
 
   const sizeClasses = {
     sm: 'w-[140px]',
@@ -140,19 +142,28 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
       className={`group flex-shrink-0 ${sizeClasses[size]}`}
     >
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-secondary">
-        {/* Gradient poster placeholder */}
-        <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-            {type === 'movie' ? (
-              <Film className="w-12 h-12 text-white/30 mb-3" />
-            ) : (
-              <Tv className="w-12 h-12 text-white/30 mb-3" />
-            )}
-            <p className="text-white/60 text-xs font-medium text-center line-clamp-3">
-              {title}
-            </p>
+        {posterUrl ? (
+          <Image
+            src={posterUrl}
+            alt={title || ''}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 180px"
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+              {type === 'movie' ? (
+                <Film className="w-12 h-12 text-white/30 mb-3" />
+              ) : (
+                <Tv className="w-12 h-12 text-white/30 mb-3" />
+              )}
+              <p className="text-white/60 text-xs font-medium text-center line-clamp-3">
+                {title}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">

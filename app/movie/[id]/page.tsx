@@ -12,7 +12,7 @@ import {
   getImageUrl,
 } from '@/lib/tmdb'
 import { Play, Star, Clock, Calendar, DollarSign } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { VideoPlayer } from '@/components/video-player'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -152,18 +152,6 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
 
               {/* Actions */}
               <div className="flex flex-wrap gap-3 mb-8">
-                {trailer && (
-                  <Button asChild size="lg" className="gap-2">
-                    <a
-                      href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                      Watch Trailer
-                    </a>
-                  </Button>
-                )}
                 <MediaActions
                   mediaId={movie.id}
                   mediaType="movie"
@@ -195,6 +183,14 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      {/* Trailer Player */}
+      {trailer && (
+        <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h2 className="text-2xl font-bold text-foreground mb-4">Watch Trailer</h2>
+          <VideoPlayer videoKey={trailer.key} title={trailer.name} />
+        </section>
+      )}
 
       {/* Cast */}
       {cast.length > 0 && (

@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Play, Info, Plus, ChevronLeft, ChevronRight, Star, Film, Tv } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
-import { type MediaItem } from '@/lib/tmdb'
+import { type MediaItem, getImageUrl } from '@/lib/tmdb'
 import { useSession } from '@/lib/auth-client'
 import { addToWatchlist } from '@/app/actions/media'
 import { toast } from 'sonner'
@@ -57,6 +58,7 @@ export function HeroSlider({ items }: HeroSliderProps) {
   const title = currentItem.title || currentItem.name
   const mediaType = currentItem.media_type || 'movie'
   const gradient = getGradient(currentItem.id)
+  const backdropUrl = getImageUrl(currentItem.backdrop_path, 'original')
 
   const handleAddToWatchlist = async () => {
     if (!session?.user) {
@@ -86,18 +88,30 @@ export function HeroSlider({ items }: HeroSliderProps) {
 
   return (
     <div className="relative w-full h-[70vh] min-h-[500px] max-h-[800px]">
-      {/* Background gradient */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
-        {/* Decorative elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
-          {mediaType === 'movie' ? (
-            <Film className="absolute top-1/2 right-1/4 -translate-y-1/2 w-64 h-64 text-white/5" />
-          ) : (
-            <Tv className="absolute top-1/2 right-1/4 -translate-y-1/2 w-64 h-64 text-white/5" />
-          )}
-        </div>
+      {/* Background */}
+      <div className="absolute inset-0">
+        {backdropUrl ? (
+          <Image
+            src={backdropUrl}
+            alt={title || ''}
+            fill
+            className="object-cover"
+            priority
+            sizes="100vw"
+          />
+        ) : (
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`}>
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
+              <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
+              {mediaType === 'movie' ? (
+                <Film className="absolute top-1/2 right-1/4 -translate-y-1/2 w-64 h-64 text-white/5" />
+              ) : (
+                <Tv className="absolute top-1/2 right-1/4 -translate-y-1/2 w-64 h-64 text-white/5" />
+              )}
+            </div>
+          </div>
+        )}
         {/* Gradient overlays */}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/40 to-transparent" />
