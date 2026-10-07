@@ -1,6 +1,4 @@
-import { redirect, notFound } from 'next/navigation'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
+import { notFound } from 'next/navigation'
 import { Navbar } from '@/components/navbar'
 import Image from 'next/image'
 import { getWatchParty } from '@/app/actions/media'
@@ -20,9 +18,6 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function WatchPartyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await auth.api.getSession({ headers: await headers() }).catch(() => null)
-  if (!session?.user) redirect('/sign-in')
-
   const party = await getWatchParty(id)
   if (!party) notFound()
 
@@ -92,7 +87,7 @@ export default async function WatchPartyDetailPage({ params }: { params: Promise
             </div>
 
             {/* Controls */}
-            <WatchPartyControls partyId={party.id} isHost={party.hostId === session.user.id} />
+            <WatchPartyControls partyId={party.id} isHost={party.hostId === 'guest'} />
           </div>
 
           {/* Sidebar */}

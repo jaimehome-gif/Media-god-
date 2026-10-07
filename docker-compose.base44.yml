@@ -1,56 +1,48 @@
 services:
-  db:
+  postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: streamvibe
-      POSTGRES_PASSWORD: streamvibe_dev
-      POSTGRES_DB: streamvibe
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./.base44/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U streamvibe -d streamvibe"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
     restart: on-failure
+    environment:
+      POSTGRES_USER: mediagod
+      POSTGRES_PASSWORD: mediagod_dev
+      POSTGRES_DB: mediagod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediagod -d mediagod"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   web:
     image: node:22
+    restart: on-failure
     working_dir: /app
     volumes:
       - .:/app
-    environment:
-      - DATABASE_URL=postgres://streamvibe:streamvibe_dev@db:5432/streamvibe
-      - BETTER_AUTH_URL=http://localhost:3000
-      - NODE_ENV=development
-      - BASE44_PREVIEW_MODE=${BASE44_PREVIEW_MODE:-}
-      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX:-}
-      - BASE44_SANDBOX_HOST_DOMAIN=${BASE44_SANDBOX_HOST_DOMAIN:-}
-      - WATCHPACK_POLLING=true
-      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-    depends_on:
-      db:
-        condition: service_healthy
+      - /app/node_modules
+      - /app/.next
     ports:
       - "3000:3000"
-    command:
-      [
-        "sh",
-        "-ec",
-        "npm install -g pnpm@9.15.0 && pnpm install --frozen-lockfile && exec pnpm exec next dev -H 0.0.0.0 -p 3000",
-      ]
+    environment:
+      - DATABASE_URL=postgresql://mediagod:mediagod_dev@postgres:5432/mediagod
+      - BETTER_AUTH_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - BASE44_PREVIEW_MODE
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - BASE44_SANDBOX_HOST_DOMAIN
+    env_file:
+      - /run/base44/app.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-ec", "npm install -g pnpm@9 && CI=true pnpm install --frozen-lockfile && exec pnpm exec next dev -H 0.0.0.0 -p 3000"]
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://localhost:3000/live-tv').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
-        ]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ || exit 1"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 12
-      start_period: 60s
-    restart: on-failure
+      start_period: 90s
 
 volumes:
-  pgdata:
+  postgres_data:

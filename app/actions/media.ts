@@ -9,9 +9,8 @@ import { revalidatePath } from 'next/cache'
 import { nanoid } from 'nanoid'
 
 async function getUserId() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) throw new Error('Unauthorized')
-  return session.user.id
+  const session = await auth.api.getSession({ headers: await headers() }).catch(() => null)
+  return session?.user?.id || 'guest'
 }
 
 export async function getOptionalUserId() {

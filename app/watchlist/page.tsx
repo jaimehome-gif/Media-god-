@@ -1,6 +1,3 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
 import { Navbar } from '@/components/navbar'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,9 +12,6 @@ export const metadata = {
 }
 
 export default async function WatchlistPage() {
-  const session = await auth.api.getSession({ headers: await headers() }).catch(() => null)
-  if (!session?.user) redirect('/sign-in')
-
   const watchlist = await getWatchlist()
 
   return (

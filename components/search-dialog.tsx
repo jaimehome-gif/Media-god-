@@ -68,7 +68,7 @@ export function SearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl p-0 gap-0 overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Search className="w-5 h-5 text-muted-foreground" />
           <Input

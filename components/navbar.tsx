@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Search, Menu, X, Play, Tv, Heart, Clock, Users, LogIn, LogOut, User } from 'lucide-react'
+import { Search, Menu, X, Play, Tv, Heart, Clock, Users, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSession, signOut } from '@/lib/auth-client'
 import {
@@ -70,56 +70,50 @@ export function Navbar() {
                 <span className="sr-only">Search</span>
               </Button>
 
-              {session?.user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                      <User className="w-5 h-5" />
-                      <span className="sr-only">User menu</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium text-foreground">{session.user.name}</p>
-                      <p className="text-xs text-muted-foreground">{session.user.email}</p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/watchlist" className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        Watchlist
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/favorites" className="flex items-center gap-2">
-                        <Heart className="w-4 h-4" />
-                        Favorites
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/watch-party" className="flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Watch Parties
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => signOut()}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <Button asChild variant="default" size="sm" className="hidden sm:flex">
-                  <Link href="/sign-in">
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Sign In
-                  </Link>
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                    <User className="w-5 h-5" />
+                    <span className="sr-only">User menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem asChild>
+                    <Link href="/watchlist" className="flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Watchlist
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/favorites" className="flex items-center gap-2">
+                      <Heart className="w-4 h-4" />
+                      Favorites
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/watch-party" className="flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Watch Parties
+                    </Link>
+                  </DropdownMenuItem>
+                  {session?.user && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <div className="px-2 py-1.5">
+                        <p className="text-sm font-medium text-foreground">{session.user.name}</p>
+                        <p className="text-xs text-muted-foreground">{session.user.email}</p>
+                      </div>
+                      <DropdownMenuItem
+                        onClick={() => signOut()}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Sign out
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Mobile menu button */}
               <Button
@@ -153,16 +147,7 @@ export function Navbar() {
                   {item.label}
                 </Link>
               ))}
-              {!session?.user && (
-                <Link
-                  href="/sign-in"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium bg-primary text-primary-foreground mt-2"
-                >
-                  <LogIn className="w-5 h-5" />
-                  Sign In
-                </Link>
-              )}
+
             </div>
           </div>
         )}

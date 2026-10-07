@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { getContinueWatching, removeContinueWatching } from '@/app/actions/media'
 import { getImageUrl } from '@/lib/tmdb'
-import { useSession } from '@/lib/auth-client'
-
 interface ContinueWatchingItem {
   id: number
   mediaId: number
@@ -23,16 +21,11 @@ interface ContinueWatchingItem {
 }
 
 export function ContinueWatchingRow() {
-  const { data: session } = useSession()
   const [items, setItems] = useState<ContinueWatchingItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchData() {
-      if (!session?.user) {
-        setLoading(false)
-        return
-      }
       try {
         const data = await getContinueWatching()
         setItems(data)
@@ -43,7 +36,7 @@ export function ContinueWatchingRow() {
       }
     }
     fetchData()
-  }, [session])
+  }, [])
 
   const handleRemove = async (mediaId: number, mediaType: string) => {
     try {

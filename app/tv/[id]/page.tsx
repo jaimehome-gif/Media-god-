@@ -9,10 +9,12 @@ import {
   getTVShowCredits,
   getTVShowVideos,
   getSimilarTVShows,
+  getTVShowExternalIds,
   getImageUrl,
 } from '@/lib/tmdb'
-import { Play, Star, Calendar, Tv } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Star, Calendar, Tv } from 'lucide-react'
+import { VideoPlayer } from '@/components/video-player'
+import { DebridStreamButton } from '@/components/debrid-stream-button'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -28,11 +30,12 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
   const { id } = await params
   const showId = parseInt(id)
 
-  const [show, cast, videos, similar] = await Promise.all([
+  const [show, cast, videos, similar, externalIds] = await Promise.all([
     getTVShowDetails(showId).catch(() => null),
     getTVShowCredits(showId).catch(() => []),
     getTVShowVideos(showId).catch(() => []),
     getSimilarTVShows(showId).catch(() => []),
+    getTVShowExternalIds(showId).catch(() => ({ imdb_id: null })),
   ])
 
   if (!show) notFound()
@@ -138,19 +141,7 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
               </p>
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-3 mb-8">
-                {trailer && (
-                  <Button asChild size="lg" className="gap-2">
-                    <a
-                      href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                      Watch Trailer
-                    </a>
-                  </Button>
-                )}
+              <div className="flex flex-wrap gap-3 mb-4">
                 <MediaActions
                   mediaId={show.id}
                   mediaType="tv"
@@ -158,10 +149,28 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
                   posterPath={show.poster_path}
                 />
               </div>
+
+              {/* Debrid Stream */}
+              <div className="mb-8">
+                <DebridStreamButton
+                  title={show.name}
+                  imdbId={externalIds.imdb_id}
+                  mediaType="tv"
+                  seasons={show.seasons}
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Trailer Player */}
+      {trailer && (
+        <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h2 className="text-2xl font-bold text-foreground mb-4">Watch Trailer</h2>
+          <VideoPlayer videoKey={trailer.key} title={trailer.name} />
+        </section>
+      )}
 
       {/* Seasons */}
       {show.seasons.length > 0 && (
