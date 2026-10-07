@@ -10,7 +10,7 @@ import { Heart, Play, Film, Tv } from 'lucide-react'
 import { WatchlistActions } from '@/components/watchlist-actions'
 
 export const metadata = {
-  title: 'My Favorites - StreamVibe',
+  title: 'My Favorites - OnlyFlix.to',
   description: 'Your favorite movies and TV shows',
 }
 

@@ -10,7 +10,7 @@ import { Users, Plus, Play, Film, Tv } from 'lucide-react'
 import { JoinPartyForm } from '@/components/join-party-form'
 
 export const metadata = {
-  title: 'Watch Parties - StreamVibe',
+  title: 'Watch Parties - OnlyFlix.to',
   description: 'Watch together with friends',
 }
 

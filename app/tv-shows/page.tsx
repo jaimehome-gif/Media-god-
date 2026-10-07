@@ -9,7 +9,7 @@ import {
 } from '@/lib/tmdb'
 
 export const metadata = {
-  title: 'TV Shows - StreamVibe',
+  title: 'TV Shows - OnlyFlix.to',
   description: 'Browse popular, top rated, and on-air TV shows',
 }
 

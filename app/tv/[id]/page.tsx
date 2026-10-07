@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const show = await getTVShowDetails(parseInt(id)).catch(() => null)
   if (!show) return { title: 'TV Show Not Found' }
   return {
-    title: `${show.name} - StreamVibe`,
+    title: `${show.name} - OnlyFlix.to`,
     description: show.overview,
   }
 }
