@@ -242,7 +242,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                       </span>
                       <span>{torrent.size}</span>
                       <span>👤 {torrent.seeders}</span>
-                      {torrent.languages.length > 0 && (
+                      {torrent.languages?.length > 0 && (
                         <span>🌐 {torrent.languages.join('+')}</span>
                       )}
                     </div>
