@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: streamvibe
+      POSTGRES_PASSWORD: streamvibe_dev
+      POSTGRES_DB: streamvibe
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./.base44/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamvibe -d streamvibe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: on-failure
+
+  web:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgres://streamvibe:streamvibe_dev@db:5432/streamvibe
+      - BETTER_AUTH_URL=http://localhost:3000
+      - NODE_ENV=development
+      - BASE44_PREVIEW_MODE=${BASE44_PREVIEW_MODE:-}
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX:-}
+      - BASE44_SANDBOX_HOST_DOMAIN=${BASE44_SANDBOX_HOST_DOMAIN:-}
+      - WATCHPACK_POLLING=true
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    command:
+      [
+        "sh",
+        "-ec",
+        "npm install -g pnpm@9.15.0 && pnpm install --frozen-lockfile && exec pnpm exec next dev -H 0.0.0.0 -p 3000",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:3000/live-tv').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    restart: on-failure
+
+volumes:
+  pgdata:

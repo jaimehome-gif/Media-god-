@@ -1,0 +1,22 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/live-tv",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "TMDB_API_KEY",
+      "description": "TMDB API key for movie/TV metadata (app currently ships mock data; optional for boot)",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "REAL_DEBRID_API_KEY",
+      "description": "RealDebrid API key for debrid downloads (optional, not referenced by current code)",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GUARDIAN_CONTENT_API_KEY",
+      "description": "Guardian Content API key (optional, not referenced by current code)",
+      "requiredAtBoot": false
+    }
+  ]
+}
