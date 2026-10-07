@@ -1,0 +1,6 @@
+import type { genericOAuth } from ".";
+export declare const genericOAuthClient: () => {
+    id: "generic-oauth-client";
+    $InferServerPlugin: ReturnType<typeof genericOAuth>;
+};
+//# sourceMappingURL=client.d.ts.map

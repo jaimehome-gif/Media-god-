@@ -1,0 +1,51 @@
+import type { CookieOptions } from "better-call";
+import type { Session, User } from "../types";
+import type { GenericEndpointContext } from "../types/context";
+import type { BetterAuthOptions } from "../types/options";
+export declare function createCookieGetter(options: BetterAuthOptions): (cookieName: string, overrideAttributes?: Partial<CookieOptions>) => {
+    name: string;
+    attributes: CookieOptions;
+};
+export declare function getCookies(options: BetterAuthOptions): {
+    sessionToken: {
+        name: string;
+        options: CookieOptions;
+    };
+    /**
+     * This cookie is used to store the session data in the cookie
+     * This is useful for when you want to cache the session in the cookie
+     */
+    sessionData: {
+        name: string;
+        options: CookieOptions;
+    };
+    dontRememberToken: {
+        name: string;
+        options: CookieOptions;
+    };
+};
+export type BetterAuthCookies = ReturnType<typeof getCookies>;
+export declare function setCookieCache(ctx: GenericEndpointContext, session: {
+    session: Session & Record<string, any>;
+    user: User;
+}): Promise<void>;
+export declare function setSessionCookie(ctx: GenericEndpointContext, session: {
+    session: Session & Record<string, any>;
+    user: User;
+}, dontRememberMe?: boolean, overrides?: Partial<CookieOptions>): Promise<void>;
+export declare function deleteSessionCookie(ctx: GenericEndpointContext, skipDontRememberMe?: boolean): void;
+export declare function parseCookies(cookieHeader: string): Map<string, string>;
+export type EligibleCookies = (string & {}) | (keyof BetterAuthCookies & {});
+export declare const getSessionCookie: (request: Request | Headers, config?: {
+    cookiePrefix?: string;
+    cookieName?: string;
+}) => string | null;
+export declare const getCookieCache: <Session extends {
+    session: Session & Record<string, any>;
+    user: User & Record<string, any>;
+}>(request: Request | Headers, config?: {
+    cookiePrefix?: string;
+    cookieName?: string;
+}) => Session | null;
+export * from "./cookie-utils";
+//# sourceMappingURL=index.d.ts.map

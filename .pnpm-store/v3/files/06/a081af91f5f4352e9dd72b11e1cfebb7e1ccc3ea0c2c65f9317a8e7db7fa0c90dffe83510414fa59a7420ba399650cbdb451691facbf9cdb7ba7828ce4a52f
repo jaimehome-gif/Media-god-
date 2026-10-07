@@ -1,0 +1,5 @@
+import type { Store, StoreValue } from "nanostores";
+import { type DeepReadonly, type ShallowRef, type UnwrapNestedRefs } from "vue";
+export declare function registerStore(store: Store): void;
+export declare function useStore<SomeStore extends Store, Value extends StoreValue<SomeStore>>(store: SomeStore): DeepReadonly<UnwrapNestedRefs<ShallowRef<Value>>>;
+//# sourceMappingURL=vue-store.d.ts.map

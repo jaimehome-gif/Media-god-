@@ -1,0 +1,5 @@
+import type { AuthContext } from "../types";
+export declare const checkAuthCookie: (request: Request | Headers, auth: {
+    $context: Promise<AuthContext>;
+}) => Promise<string | null>;
+//# sourceMappingURL=check-cookies.d.ts.map

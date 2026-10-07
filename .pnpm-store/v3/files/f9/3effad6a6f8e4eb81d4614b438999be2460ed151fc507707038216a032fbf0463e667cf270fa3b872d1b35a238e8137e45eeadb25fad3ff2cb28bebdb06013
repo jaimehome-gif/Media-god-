@@ -1,0 +1,14 @@
+import type { Provider } from "./types";
+export interface CaptchaOptions {
+    provider: Provider;
+    secretKey: string;
+    endpoints?: string[];
+    siteVerifyURLOverride?: string;
+}
+export declare const captcha: (options: CaptchaOptions) => {
+    id: "captcha";
+    onRequest: (request: Request) => Promise<{
+        response: Response;
+    } | undefined>;
+};
+//# sourceMappingURL=index.d.ts.map

@@ -1,0 +1,9 @@
+import type { anonymous } from ".";
+export declare const anonymousClient: () => {
+    id: "anonymous";
+    $InferServerPlugin: ReturnType<typeof anonymous>;
+    pathMethods: {
+        "/sign-in/anonymous": "POST";
+    };
+};
+//# sourceMappingURL=client.d.ts.map

@@ -1,0 +1,4 @@
+import { z } from "zod";
+import type { FieldAttribute } from ".";
+export declare function toZodSchema(fields: Record<string, FieldAttribute>): z.ZodObject<{}, "strip", z.ZodTypeAny, {}, {}>;
+//# sourceMappingURL=to-zod.d.ts.map

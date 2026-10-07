@@ -1,0 +1,137 @@
+import { z } from "zod";
+import type { apiKeySchema } from "../schema";
+import type { ApiKey } from "../types";
+import type { AuthContext } from "../../../types";
+import type { PredefinedApiKeyOptions } from ".";
+export declare function verifyApiKey({ opts, schema, deleteAllExpiredApiKeys, }: {
+    opts: PredefinedApiKeyOptions;
+    schema: ReturnType<typeof apiKeySchema>;
+    deleteAllExpiredApiKeys(ctx: AuthContext, byPassLastCheckTime?: boolean): Promise<number> | undefined;
+}): {
+    <C extends [{
+        body: {
+            key: string;
+            permissions?: Record<string, string[]> | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            valid: boolean;
+            error: {
+                message: string;
+                code: "KEY_NOT_FOUND";
+            };
+            key: null;
+        } | {
+            valid: boolean;
+            error: {
+                message: string;
+                code: "KEY_DISABLED";
+            };
+            key: null;
+        } | {
+            valid: boolean;
+            error: {
+                message: string;
+                code: "KEY_EXPIRED";
+            };
+            key: null;
+        } | {
+            valid: boolean;
+            error: {
+                message: string;
+                code: "USAGE_EXCEEDED";
+            };
+            key: null;
+        } | {
+            valid: boolean;
+            error: {
+                message: string | null;
+                code: "RATE_LIMITED";
+                details: {
+                    tryAgainIn: number | null;
+                };
+            };
+            key: null;
+        } | {
+            valid: boolean;
+            error: null;
+            key: Omit<ApiKey, "key"> | null;
+        };
+    } : {
+        valid: boolean;
+        error: {
+            message: string;
+            code: "KEY_NOT_FOUND";
+        };
+        key: null;
+    } | {
+        valid: boolean;
+        error: {
+            message: string;
+            code: "KEY_DISABLED";
+        };
+        key: null;
+    } | {
+        valid: boolean;
+        error: {
+            message: string;
+            code: "KEY_EXPIRED";
+        };
+        key: null;
+    } | {
+        valid: boolean;
+        error: {
+            message: string;
+            code: "USAGE_EXCEEDED";
+        };
+        key: null;
+    } | {
+        valid: boolean;
+        error: {
+            message: string | null;
+            code: "RATE_LIMITED";
+            details: {
+                tryAgainIn: number | null;
+            };
+        };
+        key: null;
+    } | {
+        valid: boolean;
+        error: null;
+        key: Omit<ApiKey, "key"> | null;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            key: z.ZodString;
+            permissions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodArray<z.ZodString, "many">>>;
+        }, "strip", z.ZodTypeAny, {
+            key: string;
+            permissions?: Record<string, string[]> | undefined;
+        }, {
+            key: string;
+            permissions?: Record<string, string[]> | undefined;
+        }>;
+        metadata: {
+            SERVER_ONLY: true;
+        };
+    } & {
+        use: any[];
+    };
+    path: "/api-key/verify";
+};
+//# sourceMappingURL=verify-api-key.d.ts.map

@@ -1,0 +1,6 @@
+import { type FieldAttribute } from ".";
+import type { Adapter, BetterAuthOptions } from "../types";
+export declare function getAdapter(options: BetterAuthOptions): Promise<Adapter>;
+export declare function convertToDB<T extends Record<string, any>>(fields: Record<string, FieldAttribute>, values: T): T;
+export declare function convertFromDB<T extends Record<string, any>>(fields: Record<string, FieldAttribute>, values: T | null): T | null;
+//# sourceMappingURL=utils.d.ts.map

@@ -1,0 +1,8 @@
+export declare const redirectPlugin: {
+    id: string;
+    name: string;
+    hooks: {
+        onSuccess(context: import("@better-fetch/fetch").SuccessContext<any>): void;
+    };
+};
+//# sourceMappingURL=fetch-plugins.d.ts.map

@@ -1,0 +1,11 @@
+export declare function encryptPrivateKey(privateKey: string, secretKey: string): Promise<{
+    encryptedPrivateKey: string;
+    iv: string;
+    authTag: string;
+}>;
+export declare function decryptPrivateKey(encryptedPrivate: {
+    encryptedPrivateKey: string;
+    iv: string;
+    authTag: string;
+}, secretKey: string): Promise<string>;
+//# sourceMappingURL=utils.d.ts.map

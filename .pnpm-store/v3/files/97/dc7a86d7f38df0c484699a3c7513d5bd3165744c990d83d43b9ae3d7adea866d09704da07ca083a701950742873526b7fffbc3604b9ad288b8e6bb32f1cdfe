@@ -1,0 +1,140 @@
+import type { BetterFetch, BetterFetchOption } from "@better-fetch/fetch";
+import type { passkey as passkeyPl, Passkey } from ".";
+import { atom } from "nanostores";
+export declare const getPasskeyActions: ($fetch: BetterFetch, { $listPasskeys, }: {
+    $listPasskeys: ReturnType<typeof atom<any>>;
+}) => {
+    signIn: {
+        /**
+         * Sign in with a registered passkey
+         */
+        passkey: (opts?: {
+            autoFill?: boolean;
+            email?: string;
+            fetchOptions?: BetterFetchOption;
+        }, options?: BetterFetchOption) => Promise<{
+            data: null;
+            error: {
+                message?: string | undefined;
+                status: number;
+                statusText: string;
+            };
+        } | undefined>;
+    };
+    passkey: {
+        /**
+         * Add a passkey to the user account
+         */
+        addPasskey: (opts?: {
+            fetchOptions?: BetterFetchOption;
+            /**
+             * The name of the passkey. This is used to
+             * identify the passkey in the UI.
+             */
+            name?: string;
+            /**
+             * The type of attachment for the passkey. Defaults to both
+             * platform and cross-platform allowed, with platform preferred.
+             */
+            authenticatorAttachment?: "platform" | "cross-platform";
+            /**
+             * Try to silently create a passkey with the password manager that the user just signed
+             * in with.
+             * @default false
+             */
+            useAutoRegister?: boolean;
+        }, fetchOpts?: BetterFetchOption) => Promise<{
+            data: null;
+            error: {
+                message?: string | undefined;
+                status: number;
+                statusText: string;
+            };
+        } | undefined>;
+    };
+    /**
+     * Inferred Internal Types
+     */
+    $Infer: {
+        Passkey: Passkey;
+    };
+};
+export declare const passkeyClient: () => {
+    id: "passkey";
+    $InferServerPlugin: ReturnType<typeof passkeyPl>;
+    getActions: ($fetch: BetterFetch) => {
+        signIn: {
+            /**
+             * Sign in with a registered passkey
+             */
+            passkey: (opts?: {
+                autoFill?: boolean;
+                email?: string;
+                fetchOptions?: BetterFetchOption;
+            }, options?: BetterFetchOption) => Promise<{
+                data: null;
+                error: {
+                    message?: string | undefined;
+                    status: number;
+                    statusText: string;
+                };
+            } | undefined>;
+        };
+        passkey: {
+            /**
+             * Add a passkey to the user account
+             */
+            addPasskey: (opts?: {
+                fetchOptions?: BetterFetchOption;
+                /**
+                 * The name of the passkey. This is used to
+                 * identify the passkey in the UI.
+                 */
+                name?: string;
+                /**
+                 * The type of attachment for the passkey. Defaults to both
+                 * platform and cross-platform allowed, with platform preferred.
+                 */
+                authenticatorAttachment?: "platform" | "cross-platform";
+                /**
+                 * Try to silently create a passkey with the password manager that the user just signed
+                 * in with.
+                 * @default false
+                 */
+                useAutoRegister?: boolean;
+            }, fetchOpts?: BetterFetchOption) => Promise<{
+                data: null;
+                error: {
+                    message?: string | undefined;
+                    status: number;
+                    statusText: string;
+                };
+            } | undefined>;
+        };
+        /**
+         * Inferred Internal Types
+         */
+        $Infer: {
+            Passkey: Passkey;
+        };
+    };
+    getAtoms($fetch: BetterFetch): {
+        listPasskeys: import("nanostores").PreinitializedWritableAtom<{
+            data: Passkey[] | null;
+            error: null | import("@better-fetch/fetch").BetterFetchError;
+            isPending: boolean;
+            isRefetching: boolean;
+            refetch: () => void;
+        }>;
+        $listPasskeys: import("nanostores").PreinitializedWritableAtom<any>;
+    };
+    pathMethods: {
+        "/passkey/register": "POST";
+        "/passkey/authenticate": "POST";
+    };
+    atomListeners: {
+        matcher(path: string): path is "/passkey/verify-registration" | "/passkey/delete-passkey" | "/passkey/update-passkey";
+        signal: "_listPasskeys";
+    }[];
+};
+//# sourceMappingURL=client.d.ts.map

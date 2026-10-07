@@ -1,0 +1,349 @@
+import { APIError } from 'better-call';
+import { z } from 'zod';
+import { a as createAuthEndpoint, g as getSessionFromCtx } from './better-auth.BIdFil5c.mjs';
+import './better-auth.8zoxzg-F.mjs';
+import '@better-auth/utils/base64';
+import '@better-auth/utils/hmac';
+import './better-auth.C24Bzw4w.mjs';
+import { u as updateMemberRole, a as addMember, c as createInvitation, g as getFullOrganization, s as setActiveOrganization, b as createTeam, d as updateTeam, r as removeTeam, l as listOrganizationTeams, e as leaveOrganization, f as getActiveMember, h as removeMember, i as checkOrganizationSlug, j as rejectInvitation, k as getInvitation, m as acceptInvitation, n as cancelInvitation, o as listOrganizations, p as deleteOrganization, q as updateOrganization, t as createOrganization, O as ORGANIZATION_ERROR_CODES, v as orgSessionMiddleware, w as getOrgAdapter, x as hasPermission } from './better-auth.-OeYbqoe.mjs';
+import { d as defaultRoles } from './better-auth.CuZPmFi8.mjs';
+
+const shimContext = (originalObject, newContext) => {
+  const shimmedObj = {};
+  for (const [key, value] of Object.entries(originalObject)) {
+    shimmedObj[key] = (ctx) => {
+      return value({
+        ...ctx,
+        context: {
+          ...newContext,
+          ...ctx.context
+        }
+      });
+    };
+    shimmedObj[key].path = value.path;
+    shimmedObj[key].method = value.method;
+    shimmedObj[key].options = value.options;
+    shimmedObj[key].headers = value.headers;
+  }
+  return shimmedObj;
+};
+
+const organization = (options) => {
+  let endpoints = {
+    createOrganization,
+    updateOrganization,
+    deleteOrganization,
+    setActiveOrganization: setActiveOrganization(),
+    getFullOrganization: getFullOrganization(),
+    listOrganizations,
+    createInvitation: createInvitation(),
+    cancelInvitation,
+    acceptInvitation,
+    getInvitation,
+    rejectInvitation,
+    checkOrganizationSlug,
+    addMember: addMember(),
+    removeMember,
+    updateMemberRole: updateMemberRole(),
+    getActiveMember,
+    leaveOrganization
+  };
+  const teamSupport = options?.teams?.enabled;
+  const teamEndpoints = {
+    createTeam: createTeam(),
+    listOrganizationTeams,
+    removeTeam,
+    updateTeam
+  };
+  if (teamSupport) {
+    endpoints = {
+      ...endpoints,
+      ...teamEndpoints
+    };
+  }
+  const roles = {
+    ...defaultRoles,
+    ...options?.roles
+  };
+  const teamSchema = teamSupport ? {
+    team: {
+      modelName: options?.schema?.team?.modelName,
+      fields: {
+        name: {
+          type: "string",
+          required: true,
+          fieldName: options?.schema?.team?.fields?.name
+        },
+        organizationId: {
+          type: "string",
+          required: true,
+          references: {
+            model: "organization",
+            field: "id"
+          },
+          fieldName: options?.schema?.team?.fields?.organizationId
+        },
+        createdAt: {
+          type: "date",
+          required: true,
+          fieldName: options?.schema?.team?.fields?.createdAt
+        },
+        updatedAt: {
+          type: "date",
+          required: false,
+          fieldName: options?.schema?.team?.fields?.updatedAt
+        }
+      }
+    }
+  } : void 0;
+  const api = shimContext(endpoints, {
+    orgOptions: options || {},
+    roles,
+    getSession: async (context) => {
+      return await getSessionFromCtx(context);
+    }
+  });
+  return {
+    id: "organization",
+    endpoints: {
+      ...api,
+      hasPermission: createAuthEndpoint(
+        "/organization/has-permission",
+        {
+          method: "POST",
+          requireHeaders: true,
+          body: z.object({
+            organizationId: z.string().optional(),
+            permission: z.record(z.string(), z.array(z.string()))
+          }),
+          use: [orgSessionMiddleware],
+          metadata: {
+            $Infer: {
+              body: {}
+            },
+            openapi: {
+              description: "Check if the user has permission",
+              requestBody: {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        permission: {
+                          type: "object",
+                          description: "The permission to check"
+                        }
+                      },
+                      required: ["permission"]
+                    }
+                  }
+                }
+              },
+              responses: {
+                "200": {
+                  description: "Success",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          error: {
+                            type: "string"
+                          },
+                          success: {
+                            type: "boolean"
+                          }
+                        },
+                        required: ["success"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        async (ctx) => {
+          if (!ctx.body.permission || Object.keys(ctx.body.permission).length > 1) {
+            throw new APIError("BAD_REQUEST", {
+              message: "invalid permission check. you can only check one resource permission at a time."
+            });
+          }
+          const activeOrganizationId = ctx.body.organizationId || ctx.context.session.session.activeOrganizationId;
+          if (!activeOrganizationId) {
+            throw new APIError("BAD_REQUEST", {
+              message: ORGANIZATION_ERROR_CODES.NO_ACTIVE_ORGANIZATION
+            });
+          }
+          const adapter = getOrgAdapter(ctx.context);
+          const member = await adapter.findMemberByOrgId({
+            userId: ctx.context.session.user.id,
+            organizationId: activeOrganizationId
+          });
+          if (!member) {
+            throw new APIError("UNAUTHORIZED", {
+              message: ORGANIZATION_ERROR_CODES.USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION
+            });
+          }
+          const result = hasPermission({
+            role: member.role,
+            options,
+            permission: ctx.body.permission
+          });
+          return ctx.json({
+            error: null,
+            success: result
+          });
+        }
+      )
+    },
+    schema: {
+      session: {
+        fields: {
+          activeOrganizationId: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.session?.fields?.activeOrganizationId
+          }
+        }
+      },
+      organization: {
+        modelName: options?.schema?.organization?.modelName,
+        fields: {
+          name: {
+            type: "string",
+            required: true,
+            sortable: true,
+            fieldName: options?.schema?.organization?.fields?.name
+          },
+          slug: {
+            type: "string",
+            unique: true,
+            sortable: true,
+            fieldName: options?.schema?.organization?.fields?.slug
+          },
+          logo: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.organization?.fields?.logo
+          },
+          createdAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.organization?.fields?.createdAt
+          },
+          metadata: {
+            type: "string",
+            required: false,
+            fieldName: options?.schema?.organization?.fields?.metadata
+          }
+        }
+      },
+      member: {
+        modelName: options?.schema?.member?.modelName,
+        fields: {
+          organizationId: {
+            type: "string",
+            required: true,
+            references: {
+              model: "organization",
+              field: "id"
+            },
+            fieldName: options?.schema?.member?.fields?.organizationId
+          },
+          userId: {
+            type: "string",
+            required: true,
+            fieldName: options?.schema?.member?.fields?.userId,
+            references: {
+              model: "user",
+              field: "id"
+            }
+          },
+          role: {
+            type: "string",
+            required: true,
+            sortable: true,
+            defaultValue: "member",
+            fieldName: options?.schema?.member?.fields?.role
+          },
+          teamId: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.member?.fields?.teamId
+          },
+          createdAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.member?.fields?.createdAt
+          }
+        }
+      },
+      invitation: {
+        modelName: options?.schema?.invitation?.modelName,
+        fields: {
+          organizationId: {
+            type: "string",
+            required: true,
+            references: {
+              model: "organization",
+              field: "id"
+            },
+            fieldName: options?.schema?.invitation?.fields?.organizationId
+          },
+          email: {
+            type: "string",
+            required: true,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.email
+          },
+          role: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.role
+          },
+          teamId: {
+            type: "string",
+            required: false,
+            sortable: true,
+            fieldName: options?.schema?.invitation?.fields?.teamId
+          },
+          status: {
+            type: "string",
+            required: true,
+            sortable: true,
+            defaultValue: "pending",
+            fieldName: options?.schema?.invitation?.fields?.status
+          },
+          expiresAt: {
+            type: "date",
+            required: true,
+            fieldName: options?.schema?.invitation?.fields?.expiresAt
+          },
+          inviterId: {
+            type: "string",
+            references: {
+              model: "user",
+              field: "id"
+            },
+            fieldName: options?.schema?.invitation?.fields?.inviterId,
+            required: true
+          }
+        }
+      },
+      ...teamSupport ? teamSchema : {}
+    },
+    $Infer: {
+      Organization: {},
+      Invitation: {},
+      Member: {},
+      Team: teamSupport ? {} : {},
+      ActiveOrganization: {}
+    },
+    $ERROR_CODES: ORGANIZATION_ERROR_CODES
+  };
+};
+
+export { organization as o };

@@ -1,0 +1,21 @@
+import type { PredefinedApiKeyOptions } from "./routes";
+import type { ApiKey } from "./types";
+interface RateLimitResult {
+    success: boolean;
+    message: string | null;
+    tryAgainIn: number | null;
+    update: Partial<ApiKey> | null;
+}
+/**
+ * Determines if a request is allowed based on rate limiting parameters.
+ *
+ * @returns An object indicating whether the request is allowed and, if not,
+ *          a message and updated ApiKey data.
+ */
+export declare function isRateLimited(
+/**
+ * The ApiKey object containing rate limiting information
+ */
+apiKey: ApiKey, opts: PredefinedApiKeyOptions): RateLimitResult;
+export {};
+//# sourceMappingURL=rate-limit.d.ts.map

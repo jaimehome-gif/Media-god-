@@ -1,0 +1,7 @@
+import type { Auth } from "../auth";
+import type { IncomingHttpHeaders } from "http";
+export declare const toNodeHandler: (auth: {
+    handler: Auth["handler"];
+} | Auth["handler"]) => (req: import("http").IncomingMessage, res: import("http").ServerResponse) => Promise<void>;
+export declare function fromNodeHeaders(nodeHeaders: IncomingHttpHeaders): Headers;
+//# sourceMappingURL=node.d.ts.map

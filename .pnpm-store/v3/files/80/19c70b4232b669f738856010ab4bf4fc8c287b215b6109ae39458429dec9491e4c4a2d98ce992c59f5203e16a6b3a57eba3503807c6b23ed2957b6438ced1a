@@ -1,0 +1,7 @@
+import type { GenericEndpointContext } from "../types/context";
+export declare function validatePassword(ctx: GenericEndpointContext, data: {
+    password: string;
+    userId: string;
+}): Promise<boolean>;
+export declare function checkPassword(userId: string, c: GenericEndpointContext): Promise<boolean>;
+//# sourceMappingURL=password.d.ts.map

@@ -1,0 +1,4 @@
+import type { OAuth2Tokens } from "./types";
+export declare function generateCodeChallenge(codeVerifier: string): Promise<string>;
+export declare function getOAuth2Tokens(data: Record<string, any>): OAuth2Tokens;
+//# sourceMappingURL=utils.d.ts.map

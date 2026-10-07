@@ -1,0 +1,7 @@
+export declare const CAPTCHA_ERROR_CODES: {
+    readonly MISSING_RESPONSE: "Missing CAPTCHA response";
+    readonly SERVICE_UNAVAILABLE: "CAPTCHA service unavailable";
+    readonly VERIFICATION_FAILED: "Captcha verification failed";
+    readonly UNKNOWN_ERROR: "Something went wrong";
+};
+//# sourceMappingURL=error-codes.d.ts.map

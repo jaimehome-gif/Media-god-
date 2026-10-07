@@ -9,7 +9,6 @@ import {
   getChannelById,
   getCategoryForChannel,
   getChannelSchedule,
-  LIVE_STREAM_URL,
 } from '@/lib/live-tv-channels'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -107,7 +106,7 @@ export default async function LiveTVChannelPage({ params }: { params: Promise<{ 
           {/* Player + info */}
           <div className="lg:col-span-2">
             <LiveTvPlayer
-              src={LIVE_STREAM_URL}
+              src={channel.url}
               channelName={channel.name}
               channelLogo={channel.logo}
             />

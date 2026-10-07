@@ -1,0 +1,7 @@
+import type { AuthContext, RateLimit } from "../../types";
+export declare function getRateLimitStorage(ctx: AuthContext): {
+    get(key: string): Promise<RateLimit | undefined>;
+    set(key: string, value: RateLimit, _update?: boolean): Promise<void>;
+};
+export declare function onRequestRateLimit(req: Request, ctx: AuthContext): Promise<Response | undefined>;
+//# sourceMappingURL=index.d.ts.map

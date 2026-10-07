@@ -1,0 +1,1 @@
+{"version":3,"file":"has-permission.d.ts","sourceRoot":"","sources":["../../../src/plugins/organization/has-permission.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,mBAAmB,EAAE,MAAM,gBAAgB,CAAC;AAE1D,eAAO,MAAM,aAAa,GAAI,OAAO;IACpC,IAAI,EAAE,MAAM,CAAC;IACb,OAAO,EAAE,mBAAmB,CAAC;IAC7B,UAAU,EAAE;QACX,CAAC,GAAG,EAAE,MAAM,GAAG,MAAM,EAAE,CAAC;KACxB,CAAC;CACF,YAWA,CAAC"}

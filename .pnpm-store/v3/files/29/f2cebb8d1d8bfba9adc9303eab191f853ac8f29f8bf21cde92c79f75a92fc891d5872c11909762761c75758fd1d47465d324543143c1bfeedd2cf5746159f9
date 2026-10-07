@@ -1,0 +1,40 @@
+import type { ProviderOptions } from "../oauth2";
+export interface RedditProfile {
+    id: string;
+    name: string;
+    icon_img: string | null;
+    has_verified_email: boolean;
+    oauth_client_id: string;
+    verified: boolean;
+}
+export interface RedditOptions extends ProviderOptions<RedditProfile> {
+    duration?: string;
+}
+export declare const reddit: (options: RedditOptions) => {
+    id: "reddit";
+    name: string;
+    createAuthorizationURL({ state, scopes, redirectURI }: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode: ({ code, redirectURI }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }) => Promise<import("../oauth2").OAuth2Tokens>;
+    getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            name?: string;
+            email?: string | null;
+            image?: string;
+            emailVerified: boolean;
+            [key: string]: any;
+        };
+        data: any;
+    } | null>;
+};
+//# sourceMappingURL=reddit.d.ts.map

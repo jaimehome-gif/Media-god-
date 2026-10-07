@@ -1,0 +1,52 @@
+import type { ProviderOptions } from "../oauth2";
+export interface FacebookProfile {
+    id: string;
+    name: string;
+    email: string;
+    email_verified: boolean;
+    picture: {
+        data: {
+            height: number;
+            is_silhouette: boolean;
+            url: string;
+            width: number;
+        };
+    };
+}
+export interface FacebookOptions extends ProviderOptions<FacebookProfile> {
+    /**
+     * Extend list of fields to retrieve from the Facebook user profile.
+     *
+     * @default ["id", "name", "email", "picture"]
+     */
+    fields?: string[];
+}
+export declare const facebook: (options: FacebookOptions) => {
+    id: "facebook";
+    name: string;
+    createAuthorizationURL({ state, scopes, redirectURI }: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode: ({ code, redirectURI }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }) => Promise<import("../oauth2").OAuth2Tokens>;
+    verifyIdToken(token: string, nonce: string | undefined): Promise<boolean>;
+    getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            name?: string;
+            email?: string | null;
+            image?: string;
+            emailVerified: boolean;
+            [key: string]: any;
+        };
+        data: any;
+    } | null>;
+};
+//# sourceMappingURL=facebook.d.ts.map

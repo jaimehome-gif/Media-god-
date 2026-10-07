@@ -1,0 +1,4 @@
+export declare const HIDE_METADATA: {
+    isAction: false;
+};
+//# sourceMappingURL=hide-metadata.d.ts.map

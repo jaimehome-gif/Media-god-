@@ -1,0 +1,5 @@
+/**
+ * Compare two buffers in constant time.
+ */
+export declare function constantTimeEqual(a: ArrayBuffer | Uint8Array, b: ArrayBuffer | Uint8Array): boolean;
+//# sourceMappingURL=buffer.d.ts.map

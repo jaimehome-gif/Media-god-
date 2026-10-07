@@ -1,0 +1,7 @@
+import type { GenericEndpointContext } from "../types";
+/**
+ * Checks if the callbackURL is a valid URL and if it's in the trustedOrigins
+ * to avoid open redirect attacks
+ */
+export declare const checkCallbackURL: (callbackURL: string, ctx: GenericEndpointContext) => void;
+//# sourceMappingURL=callback-url.d.ts.map

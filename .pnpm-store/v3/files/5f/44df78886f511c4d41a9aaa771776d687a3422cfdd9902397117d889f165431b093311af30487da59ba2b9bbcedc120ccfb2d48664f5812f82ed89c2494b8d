@@ -1,0 +1,7 @@
+import { type FieldAttribute } from ".";
+import type { BetterAuthOptions } from "../types";
+export declare function getSchema(config: BetterAuthOptions): Record<string, {
+    fields: Record<string, FieldAttribute>;
+    order: number;
+}>;
+//# sourceMappingURL=get-schema.d.ts.map

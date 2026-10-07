@@ -1,0 +1,134 @@
+import { z } from "zod";
+interface OAuthProxyOptions {
+    /**
+     * The current URL of the application.
+     * The plugin will attempt to infer the current URL from your environment
+     * by checking the base URL from popular hosting providers,
+     * from the request URL if invoked by a client,
+     * or as a fallback, from the `baseURL` in your auth config.
+     * If the URL is not inferred correctly, you can provide a value here."
+     */
+    currentURL?: string;
+    /**
+     * If a request in a production url it won't be proxied.
+     *
+     * default to `BETTER_AUTH_URL`
+     */
+    productionURL?: string;
+}
+/**
+ * A proxy plugin, that allows you to proxy OAuth requests.
+ * Useful for development and preview deployments where
+ * the redirect URL can't be known in advance to add to the OAuth provider.
+ */
+export declare const oAuthProxy: (opts?: OAuthProxyOptions) => {
+    id: "oauth-proxy";
+    endpoints: {
+        oAuthProxy: {
+            <C extends [{
+                query: {
+                    callbackURL: string;
+                    cookies: string;
+                };
+                body?: undefined;
+                method?: "GET" | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: never;
+            } : never>;
+            options: {
+                method: "GET";
+                query: z.ZodObject<{
+                    callbackURL: z.ZodString;
+                    cookies: z.ZodString;
+                }, "strip", z.ZodTypeAny, {
+                    callbackURL: string;
+                    cookies: string;
+                }, {
+                    callbackURL: string;
+                    cookies: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<void>)[];
+                metadata: {
+                    openapi: {
+                        description: string;
+                        parameters: {
+                            in: "query";
+                            name: string;
+                            required: true;
+                            description: string;
+                        }[];
+                        responses: {
+                            302: {
+                                description: string;
+                                headers: {
+                                    Location: {
+                                        description: string;
+                                        schema: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/oauth-proxy-callback";
+        };
+    };
+    hooks: {
+        after: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<void>;
+        }[];
+        before: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<{
+                context: import("better-call").MiddlewareContext<import("better-call").MiddlewareOptions, import("../..").AuthContext & {
+                    returned?: unknown;
+                    responseHeaders?: Headers;
+                }>;
+            } | undefined>;
+        }[];
+    };
+};
+export {};
+//# sourceMappingURL=index.d.ts.map

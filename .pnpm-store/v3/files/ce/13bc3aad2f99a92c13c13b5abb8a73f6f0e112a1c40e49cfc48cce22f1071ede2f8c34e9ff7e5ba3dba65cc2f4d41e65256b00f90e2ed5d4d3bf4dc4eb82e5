@@ -1,0 +1,23 @@
+import type { FieldAttribute } from ".";
+import type { BetterAuthOptions } from "../types";
+export type BetterAuthDbSchema = Record<string, {
+    /**
+     * The name of the table in the database
+     */
+    modelName: string;
+    /**
+     * The fields of the table
+     */
+    fields: Record<string, FieldAttribute>;
+    /**
+     * Whether to disable migrations for this table
+     * @default false
+     */
+    disableMigrations?: boolean;
+    /**
+     * The order of the table
+     */
+    order?: number;
+}>;
+export declare const getAuthTables: (options: BetterAuthOptions) => BetterAuthDbSchema;
+//# sourceMappingURL=get-tables.d.ts.map

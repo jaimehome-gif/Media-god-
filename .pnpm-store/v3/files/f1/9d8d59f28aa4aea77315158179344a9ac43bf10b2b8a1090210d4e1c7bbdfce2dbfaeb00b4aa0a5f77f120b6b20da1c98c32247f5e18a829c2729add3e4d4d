@@ -1,0 +1,9 @@
+import type { apiKey } from ".";
+export declare const apiKeyClient: () => {
+    id: "api-key";
+    $InferServerPlugin: ReturnType<typeof apiKey>;
+    pathMethods: {
+        "/api-key/create": "POST";
+    };
+};
+//# sourceMappingURL=client.d.ts.map

@@ -1,0 +1,21 @@
+import type { Store, StoreValue } from "nanostores";
+import type { DependencyList } from "react";
+type StoreKeys<T> = T extends {
+    setKey: (k: infer K, v: any) => unknown;
+} ? K : never;
+export interface UseStoreOptions<SomeStore> {
+    /**
+     * @default
+     * ```ts
+     * [store, options.keys]
+     * ```
+     */
+    deps?: DependencyList;
+    /**
+     * Will re-render components only on specific key changes.
+     */
+    keys?: StoreKeys<SomeStore>[];
+}
+export declare function useStore<SomeStore extends Store>(store: SomeStore, { keys, deps }?: UseStoreOptions<SomeStore>): StoreValue<SomeStore>;
+export {};
+//# sourceMappingURL=react-store.d.ts.map

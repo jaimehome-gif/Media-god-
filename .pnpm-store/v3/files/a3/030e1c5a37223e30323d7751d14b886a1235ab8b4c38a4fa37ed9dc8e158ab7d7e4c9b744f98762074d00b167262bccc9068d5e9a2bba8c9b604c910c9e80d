@@ -1,0 +1,1 @@
+{"version":3,"file":"middleware-response.d.ts","sourceRoot":"","sources":["../../src/utils/middleware-response.ts"],"names":[],"mappings":"AAAA,KAAK,MAAM,GAAG;IACb,OAAO,EAAE,MAAM,CAAC;IAChB,MAAM,EAAE,MAAM,CAAC;CACf,CAAC;AAEF,eAAO,MAAM,kBAAkB,GAAI,qBAAqB,MAAM;;CAS5D,CAAC"}

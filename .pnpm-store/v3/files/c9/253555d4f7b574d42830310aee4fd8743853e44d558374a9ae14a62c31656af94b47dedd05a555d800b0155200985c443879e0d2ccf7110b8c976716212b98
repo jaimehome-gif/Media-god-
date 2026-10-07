@@ -1,0 +1,24 @@
+export declare function toNextJsHandler(auth: {
+    handler: (request: Request) => Promise<Response>;
+} | ((request: Request) => Promise<Response>)): {
+    GET: (request: Request) => Promise<Response>;
+    POST: (request: Request) => Promise<Response>;
+};
+export declare const nextCookies: () => {
+    id: "next-cookies";
+    hooks: {
+        after: {
+            matcher(ctx: import("..").HookEndpointContext): true;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<void>;
+        }[];
+    };
+};
+//# sourceMappingURL=next-js.d.ts.map

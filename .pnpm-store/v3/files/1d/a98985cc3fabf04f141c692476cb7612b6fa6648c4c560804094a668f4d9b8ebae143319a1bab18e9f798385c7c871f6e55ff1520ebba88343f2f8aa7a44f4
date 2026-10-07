@@ -1,0 +1,10 @@
+type Params = {
+    siteVerifyURL: string;
+    secretKey: string;
+    captchaResponse: string;
+};
+export declare const googleReCAPTCHA: ({ siteVerifyURL, captchaResponse, secretKey, }: Params) => Promise<{
+    response: Response;
+} | undefined>;
+export {};
+//# sourceMappingURL=google-recaptcha.d.ts.map

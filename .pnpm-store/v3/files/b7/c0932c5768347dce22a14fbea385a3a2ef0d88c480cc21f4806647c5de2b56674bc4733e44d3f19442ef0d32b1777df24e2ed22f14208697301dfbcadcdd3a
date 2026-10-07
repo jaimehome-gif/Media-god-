@@ -1,0 +1,15 @@
+export type LogLevel = "info" | "success" | "warn" | "error" | "debug";
+export declare const levels: readonly ["info", "success", "warn", "error", "debug"];
+export declare function shouldPublishLog(currentLogLevel: LogLevel, logLevel: LogLevel): boolean;
+export interface Logger {
+    disabled?: boolean;
+    level?: Exclude<LogLevel, "success">;
+    log?: (level: Exclude<LogLevel, "success">, message: string, ...args: any[]) => void;
+}
+export type LogHandlerParams = Parameters<NonNullable<Logger["log"]>> extends [
+    LogLevel,
+    ...infer Rest
+] ? Rest : never;
+export declare const createLogger: (options?: Logger) => Record<LogLevel, (...params: LogHandlerParams) => void>;
+export declare const logger: Record<LogLevel, (message: string, ...args: any[]) => void>;
+//# sourceMappingURL=logger.d.ts.map

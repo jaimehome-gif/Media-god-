@@ -1,0 +1,56 @@
+import type { ProviderOptions } from "../oauth2";
+export interface MicrosoftEntraIDProfile extends Record<string, any> {
+    sub: string;
+    name: string;
+    email: string;
+    picture: string;
+}
+export interface MicrosoftOptions extends ProviderOptions<MicrosoftEntraIDProfile> {
+    /**
+     * The tenant ID of the Microsoft account
+     * @default "common"
+     */
+    tenantId?: string;
+    /**
+     * The size of the profile photo
+     * @default 48
+     */
+    profilePhotoSize?: 48 | 64 | 96 | 120 | 240 | 360 | 432 | 504 | 648;
+    /**
+     * Disable profile photo
+     */
+    disableProfilePhoto?: boolean;
+    /**
+     * Require user to select their account even if only one account is logged in
+     * @default false
+     */
+    requireSelectAccount?: boolean;
+}
+export declare const microsoft: (options: MicrosoftOptions) => {
+    id: "microsoft";
+    name: string;
+    createAuthorizationURL(data: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode({ code, codeVerifier, redirectURI }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }): Promise<import("../oauth2").OAuth2Tokens>;
+    getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            name?: string;
+            email?: string | null;
+            image?: string;
+            emailVerified: boolean;
+            [key: string]: any;
+        };
+        data: any;
+    } | null>;
+};
+//# sourceMappingURL=microsoft-entra-id.d.ts.map

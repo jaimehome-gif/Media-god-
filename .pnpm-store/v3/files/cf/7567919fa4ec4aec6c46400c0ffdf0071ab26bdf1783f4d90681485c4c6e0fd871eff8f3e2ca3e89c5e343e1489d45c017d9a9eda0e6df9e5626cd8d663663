@@ -1,0 +1,283 @@
+import { z } from "zod";
+export declare const listUserAccounts: {
+    <C extends [({
+        body?: undefined;
+        method?: "GET" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            provider: string;
+            createdAt: Date;
+            updatedAt: Date;
+            accountId: string;
+            scopes: string[];
+        }[];
+    } : {
+        id: string;
+        provider: string;
+        createdAt: Date;
+        updatedAt: Date;
+        accountId: string;
+        scopes: string[];
+    }[]>;
+    options: {
+        method: "GET";
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "array";
+                                    items: {
+                                        type: string;
+                                        properties: {
+                                            id: {
+                                                type: string;
+                                            };
+                                            provider: {
+                                                type: string;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/list-accounts";
+};
+export declare const linkSocialAccount: {
+    <C extends [{
+        body: {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            callbackURL?: string | undefined;
+        };
+        headers: HeadersInit;
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            url: string;
+            redirect: boolean;
+        };
+    } : {
+        url: string;
+        redirect: boolean;
+    }>;
+    options: {
+        method: "POST";
+        requireHeaders: true;
+        body: z.ZodObject<{
+            /**
+             * Callback URL to redirect to after the user has signed in.
+             */
+            callbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * OAuth2 provider to use`
+             */
+            provider: z.ZodEnum<["github", ...("apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk")[]]>;
+        }, "strip", z.ZodTypeAny, {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            callbackURL?: string | undefined;
+        }, {
+            provider: "apple" | "discord" | "facebook" | "github" | "google" | "microsoft" | "spotify" | "twitch" | "twitter" | "dropbox" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "vk";
+            callbackURL?: string | undefined;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        url: {
+                                            type: string;
+                                        };
+                                        redirect: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/link-social";
+};
+export declare const unlinkAccount: {
+    <C extends [{
+        body: {
+            providerId: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            providerId: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            providerId: string;
+        }, {
+            providerId: string;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+    } & {
+        use: any[];
+    };
+    path: "/unlink-account";
+};
+//# sourceMappingURL=account.d.ts.map

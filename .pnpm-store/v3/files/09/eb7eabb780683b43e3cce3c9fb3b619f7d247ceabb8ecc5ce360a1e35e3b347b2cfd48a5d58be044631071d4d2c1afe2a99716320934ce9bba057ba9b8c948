@@ -1,0 +1,59 @@
+import { type ProviderOptions } from "../oauth2";
+export interface VkProfile {
+    user: {
+        user_id: string;
+        first_name: string;
+        last_name: string;
+        email?: string;
+        phone?: number;
+        avatar?: string;
+        sex?: number;
+        verified?: boolean;
+        birthday: string;
+    };
+}
+export declare const enum LANG {
+    RUS = 0,
+    UKR = 1,
+    ENG = 3,
+    SPA = 4,
+    GERMAN = 6,
+    POL = 15,
+    FRA = 16,
+    TURKEY = 82
+}
+export interface VkOption extends ProviderOptions {
+    lang_id?: LANG;
+    scheme?: "light" | "dark";
+}
+export declare const vk: (options: VkOption) => {
+    id: "vk";
+    name: string;
+    createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode: ({ code, codeVerifier, redirectURI, deviceId, }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }) => Promise<import("../oauth2").OAuth2Tokens>;
+    getUserInfo(data: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            first_name: string;
+            last_name: string;
+            email: string;
+            image: string | undefined;
+            /** @note VK does not provide emailVerified*/
+            emailVerified: boolean;
+            birthday: string;
+            sex: number | undefined;
+        };
+        data: VkProfile;
+    } | null>;
+};
+//# sourceMappingURL=vk.d.ts.map

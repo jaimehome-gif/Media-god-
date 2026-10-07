@@ -1,0 +1,9 @@
+type Params = {
+    message: string;
+    status: number;
+};
+export declare const middlewareResponse: ({ message, status }: Params) => {
+    response: Response;
+};
+export {};
+//# sourceMappingURL=middleware-response.d.ts.map

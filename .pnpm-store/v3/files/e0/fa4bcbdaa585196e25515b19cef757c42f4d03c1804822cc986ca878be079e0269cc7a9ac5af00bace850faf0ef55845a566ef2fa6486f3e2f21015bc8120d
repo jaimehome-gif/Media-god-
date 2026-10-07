@@ -1,0 +1,26 @@
+import type { Statements, Subset } from "./types";
+export type AuthortizeResponse = {
+    success: false;
+    error: string;
+} | {
+    success: true;
+    error?: never;
+};
+export declare function role<TStatements extends Statements>(statements: TStatements): {
+    authorize<K extends keyof TStatements>(request: { [key in K]?: TStatements[key] | {
+        actions: TStatements[key];
+        connector: "OR" | "AND";
+    }; }, connector?: "OR" | "AND"): AuthortizeResponse;
+    statements: TStatements;
+};
+export declare function createAccessControl<const TStatements extends Statements>(s: TStatements): {
+    newRole<K extends keyof TStatements>(statements: Subset<K, TStatements>): {
+        authorize<K_1 extends K>(request: K_1 extends infer T extends keyof Subset<K, TStatements> ? { [key in T]?: Subset<K, TStatements>[key] | {
+            actions: Subset<K, TStatements>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): AuthortizeResponse;
+        statements: Subset<K, TStatements>;
+    };
+    statements: TStatements;
+};
+//# sourceMappingURL=access.d.ts.map

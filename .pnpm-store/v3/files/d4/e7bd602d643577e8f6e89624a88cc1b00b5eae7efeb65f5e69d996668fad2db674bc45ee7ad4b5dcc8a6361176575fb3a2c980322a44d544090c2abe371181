@@ -1,0 +1,23 @@
+import { type AdminOptions, type UserWithRole } from "./admin";
+import { type Session } from "../../types";
+import { type Role } from "../access";
+import { type defaultRoles } from "./access/statement";
+export declare const adminMiddleware: (inputContext: {
+    body?: any;
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<{
+    adminOptions: AdminOptions;
+    session: {
+        user: UserWithRole;
+        session: Session;
+    };
+    roles: typeof defaultRoles & {
+        [key: string]: Role;
+    };
+}>;
+//# sourceMappingURL=call.d.ts.map

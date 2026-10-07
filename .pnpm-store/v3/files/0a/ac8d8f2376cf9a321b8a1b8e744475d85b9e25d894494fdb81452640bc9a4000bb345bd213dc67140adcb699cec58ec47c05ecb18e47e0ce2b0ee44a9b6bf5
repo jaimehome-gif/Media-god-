@@ -1,0 +1,2 @@
+export declare const generateRandomString: <SubA extends "a-z" | "A-Z" | "0-9" | "-_">(length: number, alphabet?: SubA | undefined, ...arg_1: SubA[]) => string;
+//# sourceMappingURL=random.d.ts.map

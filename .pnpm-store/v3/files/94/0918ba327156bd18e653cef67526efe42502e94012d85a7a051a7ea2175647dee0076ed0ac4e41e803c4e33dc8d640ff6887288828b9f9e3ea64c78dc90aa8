@@ -1,0 +1,21 @@
+import { APIError } from 'better-call';
+import { c as createAuthMiddleware, g as getSessionFromCtx } from './better-auth.BIdFil5c.mjs';
+import 'zod';
+import './better-auth.8zoxzg-F.mjs';
+import '@better-auth/utils/base64';
+import '@better-auth/utils/hmac';
+import './better-auth.C24Bzw4w.mjs';
+import './better-auth.DH3YjMQH.mjs';
+import 'defu';
+
+const adminMiddleware = createAuthMiddleware(async (ctx) => {
+  const session = await getSessionFromCtx(ctx);
+  if (!session?.session) {
+    throw new APIError("UNAUTHORIZED");
+  }
+  return {
+    session
+  };
+});
+
+export { adminMiddleware as a };

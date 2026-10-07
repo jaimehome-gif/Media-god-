@@ -1,0 +1,1 @@
+{"version":3,"file":"ui.d.ts","sourceRoot":"","sources":["../../../src/plugins/oidc-provider/ui.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,aAAa,GAAI,6DAM3B;IACF,MAAM,EAAE,MAAM,EAAE,CAAC;IACjB,UAAU,CAAC,EAAE,MAAM,CAAC;IACpB,UAAU,EAAE,MAAM,CAAC;IACnB,WAAW,EAAE,MAAM,CAAC;IACpB,SAAS,EAAE,MAAM,CAAC;IAClB,cAAc,CAAC,EAAE,MAAM,CAAC,MAAM,EAAE,GAAG,CAAC,CAAC;CACrC,WAgIS,CAAC"}

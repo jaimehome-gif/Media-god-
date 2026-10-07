@@ -1,0 +1,30 @@
+import { createAccessControl } from '../plugins/access/index.mjs';
+
+const defaultStatements = {
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"]
+};
+const defaultAc = createAccessControl(defaultStatements);
+const adminAc = defaultAc.newRole({
+  organization: ["update"],
+  invitation: ["create", "cancel"],
+  member: ["create", "update", "delete"]
+});
+const ownerAc = defaultAc.newRole({
+  organization: ["update", "delete"],
+  member: ["create", "update", "delete"],
+  invitation: ["create", "cancel"]
+});
+const memberAc = defaultAc.newRole({
+  organization: [],
+  member: [],
+  invitation: []
+});
+const defaultRoles = {
+  admin: adminAc,
+  owner: ownerAc,
+  member: memberAc
+};
+
+export { adminAc as a, defaultAc as b, defaultStatements as c, defaultRoles as d, memberAc as m, ownerAc as o };

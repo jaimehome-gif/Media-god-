@@ -1,0 +1,2 @@
+export declare function toBoolean(value: any): boolean;
+//# sourceMappingURL=boolean.d.ts.map

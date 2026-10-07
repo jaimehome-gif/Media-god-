@@ -1,0 +1,1160 @@
+import { z } from "zod";
+import type { AdditionalUserFieldsInput, BetterAuthOptions } from "../../types";
+export declare const updateUser: <O extends BetterAuthOptions>() => {
+    <C extends import("better-call").HasRequiredKeys<({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T ? { [K_1 in keyof T as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] ? never : K_1]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_1 ? { [K_2 in keyof T_1 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] ? K_2 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] | undefined; } : never) extends infer T_2 ? { [K in keyof T_2]: (({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_3 ? { [K_1_1 in keyof T_3 as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] ? never : K_1_1]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_4 ? { [K_2_1 in keyof T_4 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] ? K_2_1 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] | undefined; } : never))[K]; } : never> extends true ? [({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_5 ? { [K_1_2 in keyof T_5 as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] ? never : K_1_2]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_6 ? { [K_2_2 in keyof T_6 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] ? K_2_2 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] | undefined; } : never) extends infer T_5_1 ? { [K_3 in keyof T_5_1]: (({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_7 ? { [K_1_3 in keyof T_7 as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] ? never : K_1_3]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_8 ? { [K_2_3 in keyof T_8 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] ? K_2_3 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] | undefined; } : never))[K_3]; } : never] : [((({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_9 ? { [K_1_4 in keyof T_9 as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] ? never : K_1_4]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_10 ? { [K_2_4 in keyof T_10 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] ? K_2_4 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] | undefined; } : never) extends infer T_10_1 ? { [K_4 in keyof T_10_1]: (({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_11 ? { [K_1_5 in keyof T_11 as {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] extends never ? never : undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] ? never : K_1_5]: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5]; } : never) & ({
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_12 ? { [K_2_5 in keyof T_12 as undefined extends {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] ? K_2_5 : never]?: {
+        body: import("../../db").InferFieldsFromPlugins<O, "user", "input"> & import("../../db").InferFieldsFromOptions<O, "user", "input"> & {
+            name?: string;
+            image?: string | null;
+        };
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] | undefined; } : never))[K_4]; } : never) | undefined)?]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodRecord<z.ZodString, z.ZodAny>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            $Infer: {
+                body: AdditionalUserFieldsInput<O> & {
+                    name?: string;
+                    image?: string | null;
+                };
+            };
+            openapi: {
+                description: string;
+                requestBody: {
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object";
+                                properties: {
+                                    name: {
+                                        type: string;
+                                        description: string;
+                                    };
+                                    image: {
+                                        type: string;
+                                        description: string;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        user: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/update-user";
+};
+export declare const changePassword: {
+    <C extends [{
+        body: {
+            newPassword: string;
+            currentPassword: string;
+            revokeOtherSessions?: boolean | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            token: string | null;
+            user: {
+                id: string;
+                email: string;
+                name: string;
+                image: string | null | undefined;
+                emailVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            };
+        };
+    } : {
+        token: string | null;
+        user: {
+            id: string;
+            email: string;
+            name: string;
+            image: string | null | undefined;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            /**
+             * The new password to set
+             */
+            newPassword: z.ZodString;
+            /**
+             * The current password of the user
+             */
+            currentPassword: z.ZodString;
+            /**
+             * revoke all sessions that are not the
+             * current one logged in by the user
+             */
+            revokeOtherSessions: z.ZodOptional<z.ZodBoolean>;
+        }, "strip", z.ZodTypeAny, {
+            newPassword: string;
+            currentPassword: string;
+            revokeOtherSessions?: boolean | undefined;
+        }, {
+            newPassword: string;
+            currentPassword: string;
+            revokeOtherSessions?: boolean | undefined;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        user: {
+                                            description: string;
+                                            $ref: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/change-password";
+};
+export declare const setPassword: {
+    <C extends [{
+        body: {
+            newPassword: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            /**
+             * The new password to set
+             */
+            newPassword: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            newPassword: string;
+        }, {
+            newPassword: string;
+        }>;
+        metadata: {
+            SERVER_ONLY: true;
+        };
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+    } & {
+        use: any[];
+    };
+    path: "/set-password";
+};
+export declare const deleteUser: {
+    <C extends [{
+        body: {
+            password?: string | undefined;
+            token?: string | undefined;
+            callbackURL?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            success: boolean;
+            message: string;
+        };
+    } : {
+        success: boolean;
+        message: string;
+    }>;
+    options: {
+        method: "POST";
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        body: z.ZodObject<{
+            /**
+             * The callback URL to redirect to after the user is deleted
+             * this is only used on delete user callback
+             */
+            callbackURL: z.ZodOptional<z.ZodString>;
+            /**
+             * The password of the user. If the password isn't provided, session freshness
+             * will be checked.
+             */
+            password: z.ZodOptional<z.ZodString>;
+            /**
+             * The token to delete the user. If the token is provided, the user will be deleted
+             */
+            token: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            password?: string | undefined;
+            token?: string | undefined;
+            callbackURL?: string | undefined;
+        }, {
+            password?: string | undefined;
+            token?: string | undefined;
+            callbackURL?: string | undefined;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/delete-user";
+};
+export declare const deleteUserCallback: {
+    <C extends [{
+        query: {
+            token: string;
+            callbackURL?: string | undefined;
+        };
+        body?: undefined;
+        method?: "GET" | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            success: boolean;
+            message: string;
+        };
+    } : {
+        success: boolean;
+        message: string;
+    }>;
+    options: {
+        method: "GET";
+        query: z.ZodObject<{
+            token: z.ZodString;
+            callbackURL: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            token: string;
+            callbackURL?: string | undefined;
+        }, {
+            token: string;
+            callbackURL?: string | undefined;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<void>)[];
+    } & {
+        use: any[];
+    };
+    path: "/delete-user/callback";
+};
+export declare const changeEmail: {
+    <C extends [{
+        body: {
+            newEmail: string;
+            callbackURL?: string | undefined;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            status: boolean;
+        };
+    } : {
+        status: boolean;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            newEmail: z.ZodString;
+            callbackURL: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            newEmail: string;
+            callbackURL?: string | undefined;
+        }, {
+            newEmail: string;
+            callbackURL?: string | undefined;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+        metadata: {
+            openapi: {
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        user: {
+                                            type: string;
+                                        };
+                                        status: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/change-email";
+};
+//# sourceMappingURL=update-user.d.ts.map

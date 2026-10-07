@@ -1,0 +1,118 @@
+import { z } from "zod";
+import type { apiKeySchema } from "../schema";
+import type { AuthContext } from "../../../types";
+import type { PredefinedApiKeyOptions } from ".";
+export declare function getApiKey({ opts, schema, deleteAllExpiredApiKeys, }: {
+    opts: PredefinedApiKeyOptions;
+    schema: ReturnType<typeof apiKeySchema>;
+    deleteAllExpiredApiKeys(ctx: AuthContext, byPassLastCheckTime?: boolean): Promise<number> | undefined;
+}): {
+    <C extends [{
+        query: {
+            id: string;
+        };
+        body?: undefined;
+        method?: "GET" | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            name: string | null;
+            start: string | null;
+            prefix: string | null;
+            userId: string;
+            refillInterval: number | null;
+            refillAmount: number | null;
+            lastRefillAt: Date | null;
+            enabled: boolean;
+            rateLimitEnabled: boolean;
+            rateLimitTimeWindow: number | null;
+            rateLimitMax: number | null;
+            requestCount: number;
+            remaining: number | null;
+            lastRequest: Date | null;
+            expiresAt: Date | null;
+            createdAt: Date;
+            updatedAt: Date;
+            metadata: Record<string, any> | null;
+            permissions?: string;
+        };
+    } : {
+        id: string;
+        name: string | null;
+        start: string | null;
+        prefix: string | null;
+        userId: string;
+        refillInterval: number | null;
+        refillAmount: number | null;
+        lastRefillAt: Date | null;
+        enabled: boolean;
+        rateLimitEnabled: boolean;
+        rateLimitTimeWindow: number | null;
+        rateLimitMax: number | null;
+        requestCount: number;
+        remaining: number | null;
+        lastRequest: Date | null;
+        expiresAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        metadata: Record<string, any> | null;
+        permissions?: string;
+    }>;
+    options: {
+        method: "GET";
+        query: z.ZodObject<{
+            id: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            id: string;
+        }, {
+            id: string;
+        }>;
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: Record<string, any> & {
+                    id: string;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    userId: string;
+                    expiresAt: Date;
+                    token: string;
+                    ipAddress?: string | null | undefined;
+                    userAgent?: string | null | undefined;
+                };
+                user: Record<string, any> & {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+            };
+        }>)[];
+    } & {
+        use: any[];
+    };
+    path: "/api-key/get";
+};
+//# sourceMappingURL=get-api-key.d.ts.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"solid-start.d.ts","sourceRoot":"","sources":["../../src/integrations/solid-start.ts"],"names":[],"mappings":"AAAA,wBAAgB,mBAAmB,CAClC,IAAI,EACD;IACA,OAAO,EAAE,CAAC,OAAO,EAAE,OAAO,KAAK,OAAO,CAAC,QAAQ,CAAC,CAAC;CAChD,GACD,CAAC,CAAC,OAAO,EAAE,OAAO,KAAK,OAAO,CAAC,QAAQ,CAAC,CAAC;iBAEd;QAC7B,OAAO,EAAE,OAAO,CAAC;KACjB;kBAF6B;QAC7B,OAAO,EAAE,OAAO,CAAC;KACjB;EASD"}

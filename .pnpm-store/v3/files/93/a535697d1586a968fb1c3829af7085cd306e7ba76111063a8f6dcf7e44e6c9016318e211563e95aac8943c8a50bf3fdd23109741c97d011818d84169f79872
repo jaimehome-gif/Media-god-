@@ -1,0 +1,3 @@
+import type { BetterAuthOptions } from "../types";
+export declare function getIp(req: Request | Headers, options: BetterAuthOptions): string | null;
+//# sourceMappingURL=get-request-ip.d.ts.map

@@ -1,0 +1,19 @@
+import type { FieldAttribute, FieldType } from ".";
+import type { BetterAuthOptions } from "../types";
+import type { KyselyDatabaseType } from "../adapters/kysely-adapter/types";
+export declare function matchType(columnDataType: string, fieldType: FieldType, dbType: KyselyDatabaseType): boolean;
+export declare function getMigrations(config: BetterAuthOptions): Promise<{
+    toBeCreated: {
+        table: string;
+        fields: Record<string, FieldAttribute>;
+        order: number;
+    }[];
+    toBeAdded: {
+        table: string;
+        fields: Record<string, FieldAttribute>;
+        order: number;
+    }[];
+    runMigrations: () => Promise<void>;
+    compileMigrations: () => Promise<string>;
+}>;
+//# sourceMappingURL=get-migration.d.ts.map

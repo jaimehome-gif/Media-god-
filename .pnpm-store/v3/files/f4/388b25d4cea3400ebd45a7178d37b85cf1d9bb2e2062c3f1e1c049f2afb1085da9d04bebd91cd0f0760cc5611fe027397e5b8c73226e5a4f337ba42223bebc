@@ -1,0 +1,2 @@
+export * from "./memory-adapter";
+//# sourceMappingURL=index.d.ts.map

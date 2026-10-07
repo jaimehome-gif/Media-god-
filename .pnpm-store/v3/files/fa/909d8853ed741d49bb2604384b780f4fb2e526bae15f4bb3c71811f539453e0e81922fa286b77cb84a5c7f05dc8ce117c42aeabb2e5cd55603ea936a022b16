@@ -1,0 +1,7 @@
+export declare class BetterAuthError extends Error {
+    constructor(message: string, cause?: string);
+}
+export declare class MissingDependencyError extends BetterAuthError {
+    constructor(pkgName: string);
+}
+//# sourceMappingURL=index.d.ts.map

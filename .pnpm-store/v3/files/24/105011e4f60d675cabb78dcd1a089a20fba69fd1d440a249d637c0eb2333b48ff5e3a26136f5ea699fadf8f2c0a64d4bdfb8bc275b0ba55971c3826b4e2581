@@ -1,0 +1,166 @@
+import { z } from "zod";
+import type { InferOptionSchema } from "../../types";
+import { schema } from "./schema";
+export type UsernameOptions = {
+    schema?: InferOptionSchema<typeof schema>;
+    /**
+     * The minimum length of the username
+     *
+     * @default 3
+     */
+    minUsernameLength?: number;
+    /**
+     * The maximum length of the username
+     *
+     * @default 30
+     */
+    maxUsernameLength?: number;
+    /**
+     * A function to validate the username
+     *
+     * By default, the username should only contain alphanumeric characters and underscores
+     */
+    usernameValidator?: (username: string) => boolean | Promise<boolean>;
+};
+export declare const username: (options?: UsernameOptions) => {
+    id: "username";
+    endpoints: {
+        signInUsername: {
+            <C extends [{
+                body: {
+                    password: string;
+                    username: string;
+                    rememberMe?: boolean | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    token: string;
+                    user: {
+                        id: string;
+                        email: string;
+                        emailVerified: boolean;
+                        username: string;
+                        name: string;
+                        image: string | null | undefined;
+                        createdAt: Date;
+                        updatedAt: Date;
+                    };
+                } | null;
+            } : {
+                token: string;
+                user: {
+                    id: string;
+                    email: string;
+                    emailVerified: boolean;
+                    username: string;
+                    name: string;
+                    image: string | null | undefined;
+                    createdAt: Date;
+                    updatedAt: Date;
+                };
+            } | null>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    username: z.ZodString;
+                    password: z.ZodString;
+                    rememberMe: z.ZodOptional<z.ZodBoolean>;
+                }, "strip", z.ZodTypeAny, {
+                    password: string;
+                    username: string;
+                    rememberMe?: boolean | undefined;
+                }, {
+                    password: string;
+                    username: string;
+                    rememberMe?: boolean | undefined;
+                }>;
+                metadata: {
+                    openapi: {
+                        summary: string;
+                        description: string;
+                        responses: {
+                            200: {
+                                description: string;
+                                content: {
+                                    "application/json": {
+                                        schema: {
+                                            type: "object";
+                                            properties: {
+                                                user: {
+                                                    $ref: string;
+                                                };
+                                                session: {
+                                                    $ref: string;
+                                                };
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            } & {
+                use: any[];
+            };
+            path: "/sign-in/username";
+        };
+    };
+    schema: {
+        user: {
+            fields: {
+                username: {
+                    type: "string";
+                    required: false;
+                    sortable: true;
+                    unique: true;
+                    returned: true;
+                    transform: {
+                        input(value: string | number | boolean | string[] | Date | number[] | null | undefined): string | undefined;
+                    };
+                };
+                displayUsername: {
+                    type: "string";
+                    required: false;
+                };
+            };
+        };
+    };
+    hooks: {
+        before: {
+            matcher(context: import("../..").HookEndpointContext): boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<void>;
+        }[];
+    };
+    $ERROR_CODES: {
+        readonly OTP_NOT_ENABLED: "OTP not enabled";
+        readonly OTP_HAS_EXPIRED: "OTP has expired";
+        readonly TOTP_NOT_ENABLED: "TOTP not enabled";
+        readonly TWO_FACTOR_NOT_ENABLED: "Two factor isn't enabled";
+        readonly BACKUP_CODES_NOT_ENABLED: "Backup codes aren't enabled";
+        readonly INVALID_BACKUP_CODE: "Invalid backup code";
+    };
+};
+//# sourceMappingURL=index.d.ts.map

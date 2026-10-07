@@ -1,0 +1,483 @@
+import { z } from "zod";
+import type { Client, OIDCMetadata, OIDCOptions } from "./types";
+/**
+ * OpenID Connect (OIDC) plugin for Better Auth. This plugin implements the
+ * authorization code flow and the token exchange flow. It also implements the
+ * userinfo endpoint.
+ *
+ * @param options - The options for the OIDC plugin.
+ * @returns A Better Auth plugin.
+ */
+export declare const oidcProvider: (options: OIDCOptions) => {
+    id: "oidc";
+    hooks: {
+        after: {
+            matcher(): true;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<Response | undefined>;
+        }[];
+    };
+    endpoints: {
+        getOpenIdConfig: {
+            <C extends [({
+                body?: undefined;
+                method?: "GET" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: OIDCMetadata;
+            } : OIDCMetadata>;
+            options: {
+                method: "GET";
+                metadata: {
+                    isAction: boolean;
+                };
+            } & {
+                use: any[];
+            };
+            path: "/.well-known/openid-configuration";
+        };
+        oAuth2authorize: {
+            <C extends [{
+                query: Record<string, any>;
+                body?: undefined;
+                method?: "GET" | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: Response;
+            } : Response>;
+            options: {
+                method: "GET";
+                query: z.ZodRecord<z.ZodString, z.ZodAny>;
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/authorize";
+        };
+        oAuthConsent: {
+            <C extends [{
+                body: {
+                    accept: boolean;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    redirectURI: string;
+                };
+            } : {
+                redirectURI: string;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    accept: z.ZodBoolean;
+                }, "strip", z.ZodTypeAny, {
+                    accept: boolean;
+                }, {
+                    accept: boolean;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/consent";
+        };
+        oAuth2token: {
+            <C extends [{
+                body: Record<string, any>;
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    access_token: string;
+                    token_type: string;
+                    expires_in: number;
+                    refresh_token: string;
+                    scope: string;
+                } | {
+                    access_token: string;
+                    token_type: string;
+                    expires_in: number;
+                    refresh_token: string | undefined;
+                    scope: string;
+                    id_token: string | undefined;
+                };
+            } : {
+                access_token: string;
+                token_type: string;
+                expires_in: number;
+                refresh_token: string;
+                scope: string;
+            } | {
+                access_token: string;
+                token_type: string;
+                expires_in: number;
+                refresh_token: string | undefined;
+                scope: string;
+                id_token: string | undefined;
+            }>;
+            options: {
+                method: "POST";
+                body: z.ZodRecord<z.ZodString, z.ZodAny>;
+                metadata: {
+                    isAction: boolean;
+                };
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/token";
+        };
+        oAuth2userInfo: {
+            <C extends [({
+                body?: undefined;
+                method?: "GET" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    sub: string;
+                    email: string | undefined;
+                    name: string | undefined;
+                    picture: string | null | undefined;
+                    given_name: string | undefined;
+                    family_name: string | undefined;
+                    email_verified: boolean | undefined;
+                };
+            } : {
+                sub: string;
+                email: string | undefined;
+                name: string | undefined;
+                picture: string | null | undefined;
+                given_name: string | undefined;
+                family_name: string | undefined;
+                email_verified: boolean | undefined;
+            }>;
+            options: {
+                method: "GET";
+                metadata: {
+                    isAction: boolean;
+                };
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/userinfo";
+        };
+        registerOAuthApplication: {
+            <C extends [{
+                body: {
+                    name: string;
+                    redirectURLs: string[];
+                    metadata?: Record<string, any> | undefined;
+                    icon?: string | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: Client;
+            } : Client>;
+            options: {
+                method: "POST";
+                body: z.ZodObject<{
+                    name: z.ZodString;
+                    icon: z.ZodOptional<z.ZodString>;
+                    metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+                    redirectURLs: z.ZodArray<z.ZodString, "many">;
+                }, "strip", z.ZodTypeAny, {
+                    name: string;
+                    redirectURLs: string[];
+                    metadata?: Record<string, any> | undefined;
+                    icon?: string | undefined;
+                }, {
+                    name: string;
+                    redirectURLs: string[];
+                    metadata?: Record<string, any> | undefined;
+                    icon?: string | undefined;
+                }>;
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/register";
+        };
+        getOAuthClient: {
+            <C extends [{
+                params: {
+                    id: string;
+                };
+                body?: undefined;
+                method?: "GET" | undefined;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    clientId: string;
+                    name: string;
+                    icon: string;
+                };
+            } : {
+                clientId: string;
+                name: string;
+                icon: string;
+            }>;
+            options: {
+                method: "GET";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/oauth2/client/:id";
+        };
+    };
+    schema: {
+        oauthApplication: {
+            modelName: string;
+            fields: {
+                name: {
+                    type: "string";
+                };
+                icon: {
+                    type: "string";
+                    required: false;
+                };
+                metadata: {
+                    type: "string";
+                    required: false;
+                };
+                clientId: {
+                    type: "string";
+                    unique: true;
+                };
+                clientSecret: {
+                    type: "string";
+                };
+                redirectURLs: {
+                    type: "string";
+                };
+                type: {
+                    type: "string";
+                };
+                disabled: {
+                    type: "boolean";
+                    required: false;
+                    defaultValue: false;
+                };
+                userId: {
+                    type: "string";
+                    required: false;
+                };
+                createdAt: {
+                    type: "date";
+                };
+                updatedAt: {
+                    type: "date";
+                };
+            };
+        };
+        oauthAccessToken: {
+            modelName: string;
+            fields: {
+                accessToken: {
+                    type: "string";
+                    unique: true;
+                };
+                refreshToken: {
+                    type: "string";
+                    unique: true;
+                };
+                accessTokenExpiresAt: {
+                    type: "date";
+                };
+                refreshTokenExpiresAt: {
+                    type: "date";
+                };
+                clientId: {
+                    type: "string";
+                };
+                userId: {
+                    type: "string";
+                    required: false;
+                };
+                scopes: {
+                    type: "string";
+                };
+                createdAt: {
+                    type: "date";
+                };
+                updatedAt: {
+                    type: "date";
+                };
+            };
+        };
+        oauthConsent: {
+            modelName: string;
+            fields: {
+                clientId: {
+                    type: "string";
+                };
+                userId: {
+                    type: "string";
+                };
+                scopes: {
+                    type: "string";
+                };
+                createdAt: {
+                    type: "date";
+                };
+                updatedAt: {
+                    type: "date";
+                };
+                consentGiven: {
+                    type: "boolean";
+                };
+            };
+        };
+    };
+};
+export type * from "./types";
+//# sourceMappingURL=index.d.ts.map

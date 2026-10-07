@@ -1,0 +1,873 @@
+import type { ApiKey, ApiKeyOptions } from "./types";
+export declare const ERROR_CODES: {
+    INVALID_METADATA_TYPE: string;
+    REFILL_AMOUNT_AND_INTERVAL_REQUIRED: string;
+    REFILL_INTERVAL_AND_AMOUNT_REQUIRED: string;
+    USER_BANNED: string;
+    UNAUTHORIZED_SESSION: string;
+    KEY_NOT_FOUND: string;
+    KEY_DISABLED: string;
+    KEY_EXPIRED: string;
+    USAGE_EXCEEDED: string;
+    KEY_NOT_RECOVERABLE: string;
+    EXPIRES_IN_IS_TOO_SMALL: string;
+    EXPIRES_IN_IS_TOO_LARGE: string;
+    INVALID_REMAINING: string;
+    INVALID_PREFIX_LENGTH: string;
+    INVALID_NAME_LENGTH: string;
+    METADATA_DISABLED: string;
+    RATE_LIMIT_EXCEEDED: string;
+    NO_VALUES_TO_UPDATE: string;
+    KEY_DISABLED_EXPIRATION: string;
+    INVALID_API_KEY: string;
+    INVALID_USER_ID_FROM_API_KEY: string;
+    INVALID_API_KEY_GETTER_RETURN_TYPE: string;
+    SERVER_ONLY_PROPERTY: string;
+};
+export declare const apiKey: (options?: ApiKeyOptions) => {
+    id: "api-key";
+    $ERROR_CODES: {
+        INVALID_METADATA_TYPE: string;
+        REFILL_AMOUNT_AND_INTERVAL_REQUIRED: string;
+        REFILL_INTERVAL_AND_AMOUNT_REQUIRED: string;
+        USER_BANNED: string;
+        UNAUTHORIZED_SESSION: string;
+        KEY_NOT_FOUND: string;
+        KEY_DISABLED: string;
+        KEY_EXPIRED: string;
+        USAGE_EXCEEDED: string;
+        KEY_NOT_RECOVERABLE: string;
+        EXPIRES_IN_IS_TOO_SMALL: string;
+        EXPIRES_IN_IS_TOO_LARGE: string;
+        INVALID_REMAINING: string;
+        INVALID_PREFIX_LENGTH: string;
+        INVALID_NAME_LENGTH: string;
+        METADATA_DISABLED: string;
+        RATE_LIMIT_EXCEEDED: string;
+        NO_VALUES_TO_UPDATE: string;
+        KEY_DISABLED_EXPIRATION: string;
+        INVALID_API_KEY: string;
+        INVALID_USER_ID_FROM_API_KEY: string;
+        INVALID_API_KEY_GETTER_RETURN_TYPE: string;
+        SERVER_ONLY_PROPERTY: string;
+    };
+    hooks: {
+        before: {
+            matcher: (ctx: import("../..").HookEndpointContext) => boolean;
+            handler: (inputContext: {
+                body?: any;
+                query?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: Headers | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+            }) => Promise<{
+                user: {
+                    id: string;
+                    name: string;
+                    email: string;
+                    emailVerified: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    image?: string | null | undefined;
+                };
+                session: {
+                    id: string;
+                    token: string;
+                    userId: string;
+                    userAgent: string | null;
+                    ipAddress: string | null;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    expiresAt: Date;
+                };
+            } | {
+                context: import("better-call").MiddlewareContext<import("better-call").MiddlewareOptions, import("../..").AuthContext & {
+                    returned?: unknown;
+                    responseHeaders?: Headers;
+                }>;
+            }>;
+        }[];
+    };
+    endpoints: {
+        createApiKey: {
+            <C extends [{
+                body: {
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    prefix?: string | undefined;
+                    expiresIn?: number | null | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    remaining?: number | null | undefined;
+                    permissions?: Record<string, string[]> | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    key: string;
+                    metadata: any;
+                    permissions: any;
+                    id: string;
+                    name: string | null;
+                    start: string | null;
+                    prefix: string | null;
+                    userId: string;
+                    refillInterval: number | null;
+                    refillAmount: number | null;
+                    lastRefillAt: Date | null;
+                    enabled: boolean;
+                    rateLimitEnabled: boolean;
+                    rateLimitTimeWindow: number | null;
+                    rateLimitMax: number | null;
+                    requestCount: number;
+                    remaining: number | null;
+                    lastRequest: Date | null;
+                    expiresAt: Date | null;
+                    createdAt: Date;
+                    updatedAt: Date;
+                };
+            } : {
+                key: string;
+                metadata: any;
+                permissions: any;
+                id: string;
+                name: string | null;
+                start: string | null;
+                prefix: string | null;
+                userId: string;
+                refillInterval: number | null;
+                refillAmount: number | null;
+                lastRefillAt: Date | null;
+                enabled: boolean;
+                rateLimitEnabled: boolean;
+                rateLimitTimeWindow: number | null;
+                rateLimitMax: number | null;
+                requestCount: number;
+                remaining: number | null;
+                lastRequest: Date | null;
+                expiresAt: Date | null;
+                createdAt: Date;
+                updatedAt: Date;
+            }>;
+            options: {
+                method: "POST";
+                body: import("zod").ZodObject<{
+                    name: import("zod").ZodOptional<import("zod").ZodString>;
+                    expiresIn: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodOptional<import("zod").ZodNumber>>>;
+                    userId: import("zod").ZodOptional<import("zod").ZodString>;
+                    prefix: import("zod").ZodOptional<import("zod").ZodString>;
+                    remaining: import("zod").ZodDefault<import("zod").ZodNullable<import("zod").ZodOptional<import("zod").ZodNumber>>>;
+                    metadata: import("zod").ZodOptional<import("zod").ZodAny>;
+                    refillAmount: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    refillInterval: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    rateLimitTimeWindow: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    rateLimitMax: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    rateLimitEnabled: import("zod").ZodOptional<import("zod").ZodBoolean>;
+                    permissions: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodArray<import("zod").ZodString, "many">>>;
+                }, "strip", import("zod").ZodTypeAny, {
+                    expiresIn: number | null;
+                    remaining: number | null;
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    prefix?: string | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    permissions?: Record<string, string[]> | undefined;
+                }, {
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    prefix?: string | undefined;
+                    expiresIn?: number | null | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    remaining?: number | null | undefined;
+                    permissions?: Record<string, string[]> | undefined;
+                }>;
+            } & {
+                use: any[];
+            };
+            path: "/api-key/create";
+        };
+        verifyApiKey: {
+            <C extends [{
+                body: {
+                    key: string;
+                    permissions?: Record<string, string[]> | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    valid: boolean;
+                    error: {
+                        message: string;
+                        code: "KEY_NOT_FOUND";
+                    };
+                    key: null;
+                } | {
+                    valid: boolean;
+                    error: {
+                        message: string;
+                        code: "KEY_DISABLED";
+                    };
+                    key: null;
+                } | {
+                    valid: boolean;
+                    error: {
+                        message: string;
+                        code: "KEY_EXPIRED";
+                    };
+                    key: null;
+                } | {
+                    valid: boolean;
+                    error: {
+                        message: string;
+                        code: "USAGE_EXCEEDED";
+                    };
+                    key: null;
+                } | {
+                    valid: boolean;
+                    error: {
+                        message: string | null;
+                        code: "RATE_LIMITED";
+                        details: {
+                            tryAgainIn: number | null;
+                        };
+                    };
+                    key: null;
+                } | {
+                    valid: boolean;
+                    error: null;
+                    key: Omit<ApiKey, "key"> | null;
+                };
+            } : {
+                valid: boolean;
+                error: {
+                    message: string;
+                    code: "KEY_NOT_FOUND";
+                };
+                key: null;
+            } | {
+                valid: boolean;
+                error: {
+                    message: string;
+                    code: "KEY_DISABLED";
+                };
+                key: null;
+            } | {
+                valid: boolean;
+                error: {
+                    message: string;
+                    code: "KEY_EXPIRED";
+                };
+                key: null;
+            } | {
+                valid: boolean;
+                error: {
+                    message: string;
+                    code: "USAGE_EXCEEDED";
+                };
+                key: null;
+            } | {
+                valid: boolean;
+                error: {
+                    message: string | null;
+                    code: "RATE_LIMITED";
+                    details: {
+                        tryAgainIn: number | null;
+                    };
+                };
+                key: null;
+            } | {
+                valid: boolean;
+                error: null;
+                key: Omit<ApiKey, "key"> | null;
+            }>;
+            options: {
+                method: "POST";
+                body: import("zod").ZodObject<{
+                    key: import("zod").ZodString;
+                    permissions: import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodArray<import("zod").ZodString, "many">>>;
+                }, "strip", import("zod").ZodTypeAny, {
+                    key: string;
+                    permissions?: Record<string, string[]> | undefined;
+                }, {
+                    key: string;
+                    permissions?: Record<string, string[]> | undefined;
+                }>;
+                metadata: {
+                    SERVER_ONLY: true;
+                };
+            } & {
+                use: any[];
+            };
+            path: "/api-key/verify";
+        };
+        getApiKey: {
+            <C extends [{
+                query: {
+                    id: string;
+                };
+                body?: undefined;
+                method?: "GET" | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    id: string;
+                    name: string | null;
+                    start: string | null;
+                    prefix: string | null;
+                    userId: string;
+                    refillInterval: number | null;
+                    refillAmount: number | null;
+                    lastRefillAt: Date | null;
+                    enabled: boolean;
+                    rateLimitEnabled: boolean;
+                    rateLimitTimeWindow: number | null;
+                    rateLimitMax: number | null;
+                    requestCount: number;
+                    remaining: number | null;
+                    lastRequest: Date | null;
+                    expiresAt: Date | null;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    metadata: Record<string, any> | null;
+                    permissions?: string;
+                };
+            } : {
+                id: string;
+                name: string | null;
+                start: string | null;
+                prefix: string | null;
+                userId: string;
+                refillInterval: number | null;
+                refillAmount: number | null;
+                lastRefillAt: Date | null;
+                enabled: boolean;
+                rateLimitEnabled: boolean;
+                rateLimitTimeWindow: number | null;
+                rateLimitMax: number | null;
+                requestCount: number;
+                remaining: number | null;
+                lastRequest: Date | null;
+                expiresAt: Date | null;
+                createdAt: Date;
+                updatedAt: Date;
+                metadata: Record<string, any> | null;
+                permissions?: string;
+            }>;
+            options: {
+                method: "GET";
+                query: import("zod").ZodObject<{
+                    id: import("zod").ZodString;
+                }, "strip", import("zod").ZodTypeAny, {
+                    id: string;
+                }, {
+                    id: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/api-key/get";
+        };
+        updateApiKey: {
+            <C extends [{
+                body: {
+                    keyId: string;
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    enabled?: boolean | undefined;
+                    expiresIn?: number | null | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    remaining?: number | undefined;
+                    permissions?: Record<string, string[]> | null | undefined;
+                };
+                method?: "POST" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    id: string;
+                    name: string | null;
+                    start: string | null;
+                    prefix: string | null;
+                    userId: string;
+                    refillInterval: number | null;
+                    refillAmount: number | null;
+                    lastRefillAt: Date | null;
+                    enabled: boolean;
+                    rateLimitEnabled: boolean;
+                    rateLimitTimeWindow: number | null;
+                    rateLimitMax: number | null;
+                    requestCount: number;
+                    remaining: number | null;
+                    lastRequest: Date | null;
+                    expiresAt: Date | null;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    metadata: Record<string, any> | null;
+                    permissions?: string;
+                };
+            } : {
+                id: string;
+                name: string | null;
+                start: string | null;
+                prefix: string | null;
+                userId: string;
+                refillInterval: number | null;
+                refillAmount: number | null;
+                lastRefillAt: Date | null;
+                enabled: boolean;
+                rateLimitEnabled: boolean;
+                rateLimitTimeWindow: number | null;
+                rateLimitMax: number | null;
+                requestCount: number;
+                remaining: number | null;
+                lastRequest: Date | null;
+                expiresAt: Date | null;
+                createdAt: Date;
+                updatedAt: Date;
+                metadata: Record<string, any> | null;
+                permissions?: string;
+            }>;
+            options: {
+                method: "POST";
+                body: import("zod").ZodObject<{
+                    keyId: import("zod").ZodString;
+                    userId: import("zod").ZodOptional<import("zod").ZodString>;
+                    name: import("zod").ZodOptional<import("zod").ZodString>;
+                    enabled: import("zod").ZodOptional<import("zod").ZodBoolean>;
+                    remaining: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    refillAmount: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    refillInterval: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    metadata: import("zod").ZodOptional<import("zod").ZodAny>;
+                    expiresIn: import("zod").ZodNullable<import("zod").ZodOptional<import("zod").ZodNumber>>;
+                    rateLimitEnabled: import("zod").ZodOptional<import("zod").ZodBoolean>;
+                    rateLimitTimeWindow: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    rateLimitMax: import("zod").ZodOptional<import("zod").ZodNumber>;
+                    permissions: import("zod").ZodNullable<import("zod").ZodOptional<import("zod").ZodRecord<import("zod").ZodString, import("zod").ZodArray<import("zod").ZodString, "many">>>>;
+                }, "strip", import("zod").ZodTypeAny, {
+                    keyId: string;
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    enabled?: boolean | undefined;
+                    expiresIn?: number | null | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    remaining?: number | undefined;
+                    permissions?: Record<string, string[]> | null | undefined;
+                }, {
+                    keyId: string;
+                    metadata?: any;
+                    name?: string | undefined;
+                    userId?: string | undefined;
+                    enabled?: boolean | undefined;
+                    expiresIn?: number | null | undefined;
+                    rateLimitMax?: number | undefined;
+                    refillInterval?: number | undefined;
+                    refillAmount?: number | undefined;
+                    rateLimitEnabled?: boolean | undefined;
+                    rateLimitTimeWindow?: number | undefined;
+                    remaining?: number | undefined;
+                    permissions?: Record<string, string[]> | null | undefined;
+                }>;
+            } & {
+                use: any[];
+            };
+            path: "/api-key/update";
+        };
+        deleteApiKey: {
+            <C extends [{
+                body: {
+                    keyId: string;
+                };
+                method?: "DELETE" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            }]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    success: boolean;
+                };
+            } : {
+                success: boolean;
+            }>;
+            options: {
+                method: "DELETE";
+                body: import("zod").ZodObject<{
+                    keyId: import("zod").ZodString;
+                }, "strip", import("zod").ZodTypeAny, {
+                    keyId: string;
+                }, {
+                    keyId: string;
+                }>;
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/api-key/delete";
+        };
+        listApiKeys: {
+            <C extends [({
+                body?: undefined;
+                method?: "GET" | undefined;
+                query?: Record<string, any> | undefined;
+                params?: Record<string, any> | undefined;
+                request?: Request | undefined;
+                headers?: HeadersInit | undefined;
+                asResponse?: boolean | undefined;
+                returnHeaders?: boolean | undefined;
+                use?: import("better-call").Middleware[] | undefined;
+                path?: string | undefined;
+            } | undefined)?]>(...inputCtx: C): Promise<C extends [{
+                asResponse: true;
+            }] ? Response : C extends [{
+                returnHeaders: true;
+            }] ? {
+                headers: Headers;
+                response: {
+                    id: string;
+                    name: string | null;
+                    start: string | null;
+                    prefix: string | null;
+                    userId: string;
+                    refillInterval: number | null;
+                    refillAmount: number | null;
+                    lastRefillAt: Date | null;
+                    enabled: boolean;
+                    rateLimitEnabled: boolean;
+                    rateLimitTimeWindow: number | null;
+                    rateLimitMax: number | null;
+                    requestCount: number;
+                    remaining: number | null;
+                    lastRequest: Date | null;
+                    expiresAt: Date | null;
+                    createdAt: Date;
+                    updatedAt: Date;
+                    metadata: Record<string, any> | null;
+                    permissions?: string;
+                }[];
+            } : {
+                id: string;
+                name: string | null;
+                start: string | null;
+                prefix: string | null;
+                userId: string;
+                refillInterval: number | null;
+                refillAmount: number | null;
+                lastRefillAt: Date | null;
+                enabled: boolean;
+                rateLimitEnabled: boolean;
+                rateLimitTimeWindow: number | null;
+                rateLimitMax: number | null;
+                requestCount: number;
+                remaining: number | null;
+                lastRequest: Date | null;
+                expiresAt: Date | null;
+                createdAt: Date;
+                updatedAt: Date;
+                metadata: Record<string, any> | null;
+                permissions?: string;
+            }[]>;
+            options: {
+                method: "GET";
+                use: ((inputContext: {
+                    body?: any;
+                    query?: Record<string, any> | undefined;
+                    request?: Request | undefined;
+                    headers?: Headers | undefined;
+                    asResponse?: boolean | undefined;
+                    returnHeaders?: boolean | undefined;
+                    use?: import("better-call").Middleware[] | undefined;
+                }) => Promise<{
+                    session: {
+                        session: Record<string, any> & {
+                            id: string;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            userId: string;
+                            expiresAt: Date;
+                            token: string;
+                            ipAddress?: string | null | undefined;
+                            userAgent?: string | null | undefined;
+                        };
+                        user: Record<string, any> & {
+                            id: string;
+                            name: string;
+                            email: string;
+                            emailVerified: boolean;
+                            createdAt: Date;
+                            updatedAt: Date;
+                            image?: string | null | undefined;
+                        };
+                    };
+                }>)[];
+            } & {
+                use: any[];
+            };
+            path: "/api-key/list";
+        };
+    };
+    schema: {
+        apikey: {
+            modelName: string;
+            fields: {
+                name: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                start: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                prefix: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                key: {
+                    type: "string";
+                    required: true;
+                    input: false;
+                };
+                userId: {
+                    type: "string";
+                    references: {
+                        model: string;
+                        field: string;
+                    };
+                    required: true;
+                    input: false;
+                };
+                refillInterval: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                };
+                refillAmount: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                };
+                lastRefillAt: {
+                    type: "date";
+                    required: false;
+                    input: false;
+                };
+                enabled: {
+                    type: "boolean";
+                    required: false;
+                    input: false;
+                    defaultValue: true;
+                };
+                rateLimitEnabled: {
+                    type: "boolean";
+                    required: false;
+                    input: false;
+                    defaultValue: true;
+                };
+                rateLimitTimeWindow: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                    defaultValue: number;
+                };
+                rateLimitMax: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                    defaultValue: number;
+                };
+                requestCount: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                    defaultValue: number;
+                };
+                remaining: {
+                    type: "number";
+                    required: false;
+                    input: false;
+                };
+                lastRequest: {
+                    type: "date";
+                    required: false;
+                    input: false;
+                };
+                expiresAt: {
+                    type: "date";
+                    required: false;
+                    input: false;
+                };
+                createdAt: {
+                    type: "date";
+                    required: true;
+                    input: false;
+                };
+                updatedAt: {
+                    type: "date";
+                    required: true;
+                    input: false;
+                };
+                permissions: {
+                    type: "string";
+                    required: false;
+                    input: false;
+                };
+                metadata: {
+                    type: "string";
+                    required: false;
+                    input: true;
+                    transform: {
+                        input(value: string | number | boolean | string[] | Date | number[] | null | undefined): string;
+                        output(value: string | number | boolean | string[] | Date | number[] | null | undefined): any;
+                    };
+                };
+            };
+        };
+    };
+};
+//# sourceMappingURL=index.d.ts.map

@@ -1,0 +1,76 @@
+import type { UserWithTwoFactor } from "./types";
+import type { GenericEndpointContext } from "../../types";
+export declare const verifyTwoFactorMiddleware: (inputContext: {
+    body: {
+        trustDevice?: boolean | undefined;
+    };
+    query?: Record<string, any> | undefined;
+    request?: Request | undefined;
+    headers?: Headers | undefined;
+    asResponse?: boolean | undefined;
+    returnHeaders?: boolean | undefined;
+    use?: import("better-call").Middleware[] | undefined;
+}) => Promise<{
+    valid: (ctx: GenericEndpointContext) => Promise<{
+        token: string;
+        user: {
+            id: string;
+            email: string;
+            emailVerified: boolean;
+            name: string;
+            image: string | null | undefined;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    invalid: () => Promise<never>;
+    session: {
+        session: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: UserWithTwoFactor;
+    };
+} | {
+    valid: (ctx: GenericEndpointContext) => Promise<{
+        token: string;
+        user: {
+            id: string;
+            email: string;
+            emailVerified: boolean;
+            name: string;
+            image: string | null | undefined;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    }>;
+    invalid: () => Promise<never>;
+    session: {
+        session: Record<string, any> & {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            userId: string;
+            expiresAt: Date;
+            token: string;
+            ipAddress?: string | null | undefined;
+            userAgent?: string | null | undefined;
+        };
+        user: Record<string, any> & {
+            id: string;
+            name: string;
+            email: string;
+            emailVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            image?: string | null | undefined;
+        };
+    };
+}>;
+//# sourceMappingURL=verify-middleware.d.ts.map

@@ -1,0 +1,74 @@
+import { type WritableAtom } from "nanostores";
+import type { AtomListener, ClientOptions } from "./types";
+export declare const getClientConfig: (options?: ClientOptions) => {
+    pluginsActions: Record<string, any>;
+    pluginsAtoms: Record<string, WritableAtom<any>>;
+    pluginPathMethods: Record<string, "GET" | "POST">;
+    atomListeners: AtomListener[];
+    $fetch: import("@better-fetch/fetch").BetterFetch<{
+        plugins: (import("@better-fetch/fetch").BetterFetchPlugin | {
+            id: string;
+            name: string;
+            hooks: {
+                onSuccess(context: import("@better-fetch/fetch").SuccessContext<any>): void;
+            };
+        })[];
+        method: string;
+        headers?: (HeadersInit & (HeadersInit | {
+            accept: "application/json" | "text/plain" | "application/octet-stream";
+            "content-type": "application/json" | "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data" | "application/octet-stream";
+            authorization: "Bearer" | "Basic";
+        })) | undefined;
+        cache?: RequestCache;
+        credentials?: RequestCredentials;
+        integrity?: string;
+        keepalive?: boolean;
+        mode?: RequestMode;
+        priority?: RequestPriority;
+        redirect?: RequestRedirect;
+        referrer?: string;
+        referrerPolicy?: ReferrerPolicy;
+        signal?: AbortSignal | null;
+        window?: null;
+        onRequest?: <T extends Record<string, any>>(context: import("@better-fetch/fetch").RequestContext<T>) => Promise<import("@better-fetch/fetch").RequestContext | void> | import("@better-fetch/fetch").RequestContext | void;
+        onResponse?: (context: import("@better-fetch/fetch").ResponseContext) => Promise<Response | void | import("@better-fetch/fetch").ResponseContext> | Response | import("@better-fetch/fetch").ResponseContext | void;
+        onSuccess?: ((context: import("@better-fetch/fetch").SuccessContext<any>) => Promise<void> | void) | undefined;
+        onError?: (context: import("@better-fetch/fetch").ErrorContext) => Promise<void> | void;
+        onRetry?: (response: import("@better-fetch/fetch").ResponseContext) => Promise<void> | void;
+        hookOptions?: {
+            cloneResponse?: boolean;
+        };
+        timeout?: number;
+        customFetchImpl: import("@better-fetch/fetch").FetchEsque;
+        baseURL: string;
+        throw?: boolean;
+        auth?: {
+            type: "Bearer";
+            token: string | (() => string | undefined) | undefined;
+        } | {
+            type: "Basic";
+            username: string | (() => string | undefined) | undefined;
+            password: string | (() => string | undefined) | undefined;
+        } | {
+            type: "Custom";
+            prefix: string | (() => string | undefined) | undefined;
+            value: string | (() => string | undefined) | undefined;
+        };
+        body?: any;
+        query?: any;
+        params?: any;
+        duplex?: "full" | "half";
+        jsonParser: (text: string) => Promise<any> | any;
+        retry?: import("@better-fetch/fetch").RetryOptions;
+        retryAttempt?: number;
+        output?: import("@better-fetch/fetch").StandardSchemaV1 | typeof Blob | typeof File;
+        errorSchema?: import("@better-fetch/fetch").StandardSchemaV1;
+        disableValidation?: boolean;
+    }, unknown, unknown, {}>;
+    $store: {
+        notify: (signal?: Omit<string, "$sessionSignal"> | "$sessionSignal") => void;
+        listen: (signal: Omit<string, "$sessionSignal"> | "$sessionSignal", listener: (value: boolean, oldValue?: boolean | undefined) => void) => void;
+        atoms: Record<string, WritableAtom<any>>;
+    };
+};
+//# sourceMappingURL=config.d.ts.map

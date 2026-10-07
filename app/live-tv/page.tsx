@@ -1,7 +1,7 @@
 import { Tv, Radio, Globe } from 'lucide-react'
 import Link from 'next/link'
 import { Navbar } from '@/components/navbar'
-import { channelCategories } from '@/lib/live-tv-channels'
+import { channelCategories, allChannels } from '@/lib/live-tv-channels'
 
 export const metadata = {
   title: 'Live TV - StreamVibe',
@@ -32,7 +32,7 @@ export default function LiveTVPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
-            <span className="text-muted-foreground">150+ channels streaming live with active EPG guides</span>
+            <span className="text-muted-foreground">{allChannels.length} channels streaming live with active EPG guides</span>
           </div>
         </div>
 

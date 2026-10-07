@@ -1,0 +1,6 @@
+import type { username } from ".";
+export declare const usernameClient: () => {
+    id: "username";
+    $InferServerPlugin: ReturnType<typeof username>;
+};
+//# sourceMappingURL=client.d.ts.map

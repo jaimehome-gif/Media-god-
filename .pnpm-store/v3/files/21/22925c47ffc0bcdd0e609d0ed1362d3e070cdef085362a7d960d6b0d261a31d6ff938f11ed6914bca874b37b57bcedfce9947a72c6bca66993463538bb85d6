@@ -1,0 +1,2 @@
+export declare const merge: (objects: object[]) => object;
+//# sourceMappingURL=merger.d.ts.map

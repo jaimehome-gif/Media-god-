@@ -1,0 +1,1 @@
+{"version":3,"file":"next-js.d.ts","sourceRoot":"","sources":["../../src/integrations/next-js.ts"],"names":[],"mappings":"AAIA,wBAAgB,eAAe,CAC9B,IAAI,EACD;IACA,OAAO,EAAE,CAAC,OAAO,EAAE,OAAO,KAAK,OAAO,CAAC,QAAQ,CAAC,CAAC;CAChD,GACD,CAAC,CAAC,OAAO,EAAE,OAAO,KAAK,OAAO,CAAC,QAAQ,CAAC,CAAC;mBAEZ,OAAO;oBAAP,OAAO;EAOvC;AAED,eAAO,MAAM,WAAW;;;;;;;;;;;;;;;;CA2CvB,CAAC"}

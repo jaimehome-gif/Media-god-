@@ -1,0 +1,39 @@
+import type { ProviderOptions } from "../oauth2";
+export interface SpotifyProfile {
+    id: string;
+    display_name: string;
+    email: string;
+    images: {
+        url: string;
+    }[];
+}
+export interface SpotifyOptions extends ProviderOptions<SpotifyProfile> {
+}
+export declare const spotify: (options: SpotifyOptions) => {
+    id: "spotify";
+    name: string;
+    createAuthorizationURL({ state, scopes, codeVerifier, redirectURI }: {
+        state: string;
+        codeVerifier: string;
+        scopes?: string[];
+        redirectURI: string;
+    }): Promise<URL>;
+    validateAuthorizationCode: ({ code, codeVerifier, redirectURI }: {
+        code: string;
+        redirectURI: string;
+        codeVerifier?: string;
+        deviceId?: string;
+    }) => Promise<import("../oauth2").OAuth2Tokens>;
+    getUserInfo(token: import("../oauth2").OAuth2Tokens): Promise<{
+        user: {
+            id: string;
+            name?: string;
+            email?: string | null;
+            image?: string;
+            emailVerified: boolean;
+            [key: string]: any;
+        };
+        data: any;
+    } | null>;
+};
+//# sourceMappingURL=spotify.d.ts.map

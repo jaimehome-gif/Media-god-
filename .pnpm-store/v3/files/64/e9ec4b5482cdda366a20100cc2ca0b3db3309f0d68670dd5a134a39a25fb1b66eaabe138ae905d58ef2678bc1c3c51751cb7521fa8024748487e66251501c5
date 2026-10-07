@@ -1,0 +1,13 @@
+type ParseOptions = {
+    /** Throw errors instead of returning the original value */
+    strict?: boolean;
+    /** Log warnings when suspicious patterns are detected */
+    warnings?: boolean;
+    /** Custom reviver function */
+    reviver?: (key: string, value: any) => any;
+    /** Automatically convert ISO date strings to Date objects */
+    parseDates?: boolean;
+};
+export declare function parseJSON<T = unknown>(value: unknown, options?: ParseOptions): T;
+export default parseJSON;
+//# sourceMappingURL=parser.d.ts.map

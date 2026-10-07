@@ -1,0 +1,2382 @@
+import { z } from "zod";
+import { type InferRolesFromOption } from "../schema";
+import type { OrganizationOptions } from "../organization";
+export declare const createInvitation: <O extends OrganizationOptions | undefined>(option: O) => {
+    <C extends import("better-call").HasRequiredKeys<({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T ? { [K_1 in keyof T as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1] ? never : K_1]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_1 ? { [K_2 in keyof T_1 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] ? K_2 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2] | undefined; } : never) extends infer T_2 ? { [K in keyof T_2]: (({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_3 ? { [K_1_1 in keyof T_3 as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1] ? never : K_1_1]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_1]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_4 ? { [K_2_1 in keyof T_4 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] ? K_2_1 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_1] | undefined; } : never))[K]; } : never> extends true ? [({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_5 ? { [K_1_2 in keyof T_5 as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2] ? never : K_1_2]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_2]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_6 ? { [K_2_2 in keyof T_6 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] ? K_2_2 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_2] | undefined; } : never) extends infer T_5_1 ? { [K_3 in keyof T_5_1]: (({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_7 ? { [K_1_3 in keyof T_7 as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3] ? never : K_1_3]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_3]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_8 ? { [K_2_3 in keyof T_8 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] ? K_2_3 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_3] | undefined; } : never))[K_3]; } : never] : [((({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_9 ? { [K_1_4 in keyof T_9 as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4] ? never : K_1_4]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_4]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_10 ? { [K_2_4 in keyof T_10 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] ? K_2_4 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_4] | undefined; } : never) extends infer T_10_1 ? { [K_4 in keyof T_10_1]: (({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_11 ? { [K_1_5 in keyof T_11 as {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] extends never ? never : undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5] ? never : K_1_5]: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_1_5]; } : never) & ({
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    } extends infer T_12 ? { [K_2_5 in keyof T_12 as undefined extends {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] ? K_2_5 : never]?: {
+        body: {
+            /**
+             * The email address of the user
+             * to invite
+             */
+            email: string;
+            /**
+             * The role to assign to the user
+             */
+            role: InferRolesFromOption<O>;
+            /**
+             * The organization ID to invite
+             * the user to
+             */
+            organizationId?: string;
+            /**
+             * Resend the invitation email, if
+             * the user is already invited
+             */
+            resend?: boolean;
+        } & (O extends {
+            teams: {
+                enabled: true;
+            };
+        } ? {
+            /**
+             * The team the user is
+             * being invited to.
+             */
+            teamId?: string;
+        } : {});
+        method: "POST" | undefined;
+        query: Record<string, any> | undefined;
+        params: Record<string, any> | undefined;
+        request: Request | undefined;
+        headers: HeadersInit | undefined;
+        asResponse?: boolean;
+        returnHeaders?: boolean;
+        use?: import("better-call").Middleware[];
+        path?: string;
+    }[K_2_5] | undefined; } : never))[K_4]; } : never) | undefined)?]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        };
+    } : {
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }>;
+    options: {
+        method: "POST";
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        body: z.ZodObject<{
+            email: z.ZodString;
+            role: z.ZodString;
+            organizationId: z.ZodOptional<z.ZodString>;
+            resend: z.ZodOptional<z.ZodBoolean>;
+            teamId: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            email: string;
+            role: string;
+            organizationId?: string | undefined;
+            teamId?: string | undefined;
+            resend?: boolean | undefined;
+        }, {
+            email: string;
+            role: string;
+            organizationId?: string | undefined;
+            teamId?: string | undefined;
+            resend?: boolean | undefined;
+        }>;
+        metadata: {
+            $Infer: {
+                body: {
+                    /**
+                     * The email address of the user
+                     * to invite
+                     */
+                    email: string;
+                    /**
+                     * The role to assign to the user
+                     */
+                    role: InferRolesFromOption<O>;
+                    /**
+                     * The organization ID to invite
+                     * the user to
+                     */
+                    organizationId?: string;
+                    /**
+                     * Resend the invitation email, if
+                     * the user is already invited
+                     */
+                    resend?: boolean;
+                } & (O extends {
+                    teams: {
+                        enabled: true;
+                    };
+                } ? {
+                    /**
+                     * The team the user is
+                     * being invited to.
+                     */
+                    teamId?: string;
+                } : {});
+            };
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        id: {
+                                            type: string;
+                                        };
+                                        email: {
+                                            type: string;
+                                        };
+                                        role: {
+                                            type: string;
+                                        };
+                                        organizationId: {
+                                            type: string;
+                                        };
+                                        inviterId: {
+                                            type: string;
+                                        };
+                                        status: {
+                                            type: string;
+                                        };
+                                        expiresAt: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/invite-member";
+};
+export declare const acceptInvitation: {
+    <C extends [{
+        body: {
+            invitationId: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            invitation: {
+                id: string;
+                email: string;
+                status: "pending" | "accepted" | "rejected" | "canceled";
+                expiresAt: Date;
+                organizationId: string;
+                role: string;
+                inviterId: string;
+                teamId?: string | undefined;
+            };
+            member: {
+                userId: string;
+                organizationId: string;
+                role: string;
+                id?: string | undefined;
+                createdAt?: Date | undefined;
+                teamId?: string | undefined;
+            };
+        } | null;
+    } : {
+        invitation: {
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        };
+        member: {
+            userId: string;
+            organizationId: string;
+            role: string;
+            id?: string | undefined;
+            createdAt?: Date | undefined;
+            teamId?: string | undefined;
+        };
+    } | null>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            invitationId: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            invitationId: string;
+        }, {
+            invitationId: string;
+        }>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        invitation: {
+                                            type: string;
+                                        };
+                                        member: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/accept-invitation";
+};
+export declare const rejectInvitation: {
+    <C extends [{
+        body: {
+            invitationId: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            invitation: {
+                id: string;
+                email: string;
+                status: "pending" | "accepted" | "rejected" | "canceled";
+                expiresAt: Date;
+                organizationId: string;
+                role: string;
+                inviterId: string;
+                teamId?: string | undefined;
+            } | null;
+            member: null;
+        };
+    } : {
+        invitation: {
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        } | null;
+        member: null;
+    }>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            invitationId: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            invitationId: string;
+        }, {
+            invitationId: string;
+        }>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        invitation: {
+                                            type: string;
+                                        };
+                                        member: {
+                                            type: string;
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/reject-invitation";
+};
+export declare const cancelInvitation: {
+    <C extends [{
+        body: {
+            invitationId: string;
+        };
+        method?: "POST" | undefined;
+        query?: Record<string, any> | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        headers?: HeadersInit | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        } | null;
+    } : {
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    } | null>;
+    options: {
+        method: "POST";
+        body: z.ZodObject<{
+            invitationId: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            invitationId: string;
+        }, {
+            invitationId: string;
+        }>;
+        use: (((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>) | ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            session: {
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            };
+        }>))[];
+        openapi: {
+            description: string;
+            responses: {
+                "200": {
+                    description: string;
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: string;
+                                properties: {
+                                    invitation: {
+                                        type: string;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/cancel-invitation";
+};
+export declare const getInvitation: {
+    <C extends [{
+        query: {
+            id: string;
+        };
+        headers: HeadersInit;
+        body?: undefined;
+        method?: "GET" | undefined;
+        params?: Record<string, any> | undefined;
+        request?: Request | undefined;
+        asResponse?: boolean | undefined;
+        returnHeaders?: boolean | undefined;
+        use?: import("better-call").Middleware[] | undefined;
+        path?: string | undefined;
+    }]>(...inputCtx: C): Promise<C extends [{
+        asResponse: true;
+    }] ? Response : C extends [{
+        returnHeaders: true;
+    }] ? {
+        headers: Headers;
+        response: {
+            organizationName: string;
+            organizationSlug: string;
+            inviterEmail: string;
+            id: string;
+            email: string;
+            status: "pending" | "accepted" | "rejected" | "canceled";
+            expiresAt: Date;
+            organizationId: string;
+            role: string;
+            inviterId: string;
+            teamId?: string | undefined;
+        };
+    } : {
+        organizationName: string;
+        organizationSlug: string;
+        inviterEmail: string;
+        id: string;
+        email: string;
+        status: "pending" | "accepted" | "rejected" | "canceled";
+        expiresAt: Date;
+        organizationId: string;
+        role: string;
+        inviterId: string;
+        teamId?: string | undefined;
+    }>;
+    options: {
+        method: "GET";
+        use: ((inputContext: {
+            body?: any;
+            query?: Record<string, any> | undefined;
+            request?: Request | undefined;
+            headers?: Headers | undefined;
+            asResponse?: boolean | undefined;
+            returnHeaders?: boolean | undefined;
+            use?: import("better-call").Middleware[] | undefined;
+        }) => Promise<{
+            orgOptions: OrganizationOptions;
+            roles: typeof import("../access").defaultRoles & {
+                [key: string]: import("../../access").Role<{}>;
+            };
+            getSession: (context: import("../../..").GenericEndpointContext) => Promise<{
+                session: import("../../..").Session & {
+                    activeOrganizationId?: string;
+                };
+                user: import("../../..").User;
+            }>;
+        }>)[];
+        requireHeaders: true;
+        query: z.ZodObject<{
+            id: z.ZodString;
+        }, "strip", z.ZodTypeAny, {
+            id: string;
+        }, {
+            id: string;
+        }>;
+        metadata: {
+            openapi: {
+                description: string;
+                responses: {
+                    "200": {
+                        description: string;
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object";
+                                    properties: {
+                                        id: {
+                                            type: string;
+                                        };
+                                        email: {
+                                            type: string;
+                                        };
+                                        role: {
+                                            type: string;
+                                        };
+                                        organizationId: {
+                                            type: string;
+                                        };
+                                        inviterId: {
+                                            type: string;
+                                        };
+                                        status: {
+                                            type: string;
+                                        };
+                                        expiresAt: {
+                                            type: string;
+                                        };
+                                        organizationName: {
+                                            type: string;
+                                        };
+                                        organizationSlug: {
+                                            type: string;
+                                        };
+                                        inviterEmail: {
+                                            type: string;
+                                        };
+                                    };
+                                    required: string[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        use: any[];
+    };
+    path: "/organization/get-invitation";
+};
+//# sourceMappingURL=crud-invites.d.ts.map

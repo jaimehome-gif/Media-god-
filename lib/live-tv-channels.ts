@@ -2,9 +2,12 @@ import {
   Tv,
   Film,
   Music,
-  Gamepad2,
   Newspaper,
   Trophy,
+  ShoppingBag,
+  Baby,
+  Clapperboard,
+  Globe,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -12,9 +15,11 @@ export type Channel = {
   id: number
   name: string
   logo: string
+  url: string
   currentProgram: string
   time: string
   viewers: string
+  country: string
 }
 
 export type ChannelCategory = {
@@ -23,79 +28,92 @@ export type ChannelCategory = {
   channels: Channel[]
 }
 
+// ---------------------------------------------------------------------------
+// UK Channels — streams sourced from the Free-TV/IPTV public playlist
+// (https://github.com/Free-TV/IPTV).  HTTPS endpoints are preferred; a small
+// number of channels only publish HTTP endpoints and are included because the
+// user explicitly requested them — the player will show a graceful error if
+// the browser blocks mixed content.
+// ---------------------------------------------------------------------------
+
+const ukChannels: Channel[] = [
+  { id: 1, name: 'BBC One', logo: '🇬🇧', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_one_yorks/iptv_hd_abr_v1.m3u8', currentProgram: 'BBC One Live', time: '24/7', viewers: '4.2M', country: 'UK' },
+  { id: 2, name: 'BBC Two', logo: '🇬🇧', url: 'https://vs-hls-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_two_hd/iptv_hd_abr_v1.m3u8', currentProgram: 'BBC Two Live', time: '24/7', viewers: '3.1M', country: 'UK' },
+  { id: 3, name: 'ITV 1', logo: '🇬🇧', url: 'http://45.14.84.37/itv1/index.m3u8', currentProgram: 'ITV 1 Live', time: '24/7', viewers: '2.8M', country: 'UK' },
+  { id: 4, name: 'STV', logo: '🏴', url: 'https://csm-e-stv-eb.tls1.yospace.com/csm/live/139900483.m3u8', currentProgram: 'STV Live', time: '24/7', viewers: '850K', country: 'UK' },
+  { id: 5, name: 'S4C', logo: '🏴', url: 'https://live-uk.s4c-cdn.co.uk/out/v1/a0134f1fd5a2461b9422b574566d4442/live_uk.m3u8', currentProgram: 'S4C Live', time: '24/7', viewers: '320K', country: 'UK' },
+  { id: 6, name: 'Channel 5', logo: '🇬🇧', url: 'http://193.46.58.239:8080/Channel5/index.m3u8', currentProgram: 'Channel 5 Live', time: '24/7', viewers: '1.5M', country: 'UK' },
+  { id: 7, name: 'ITV 2', logo: '🇬🇧', url: 'http://45.14.84.37/itv2/index.m3u8', currentProgram: 'ITV 2 Live', time: '24/7', viewers: '1.2M', country: 'UK' },
+  { id: 8, name: 'BBC Alba', logo: '🇬🇧', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_alba/iptv_hd_abr_v1.m3u8', currentProgram: 'BBC Alba Live', time: '24/7', viewers: '120K', country: 'UK' },
+  { id: 9, name: 'BBC Four', logo: '🇬🇧', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_four_hd/iptv_hd_abr_v1.m3u8', currentProgram: 'BBC Four Live', time: '24/7', viewers: '450K', country: 'UK' },
+  { id: 10, name: 'BBC Scotland', logo: '🏴', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_scotland_hd/pc_hd_abr_v2.m3u8', currentProgram: 'BBC Scotland Live', time: '24/7', viewers: '680K', country: 'UK' },
+  { id: 11, name: 'ITV 3', logo: '🇬🇧', url: 'http://45.14.84.37/itv3/index.m3u8', currentProgram: 'ITV 3 Live', time: '24/7', viewers: '980K', country: 'UK' },
+  { id: 12, name: 'BBC Three', logo: '🇬🇧', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_three_hd/iptv_hd_abr_v1.m3u8', currentProgram: 'BBC Three Live', time: '24/7', viewers: '1.1M', country: 'UK' },
+  { id: 13, name: 'ITV 4', logo: '🇬🇧', url: 'http://45.14.84.37/itv4/index.m3u8', currentProgram: 'ITV 4 Live', time: '24/7', viewers: '760K', country: 'UK' },
+]
+
+const newsChannels: Channel[] = [
+  { id: 20, name: 'BBC News', logo: '📰', url: 'https://vs-hls-push-ww-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_news_channel_hd/t=3840/v=pv14/b=5070016/main.m3u8', currentProgram: 'BBC News Live', time: '24/7', viewers: '5.2M', country: 'UK' },
+  { id: 21, name: 'BBC Parliament', logo: '🏛️', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_parliament/pc_hd_abr_v2.m3u8', currentProgram: 'Parliament Live', time: '24/7', viewers: '90K', country: 'UK' },
+  { id: 22, name: 'Sky News', logo: '📰', url: 'https://linear021-gb-hls1-prd-ak.cdn.skycdp.com/Content/HLS_001_hd/Live/channel(skynews)/index_mob.m3u8', currentProgram: 'Sky News Live', time: '24/7', viewers: '3.4M', country: 'UK' },
+  { id: 23, name: 'GB News', logo: '📰', url: 'https://live-gbnews.simplestreamcdn.com/live5/gbnews/bitrate1.isml/manifest.m3u8', currentProgram: 'GB News Live', time: '24/7', viewers: '1.2M', country: 'UK' },
+  { id: 24, name: 'TalkTV', logo: '📰', url: 'https://488f4ce4.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/TEctZ2JfVGFsa19ITFM/playlist.m3u8', currentProgram: 'TalkTV Live', time: '24/7', viewers: '580K', country: 'UK' },
+  { id: 25, name: 'France 24 English', logo: '🇫🇷', url: 'https://live.france24.com/hls/live/2037218-b/F24_EN_HI_HLS/master_5000.m3u8', currentProgram: 'France 24 English Live', time: '24/7', viewers: '2.1M', country: 'FR' },
+  { id: 26, name: 'DW English', logo: '🇩🇪', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8', currentProgram: 'DW News Live', time: '24/7', viewers: '1.8M', country: 'DE' },
+  { id: 27, name: 'Al Jazeera English', logo: '🇶🇦', url: 'https://live-hls-apps-aje-fa.getaj.net/AJE/index.m3u8', currentProgram: 'Al Jazeera Live', time: '24/7', viewers: '4.5M', country: 'QA' },
+  { id: 28, name: 'CGTN', logo: '🇨🇳', url: 'https://news.cgtn.com/resource/live/english/cgtn-news.m3u8', currentProgram: 'CGTN Live', time: '24/7', viewers: '1.6M', country: 'CN' },
+  { id: 29, name: 'NHK World Japan', logo: '🇯🇵', url: 'https://master.nhkworld.jp/nhkworld-tv/playlist/live.m3u8', currentProgram: 'NHK World Live', time: '24/7', viewers: '2.3M', country: 'JP' },
+  { id: 30, name: 'TRT World', logo: '🇹🇷', url: 'https://tv-trtworld.medya.trt.com.tr/master.m3u8', currentProgram: 'TRT World Live', time: '24/7', viewers: '1.4M', country: 'TR' },
+  { id: 31, name: 'Bloomberg TV', logo: '💼', url: 'https://bloomberg.com/media-manifest/streams/eu.m3u8', currentProgram: 'Bloomberg Live', time: '24/7', viewers: '1.9M', country: 'US' },
+  { id: 32, name: 'Euronews English', logo: '🇪🇺', url: 'https://dash4.antik.sk/live/test_euronews/playlist.m3u8', currentProgram: 'Euronews Live', time: '24/7', viewers: '2.7M', country: 'FR' },
+  { id: 33, name: 'Arirang TV', logo: '🇰🇷', url: 'http://amdlive-ch01.ctnd.com.edgesuite.net/arirang_1ch/smil:arirang_1ch.smil/playlist.m3u8', currentProgram: 'Arirang Live', time: '24/7', viewers: '890K', country: 'KR' },
+]
+
+const entertainmentChannels: Channel[] = [
+  { id: 40, name: 'Great! Movies', logo: '🎬', url: 'https://amg01753-narrativeuk-amg01753c3-lg-gb-1833.playouts.now.amagi.tv/playlist/amg01753-narrativeuk-greatmovies-lggb/playlist.m3u8', currentProgram: 'Great! Movies Live', time: '24/7', viewers: '420K', country: 'UK' },
+  { id: 41, name: 'Great! Romance', logo: '💕', url: 'https://amg01753-narrativeuk-amg01753c2-lg-gb-1832.playouts.now.amagi.tv/playlist/amg01753-narrativeuk-greatchristmas-lggb/playlist.m3u8', currentProgram: 'Great! Romance Live', time: '24/7', viewers: '280K', country: 'UK' },
+  { id: 42, name: 'Blaze', logo: '🔥', url: 'https://live.blaze.tv/live7/blaze/bitrate1.isml/live.m3u8', currentProgram: 'Blaze Live', time: '24/7', viewers: '540K', country: 'UK' },
+  { id: 43, name: 'True Crime', logo: '🔍', url: 'https://b6cca454.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/U2Ftc3VuZy1nYl9UcnVlQ3JpbWVVS2Zyb21DQlNSZWFsaXR5X0hMUw/playlist.m3u8', currentProgram: 'True Crime Live', time: '24/7', viewers: '380K', country: 'UK' },
+  { id: 44, name: 'TBN UK', logo: '✝️', url: 'https://live-tbn-ssai.simplestreamcdn.com/v1/master/774d979dd66704abea7c5b62cb34c6815fda0d35/tbn-live/manifest.m3u8', currentProgram: 'TBN UK Live', time: '24/7', viewers: '190K', country: 'UK' },
+  { id: 45, name: 'Talking Pictures TV', logo: '📽️', url: 'http://92.114.85.72:8000/play/a0la', currentProgram: 'Talking Pictures Live', time: '24/7', viewers: '150K', country: 'UK' },
+  { id: 46, name: 'Together TV', logo: '🤝', url: 'http://92.114.85.72:8000/play/a0j8', currentProgram: 'Together TV Live', time: '24/7', viewers: '130K', country: 'UK' },
+]
+
+const shoppingChannels: Channel[] = [
+  { id: 50, name: 'QVC UK', logo: '🛍️', url: 'https://qvcuk-live.akamaized.net/hls/live/2097112/qvc/3/3.m3u8', currentProgram: 'QVC UK Live', time: '24/7', viewers: '680K', country: 'UK' },
+  { id: 51, name: 'QVC Beauty', logo: '💄', url: 'https://qvcuk-live.akamaized.net/hls/live/2097112/qby/3/3.m3u8', currentProgram: 'QVC Beauty Live', time: '24/7', viewers: '320K', country: 'UK' },
+  { id: 52, name: 'QVC Extra', logo: '🛍️', url: 'https://qvcuk-live.akamaized.net/hls/live/2097112/qex/3/3.m3u8', currentProgram: 'QVC Extra Live', time: '24/7', viewers: '240K', country: 'UK' },
+  { id: 53, name: 'QVC Style', logo: '👗', url: 'https://qvcuk-live.akamaized.net/hls/live/2097112/qst/3/3.m3u8', currentProgram: 'QVC Style Live', time: '24/7', viewers: '280K', country: 'UK' },
+  { id: 54, name: 'TJC', logo: '💎', url: 'https://cdn-shop-lc-01.akamaized.net/Content/HLS_HLS/Live/channel(TJCOTT)/index.m3u8', currentProgram: 'TJC Live', time: '24/7', viewers: '190K', country: 'UK' },
+  { id: 55, name: 'Jewellery Maker', logo: '💍', url: 'https://lo3.gemporia.com/abrjewellerymaker/smil:livestreamFullHD.smil/playlist.m3u8', currentProgram: 'Jewellery Maker Live', time: '24/7', viewers: '110K', country: 'UK' },
+  { id: 56, name: 'Hobby Maker', logo: '🎨', url: 'https://lo3.gemporia.com/abrhobbymakerukgfx/smil:livestreamFullHD.smil/playlist.m3u8', currentProgram: 'Hobby Maker Live', time: '24/7', viewers: '85K', country: 'UK' },
+  { id: 57, name: 'GemsTV', logo: '💎', url: 'https://lo3.gemporia.com/abrgemporiaukgfx/smil:livestream.smil/playlist.m3u8', currentProgram: 'GemsTV Live', time: '24/7', viewers: '95K', country: 'UK' },
+]
+
+const musicChannels: Channel[] = [
+  { id: 60, name: 'Now 70s', logo: '🎵', url: 'https://lightning-now70s-samsungnz.amagi.tv/playlist.m3u8', currentProgram: 'Now 70s Music', time: '24/7', viewers: '450K', country: 'UK' },
+  { id: 61, name: 'Now 80s', logo: '🎸', url: 'https://lightning-now80s-samsunguk.amagi.tv/playlist.m3u8', currentProgram: 'Now 80s Music', time: '24/7', viewers: '620K', country: 'UK' },
+]
+
+const documentaryChannels: Channel[] = [
+  { id: 70, name: 'CGTN Documentary', logo: '🌍', url: 'https://news.cgtn.com/resource/live/document/cgtn-doc.m3u8', currentProgram: 'CGTN Documentary Live', time: '24/7', viewers: '340K', country: 'CN' },
+  { id: 71, name: 'RT Documentary', logo: '🎬', url: 'https://rt-rtd.rttv.com/dvr/rtdoc/playlist.m3u8', currentProgram: 'RT Documentary Live', time: '24/7', viewers: '520K', country: 'RU' },
+]
+
+const kidsChannels: Channel[] = [
+  { id: 80, name: 'CBBC', logo: '🧒', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:cbbc_hd/t=3840/v=pv14/b=5070016/main.m3u8', currentProgram: 'CBBC Live', time: '24/7', viewers: '890K', country: 'UK' },
+  { id: 81, name: 'CBeebies', logo: '👶', url: 'https://vs-hls-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:cbeebies_hd/t=3840/v=pv14/b=5070016/main.m3u8', currentProgram: 'CBeebies Live', time: '24/7', viewers: '1.2M', country: 'UK' },
+  { id: 82, name: 'Pop', logo: '🎈', url: 'https://amg01753-narrativeentert-popkids-lggb-xyy5k.amagi.tv/ts-eu-w1-n2/playlist/amg01753-narrativeentert-popkids-lggb/playlist.m3u8', currentProgram: 'Pop Kids Live', time: '24/7', viewers: '340K', country: 'UK' },
+]
+
 export const channelCategories: ChannelCategory[] = [
-  {
-    name: 'Entertainment',
-    icon: Tv,
-    channels: [
-      { id: 1, name: 'HBO Max', logo: '🎬', currentProgram: 'House of the Dragon S2', time: '20:00 - 21:00', viewers: '2.3M' },
-      { id: 2, name: 'Netflix Live', logo: '🔴', currentProgram: 'Stranger Things Marathon', time: '19:00 - 22:00', viewers: '4.1M' },
-      { id: 3, name: 'Disney+', logo: '🏰', currentProgram: 'The Mandalorian', time: '20:30 - 21:30', viewers: '1.8M' },
-      { id: 4, name: 'Paramount+', logo: '⭐', currentProgram: 'Tulsa King', time: '21:00 - 22:00', viewers: '890K' },
-      { id: 5, name: 'AMC', logo: '🎭', currentProgram: 'The Walking Dead', time: '20:00 - 21:00', viewers: '560K' },
-      { id: 6, name: 'FX', logo: '📺', currentProgram: 'The Bear', time: '21:30 - 22:00', viewers: '720K' },
-    ],
-  },
-  {
-    name: 'News',
-    icon: Newspaper,
-    channels: [
-      { id: 7, name: 'CNN', logo: '📰', currentProgram: 'Global News Hour', time: '20:00 - 21:00', viewers: '3.2M' },
-      { id: 8, name: 'BBC World', logo: '🌍', currentProgram: 'BBC News at Ten', time: '22:00 - 22:30', viewers: '2.8M' },
-      { id: 9, name: 'Fox News', logo: '🦊', currentProgram: 'Prime Time Politics', time: '20:00 - 22:00', viewers: '2.1M' },
-      { id: 10, name: 'MSNBC', logo: '📡', currentProgram: 'The Beat with Ari Melber', time: '18:00 - 19:00', viewers: '1.5M' },
-      { id: 11, name: 'Al Jazeera', logo: '🌐', currentProgram: 'Middle East Direct', time: '20:00 - 21:00', viewers: '980K' },
-      { id: 12, name: 'Sky News', logo: '☁️', currentProgram: 'News Tonight', time: '21:00 - 22:00', viewers: '1.2M' },
-    ],
-  },
-  {
-    name: 'Sports',
-    icon: Trophy,
-    channels: [
-      { id: 13, name: 'ESPN', logo: '🏈', currentProgram: 'Monday Night Football', time: '20:00 - 23:30', viewers: '5.6M' },
-      { id: 14, name: 'Fox Sports', logo: '⚽', currentProgram: 'UEFA Champions League Live', time: '20:00 - 22:00', viewers: '3.4M' },
-      { id: 15, name: 'NBA TV', logo: '🏀', currentProgram: 'NBA Live: Lakers vs Celtics', time: '19:30 - 22:00', viewers: '2.1M' },
-      { id: 16, name: 'NFL Network', logo: '🏈', currentProgram: 'NFL Total Access', time: '19:00 - 20:00', viewers: '1.9M' },
-      { id: 17, name: 'MLB Network', logo: '⚾', currentProgram: 'Baseball Tonight', time: '21:00 - 22:00', viewers: '1.3M' },
-      { id: 18, name: 'Sky Sports', logo: '🎾', currentProgram: 'Live Premier League Review', time: '20:00 - 22:30', viewers: '2.7M' },
-    ],
-  },
-  {
-    name: 'Movies',
-    icon: Film,
-    channels: [
-      { id: 19, name: 'TCM', logo: '🎥', currentProgram: 'Classic Cinema: Casablanca', time: '20:00 - 22:15', viewers: '890K' },
-      { id: 20, name: 'Showtime', logo: '🎬', currentProgram: 'Interstellar', time: '19:30 - 22:20', viewers: '1.4M' },
-      { id: 21, name: 'Starz', logo: '⭐', currentProgram: 'John Wick: Chapter 4', time: '20:00 - 22:30', viewers: '980K' },
-      { id: 22, name: 'Cinemax', logo: '🎞️', currentProgram: 'Gladiator', time: '20:00 - 22:35', viewers: '650K' },
-      { id: 23, name: 'IFC', logo: '🎭', currentProgram: 'Indie Spotlight Showcase', time: '20:00 - 21:45', viewers: '420K' },
-      { id: 24, name: 'Sundance', logo: '🌅', currentProgram: 'Documentary Special', time: '21:00 - 22:30', viewers: '380K' },
-    ],
-  },
-  {
-    name: 'Music',
-    icon: Music,
-    channels: [
-      { id: 25, name: 'MTV', logo: '🎵', currentProgram: 'Official Top 40 Countdown', time: '20:00 - 21:00', viewers: '1.8M' },
-      { id: 26, name: 'VH1', logo: '🎸', currentProgram: 'Classic Rock Anthems', time: '20:00 - 22:00', viewers: '920K' },
-      { id: 27, name: 'CMT', logo: '🤠', currentProgram: 'Country Music Hits', time: '20:00 - 21:30', viewers: '560K' },
-      { id: 28, name: 'BET', logo: '🎤', currentProgram: 'Rap City Reloaded', time: '21:00 - 22:00', viewers: '1.1M' },
-      { id: 29, name: 'Fuse', logo: '🎧', currentProgram: 'Underground Beats', time: '20:00 - 21:00', viewers: '340K' },
-      { id: 30, name: 'MTV Live', logo: '📻', currentProgram: 'Live Festival Stage', time: '20:00 - 23:00', viewers: '780K' },
-    ],
-  },
-  {
-    name: 'Gaming',
-    icon: Gamepad2,
-    channels: [
-      { id: 31, name: 'Twitch TV', logo: '🎮', currentProgram: 'Top Streamer Showcase', time: '20:00 - 00:00', viewers: '8.2M' },
-      { id: 32, name: 'YouTube Gaming', logo: '▶️', currentProgram: 'Let’s Play Championship', time: '19:00 - 22:00', viewers: '6.5M' },
-      { id: 33, name: 'G4', logo: '🕹️', currentProgram: 'Retro Arcade Battles', time: '20:00 - 21:00', viewers: '1.2M' },
-      { id: 34, name: 'ESL', logo: '🏆', currentProgram: 'CS2 Major Grand Finals', time: '18:00 - 22:30', viewers: '2.3M' },
-      { id: 35, name: 'FACEIT', logo: '⚔️', currentProgram: 'Pro League Qualifier', time: '20:00 - 23:00', viewers: '890K' },
-      { id: 36, name: 'GG', logo: '🎯', currentProgram: 'Speedrun Marathon', time: '20:00 - 22:00', viewers: '450K' },
-    ],
-  },
+  { name: 'UK Channels', icon: Tv, channels: ukChannels },
+  { name: 'News', icon: Newspaper, channels: newsChannels },
+  { name: 'Entertainment', icon: Clapperboard, channels: entertainmentChannels },
+  { name: 'Shopping', icon: ShoppingBag, channels: shoppingChannels },
+  { name: 'Music', icon: Music, channels: musicChannels },
+  { name: 'Documentary', icon: Globe, channels: documentaryChannels },
+  { name: 'Kids', icon: Baby, channels: kidsChannels },
 ]
 
 export const allChannels: Channel[] = channelCategories.flatMap((c) => c.channels)
@@ -119,12 +137,8 @@ export function getChannelSchedule(id: number): EpgEntry[] {
   const channel = getChannelById(id)
   if (!channel) return []
 
-  const [start] = channel.time.split(' - ')
-  const startHour = parseInt(start, 10)
-  const baseHour = isNaN(startHour) ? 20 : startHour
-
   const upcoming = [
-    `${channel.currentProgram}`,
+    channel.currentProgram,
     'Primetime Highlights',
     'Late Night Special',
     'After Dark Marathon',
@@ -132,7 +146,7 @@ export function getChannelSchedule(id: number): EpgEntry[] {
   ]
 
   return upcoming.map((title, i) => {
-    const hour = (baseHour + i) % 24
+    const hour = (20 + i) % 24
     const next = (hour + 1) % 24
     return {
       time: `${String(hour).padStart(2, '0')}:00 - ${String(next).padStart(2, '0')}:00`,
@@ -142,6 +156,6 @@ export function getChannelSchedule(id: number): EpgEntry[] {
   })
 }
 
-// A single public HLS test stream used as the live source for every channel.
+// Fallback test stream (used only if a channel has no URL).
 export const LIVE_STREAM_URL =
   'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8'

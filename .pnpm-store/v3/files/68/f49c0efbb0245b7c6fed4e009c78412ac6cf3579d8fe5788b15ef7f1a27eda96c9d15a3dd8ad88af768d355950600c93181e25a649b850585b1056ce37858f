@@ -1,0 +1,1 @@
+{"version":3,"file":"infer-plugin.d.ts","sourceRoot":"","sources":["../../../src/client/plugins/infer-plugin.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAA0B,iBAAiB,EAAE,MAAM,aAAa,CAAC;AAE7E,eAAO,MAAM,iBAAiB,GAC7B,YAAY,SACT,iBAAiB,GACjB;IACA,OAAO,EAAE,iBAAiB,CAAC;CAC1B,EACJ,EAAE,SAAS,MAAM;;;iBAE6B,MAAM,CAAC;oDACD,CAAC;YAE9C,EAAE;;CAST,CAAC"}

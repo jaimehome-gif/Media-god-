@@ -1,0 +1,29 @@
+import type { twoFactor as twoFa } from "../../plugins/two-factor";
+export declare const twoFactorClient: (options?: {
+    /**
+     * a redirect function to call if a user needs to verify
+     * their two factor
+     */
+    onTwoFactorRedirect?: () => void | Promise<void>;
+}) => {
+    id: "two-factor";
+    $InferServerPlugin: ReturnType<typeof twoFa>;
+    atomListeners: {
+        matcher: (path: string) => boolean;
+        signal: "$sessionSignal";
+    }[];
+    pathMethods: {
+        "/two-factor/disable": "POST";
+        "/two-factor/enable": "POST";
+        "/two-factor/send-otp": "POST";
+        "/two-factor/generate-backup-codes": "POST";
+    };
+    fetchPlugins: {
+        id: string;
+        name: string;
+        hooks: {
+            onSuccess(context: import("@better-fetch/fetch").SuccessContext<any>): Promise<void>;
+        };
+    }[];
+};
+//# sourceMappingURL=client.d.ts.map

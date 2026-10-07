@@ -1,0 +1,23 @@
+'use strict';
+
+const betterCall = require('better-call');
+const account = require('./better-auth.CHh0hgk_.cjs');
+require('zod');
+require('./better-auth.DiSjtgs9.cjs');
+require('@better-auth/utils/base64');
+require('@better-auth/utils/hmac');
+require('./better-auth.CHyZMcYK.cjs');
+require('./better-auth.GpOOav9x.cjs');
+require('defu');
+
+const adminMiddleware = account.createAuthMiddleware(async (ctx) => {
+  const session = await account.getSessionFromCtx(ctx);
+  if (!session?.session) {
+    throw new betterCall.APIError("UNAUTHORIZED");
+  }
+  return {
+    session
+  };
+});
+
+exports.adminMiddleware = adminMiddleware;

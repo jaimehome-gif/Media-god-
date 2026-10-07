@@ -1,0 +1,180 @@
+export declare const defaultStatements: {
+    readonly organization: readonly ["update", "delete"];
+    readonly member: readonly ["create", "update", "delete"];
+    readonly invitation: readonly ["create", "cancel"];
+};
+export declare const defaultAc: {
+    newRole<K extends "organization" | "member" | "invitation">(statements: import("../../access").Subset<K, {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>): {
+        authorize<K_1 extends K>(request: K_1 extends infer T extends keyof import("../../access").Subset<K, {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../../access").Subset<K, {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../../access").Subset<K, {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+        statements: import("../../access").Subset<K, {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+    statements: {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    };
+};
+export declare const adminAc: {
+    authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>[key] | {
+        actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key];
+        connector: "OR" | "AND";
+    } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+    statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>;
+};
+export declare const ownerAc: {
+    authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>[key] | {
+        actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key];
+        connector: "OR" | "AND";
+    } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+    statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>;
+};
+export declare const memberAc: {
+    authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>[key] | {
+        actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key];
+        connector: "OR" | "AND";
+    } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+    statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+        readonly organization: readonly ["update", "delete"];
+        readonly member: readonly ["create", "update", "delete"];
+        readonly invitation: readonly ["create", "cancel"];
+    }>;
+};
+export declare const defaultRoles: {
+    admin: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+        statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+    owner: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+        statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+    member: {
+        authorize<K extends "organization" | "member" | "invitation">(request: K extends infer T extends keyof import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }> ? { [key in T]?: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>[key] | {
+            actions: import("../../access").Subset<"organization" | "member" | "invitation", {
+                readonly organization: readonly ["update", "delete"];
+                readonly member: readonly ["create", "update", "delete"];
+                readonly invitation: readonly ["create", "cancel"];
+            }>[key];
+            connector: "OR" | "AND";
+        } | undefined; } : never, connector?: "OR" | "AND"): import("../../access").AuthortizeResponse;
+        statements: import("../../access").Subset<"organization" | "member" | "invitation", {
+            readonly organization: readonly ["update", "delete"];
+            readonly member: readonly ["create", "update", "delete"];
+            readonly invitation: readonly ["create", "cancel"];
+        }>;
+    };
+};
+//# sourceMappingURL=statement.d.ts.map

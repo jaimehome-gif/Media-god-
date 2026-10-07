@@ -1,0 +1,2 @@
+export type KyselyDatabaseType = "postgres" | "mysql" | "sqlite" | "mssql";
+//# sourceMappingURL=types.d.ts.map
