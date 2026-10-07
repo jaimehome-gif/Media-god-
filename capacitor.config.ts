@@ -3,25 +3,17 @@ import type { CapacitorConfig } from '@capacitor/cli'
 /**
  * StreamVibe Capacitor configuration.
  *
- * StreamVibe is a server-rendered Next.js app (auth, DB, server actions, Live TV
- * playback all run on the server). The Android app is therefore a thin native
- * WebView wrapper that loads the deployed web app over the network, which keeps
- * every existing feature intact inside the native shell.
- *
- * Set CAPACITOR_SERVER_URL to your deployed StreamVibe URL before building, e.g.:
- *   CAPACITOR_SERVER_URL=https://streamvibe.example.com pnpm cap:sync
- *
- * During local development you can point it at your dev server
- * (http://<your-lan-ip>:3000) and set `cleartext: true`.
+ * The native Android app is a thin WebView wrapper around the live StreamVibe
+ * site. Keep the URL configurable so the same native project can be rebuilt
+ * against the current published/preview deployment.
  */
 const serverUrl =
-  process.env.CAPACITOR_SERVER_URL || 'https://streamvibe.example.com'
+  process.env.CAPACITOR_SERVER_URL ||
+  'https://3000-6a9a89a0280b0a64005381de--b-2d5260a-673c4755c13de4ac.imported.base44-preview.app/'
 
 const config: CapacitorConfig = {
   appId: 'com.streamvibe.app',
   appName: 'StreamVibe',
-  // webDir is required by the CLI but unused when server.url is set — the app is
-  // loaded from the remote server, not from bundled static files.
   webDir: 'out',
   server: {
     url: serverUrl,
@@ -29,8 +21,6 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: true,
-    // Keep the WebView alive across config/orientation changes so playback isn't
-    // interrupted when the device rotates.
     backgroundColor: '#1a1625',
   },
 }
