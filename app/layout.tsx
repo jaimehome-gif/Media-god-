@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ['latin'] })
 const _geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'OnlyFlix.to - Movies, TV Shows & Live TV',
+  title: 'StreamVibe - Movies, TV Shows & Live TV',
   description: 'Watch unlimited movies, TV shows, and live TV channels. Create watch parties with friends.',
   generator: 'v0.app',
   icons: {

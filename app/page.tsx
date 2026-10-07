@@ -120,7 +120,7 @@ export default async function HomePage() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              OnlyFlix.to - Your ultimate streaming destination
+              StreamVibe - Your ultimate streaming destination
             </p>
             <p className="text-xs text-muted-foreground">
               Demo application with mock data

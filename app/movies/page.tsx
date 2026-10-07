@@ -10,7 +10,7 @@ import {
 } from '@/lib/tmdb'
 
 export const metadata = {
-  title: 'Movies - OnlyFlix.to',
+  title: 'Movies - StreamVibe',
   description: 'Browse popular, top rated, and upcoming movies',
 }
 

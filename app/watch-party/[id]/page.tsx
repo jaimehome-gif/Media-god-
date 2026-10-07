@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const party = await getWatchParty(id)
   if (!party) return { title: 'Watch Party Not Found' }
   return {
-    title: `Watch Party: ${party.title} - OnlyFlix.to`,
+    title: `Watch Party: ${party.title} - StreamVibe`,
     description: `Watch ${party.title} together with friends`,
   }
 }

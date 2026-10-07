@@ -38,7 +38,7 @@ export function Navbar() {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                 <Play className="w-4 h-4 text-primary-foreground fill-current" />
               </div>
-              <span className="text-xl font-bold text-foreground">OnlyFlix.to</span>
+              <span className="text-xl font-bold text-foreground">StreamVibe</span>
             </Link>
 
             {/* Desktop Navigation */}

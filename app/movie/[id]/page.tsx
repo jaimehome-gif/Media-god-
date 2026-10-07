@@ -15,13 +15,14 @@ import {
 import { Play, Star, Clock, Calendar, DollarSign } from 'lucide-react'
 import { VideoPlayer } from '@/components/video-player'
 import { DebridStreamButton } from '@/components/debrid-stream-button'
+import { OnlyFlixPlayer } from '@/components/onlyflix-player'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const movie = await getMovieDetails(parseInt(id)).catch(() => null)
   if (!movie) return { title: 'Movie Not Found' }
   return {
-    title: `${movie.title} - OnlyFlix.to`,
+    title: `${movie.title} - StreamVibe`,
     description: movie.overview,
   }
 }
@@ -195,6 +196,18 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      {/* OnlyFlix Player */}
+      {externalIds.imdb_id && (
+        <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h2 className="text-2xl font-bold text-foreground mb-4">Watch Now</h2>
+          <OnlyFlixPlayer
+            imdbId={externalIds.imdb_id}
+            title={movie.title}
+            posterPath={movie.backdrop_path}
+          />
+        </section>
+      )}
 
       {/* Trailer Player */}
       {trailer && (

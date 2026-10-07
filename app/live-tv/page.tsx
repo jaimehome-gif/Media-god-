@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Navbar } from '@/components/navbar'
 
 export const metadata = {
-  title: 'Live TV - OnlyFlix.to',
+  title: 'Live TV - StreamVibe',
   description: 'Watch live TV channels from around the world with real-time program guides',
 }
 
