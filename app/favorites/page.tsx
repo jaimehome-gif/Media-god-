@@ -6,6 +6,8 @@ import { getImageUrl } from '@/lib/tmdb'
 import { Heart, Play, Film, Tv } from 'lucide-react'
 import { WatchlistActions } from '@/components/watchlist-actions'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: 'My Favorites - StreamVibe',
   description: 'Your favorite movies and TV shows',
