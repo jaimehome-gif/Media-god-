@@ -15,6 +15,8 @@ import {
 } from '@/lib/tmdb'
 import { HomeFilters } from '@/components/home-filters'
 
+export const dynamic = 'force-dynamic'
+
 export default async function HomePage() {
   const [trending, popularMovies, topRatedMovies, popularTV, nowPlaying, onTheAir, movieGenres, tvGenres] = await Promise.all([
     getTrending(),
