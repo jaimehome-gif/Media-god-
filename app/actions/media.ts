@@ -9,13 +9,13 @@ import { revalidatePath } from 'next/cache'
 import { nanoid } from 'nanoid'
 
 async function getUserId() {
-  const session = await auth.api.getSession({ headers: await headers() }).catch(() => null)
+  const session = await auth?.api.getSession({ headers: await headers() }).catch(() => null)
   return session?.user?.id || 'guest'
 }
 
 export async function getOptionalUserId() {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
+    const session = await auth?.api.getSession({ headers: await headers() })
     return session?.user?.id || null
   } catch {
     return null
