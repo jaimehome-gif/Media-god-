@@ -1,3 +1,5 @@
+import { isVideoFile, isSampleOrTrailer, matchesEpisodeFile, matchesExactEpisode } from './episode-matching'
+
 const RD_API = 'https://api.real-debrid.com/rest/1.0'
 
 export class DebridError extends Error {
@@ -67,7 +69,11 @@ function isHttpUrl(value: unknown): value is string {
   }
 }
 
-export async function prepareTorrentStream(apiKey: string, torrentId: string) {
+export async function prepareTorrentStream(
+  apiKey: string,
+  torrentId: string,
+  requestedEpisode?: { season: number; episode: number },
+) {
   let info = await debridRequest<TorrentInfo>(apiKey, `/torrents/info/${encodeURIComponent(torrentId)}`)
 
   if (['error', 'magnet_error', 'virus', 'dead'].includes(info.status)) {
@@ -75,11 +81,24 @@ export async function prepareTorrentStream(apiKey: string, torrentId: string) {
   }
 
   if (info.status === 'waiting_files_selection') {
-    // Real-Debrid file IDs are not zero-based search-provider indexes. Select the actual video, not samples or text files.
-    const videos = info.files.filter((file) => /\.(mp4|m4v|mkv|webm|avi|mov|wmv|ts|m2ts|mpg|mpeg)$/i.test(file.path))
-    const mainVideos = videos.filter((file) => !/(?:^|[\/\\._ -])(sample|trailer)(?:[\/\\._ -]|$)/i.test(file.path))
-    const video = (mainVideos.length ? mainVideos : videos).sort((a, b) => b.bytes - a.bytes)[0]
-    if (!video) throw new DebridError('This torrent does not contain a video file.', 422, 'NO_VIDEO')
+    // Real-Debrid file IDs are NOT array indexes. Only select the requested
+    // episode from a multi-file pack, never an arbitrary largest video.
+    const videos = info.files.filter((file) => isVideoFile(file.path) && !isSampleOrTrailer(file.path))
+    const matches = requestedEpisode
+      ? videos.filter((file) => matchesEpisodeFile(file.path, requestedEpisode.season, requestedEpisode.episode, info.filename))
+      : videos
+    const singleEpisodeFile = requestedEpisode && videos.length === 1 &&
+      matchesExactEpisode(info.filename, requestedEpisode.season, requestedEpisode.episode)
+      ? videos : []
+    const video = (matches.length ? matches : singleEpisodeFile)
+      .sort((a, b) => b.bytes - a.bytes)[0] ||
+      (!requestedEpisode ? [...videos].sort((a, b) => b.bytes - a.bytes)[0] : undefined)
+    if (!video) {
+      throw new DebridError(requestedEpisode
+        ? `This torrent does not contain season ${requestedEpisode.season}, episode ${requestedEpisode.episode}. Choose another source.`
+        : 'This torrent does not contain a playable video.', 422,
+      requestedEpisode ? 'EPISODE_NOT_FOUND' : 'NO_VIDEO')
+    }
     await debridRequest(apiKey, `/torrents/selectFiles/${encodeURIComponent(torrentId)}`, new URLSearchParams({ files: String(video.id) }))
     info = await debridRequest<TorrentInfo>(apiKey, `/torrents/info/${encodeURIComponent(torrentId)}`)
   }
@@ -88,10 +107,26 @@ export async function prepareTorrentStream(apiKey: string, torrentId: string) {
     return { torrentId, ready: false, status: info.status, progress: info.progress, message: 'Waiting for Real-Debrid to prepare the video.' }
   }
 
-  // Links correspond to selected files in order. Prefer the main video if an existing torrent selected several files.
+  // Each Real-Debrid link belongs to the selected file with the SAME index.
+  // With a season pack, reject absent episodes rather than playing another one.
   const selected = info.files.filter((file) => file.selected === 1)
-  const video = selected.filter((file) => /\.(mp4|m4v|mkv|webm|avi|mov|wmv|ts|m2ts|mpg|mpeg)$/i.test(file.path)).sort((a, b) => b.bytes - a.bytes)[0]
-  const linkIndex = video ? selected.findIndex((file) => file.id === video.id) : 0
+  const videos = selected.filter((file) => isVideoFile(file.path) && !isSampleOrTrailer(file.path))
+  const matches = requestedEpisode
+    ? videos.filter((file) => matchesEpisodeFile(file.path, requestedEpisode.season, requestedEpisode.episode, info.filename))
+    : videos
+  const singleEpisodeFile = requestedEpisode && videos.length === 1 &&
+    matchesExactEpisode(info.filename, requestedEpisode.season, requestedEpisode.episode)
+    ? videos : []
+  const video = (matches.length ? matches : singleEpisodeFile)
+    .sort((a, b) => b.bytes - a.bytes)[0] ||
+    (!requestedEpisode ? [...videos].sort((a, b) => b.bytes - a.bytes)[0] : undefined)
+  if (!video) {
+    throw new DebridError(requestedEpisode
+      ? `The requested episode S${String(requestedEpisode.season).padStart(2, '0')}E${String(requestedEpisode.episode).padStart(2, '0')} is not available in this selected torrent.`
+      : 'No playable video file is selected.', 422,
+    requestedEpisode ? 'EPISODE_NOT_FOUND' : 'NO_VIDEO')
+  }
+  const linkIndex = selected.findIndex((file) => file.id === video.id)
   const link = info.links[linkIndex]
   if (!link) throw new DebridError('Real-Debrid has not provided a link for the selected video.', 422, 'NO_VIDEO_LINK')
 
