@@ -17,7 +17,8 @@ interface TorrentResult {
   title: string
   size: string
   quality: string
-  infoHash: string
+  infoHash?: string
+  torrentId?: string
   seeders: number
   provider: string
   languages: string[]
@@ -47,6 +48,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   const [blockedHashes, setBlockedHashes] = useState<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollRunRef = useRef(0)
+  const searchRunRef = useRef(0)
 
   const stopPolling = useCallback(() => {
     pollRunRef.current++
@@ -58,11 +60,12 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   }, [])
 
   useEffect(() => () => {
+    searchRunRef.current++
     pollRunRef.current++
     if (pollRef.current) clearTimeout(pollRef.current)
   }, [])
 
-  const pollTorrentStatus = useCallback(async (torrentId: string, infoHash: string) => {
+  const pollTorrentStatus = useCallback(async (torrentId: string, sourceKey: string, season?: number, episode?: number) => {
     const run = ++pollRunRef.current
     setPolling(true)
     let attempts = 0
@@ -71,14 +74,19 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
     const check = async () => {
       attempts++
       try {
-        const res = await fetch(`/api/debrid/torrent-status?id=${torrentId}`)
+        const params = new URLSearchParams({ id: torrentId })
+        if (season !== undefined && episode !== undefined) {
+          params.set('season', String(season))
+          params.set('episode', String(episode))
+        }
+        const res = await fetch(`/api/debrid/torrent-status?${params}`)
         const data = await res.json()
         if (run !== pollRunRef.current) return
 
         if (data.error) {
           stopPolling()
           setStreamError(data.error)
-          if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, infoHash]))
+          if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, sourceKey]))
           toast.error(data.error)
           return
         }
@@ -114,12 +122,15 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
   const currentSeason = validSeasons.find((s) => s.season_number === selectedSeason)
   const maxEpisodes = currentSeason?.episode_count || 1
 
-  const handleSearch = async () => {
-    if (!imdbId) {
-      toast.error('No IMDB ID found for this title')
-      return
+  useEffect(() => {
+    if (validSeasons.length && !validSeasons.some(season => season.season_number === selectedSeason)) {
+      setSelectedSeason(validSeasons[0].season_number)
+      setSelectedEpisode(1)
     }
+  }, [seasons, selectedSeason, validSeasons.length])
 
+  const handleSearch = async (season = selectedSeason, episode = selectedEpisode) => {
+    const run = ++searchRunRef.current
     stopPolling()
     setStreamError(null)
     setBlockedHashes(new Set())
@@ -134,12 +145,13 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
       })
       if (imdbId) params.set('imdbId', imdbId)
       if (isTV) {
-        params.set('season', String(selectedSeason))
-        params.set('episode', String(selectedEpisode))
+        params.set('season', String(season))
+        params.set('episode', String(episode))
       }
 
       const response = await fetch(`/api/debrid/search?${params}`)
       const data = await response.json()
+      if (run !== searchRunRef.current) return
 
       if (!response.ok || data.error) {
         setStreamError(data.error || 'Failed to search for torrents')
@@ -149,32 +161,36 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         toast.info('No torrents found for this title')
       }
     } catch {
-      toast.error('Failed to search for torrents')
+      if (run === searchRunRef.current) setStreamError('Episode search is unavailable. Check your connection and try again.')
     } finally {
-      setSearching(false)
+      if (run === searchRunRef.current) setSearching(false)
     }
   }
 
   const handleAddMagnet = async (torrent: TorrentResult) => {
     stopPolling()
-    setAdding(torrent.infoHash)
+    const sourceKey = torrent.torrentId || torrent.infoHash || torrent.title
+    setAdding(sourceKey)
     setStreamUrl(null)
     setStreamError(null)
 
     try {
-      const response = await fetch('/api/debrid/add-magnet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          infoHash: torrent.infoHash,
-        }),
-      })
+      const episodeParams = isTV ? { season: selectedSeason, episode: selectedEpisode } : {}
+      const response = torrent.torrentId
+        ? await fetch(`/api/debrid/torrent-status?${new URLSearchParams({
+            id: torrent.torrentId, ...Object.fromEntries(Object.entries(episodeParams).map(([k, v]) => [k, String(v)])),
+          })}`)
+        : await fetch('/api/debrid/add-magnet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ infoHash: torrent.infoHash, ...episodeParams }),
+          })
 
       const data: StreamResult = await response.json()
 
       if (data.error) {
         setStreamError(data.error)
-        if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, torrent.infoHash]))
+        if (data.code === 'CONTENT_BLOCKED') setBlockedHashes((current) => new Set([...current, sourceKey]))
         toast.error(data.error)
         return
       }
@@ -184,7 +200,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
         toast.info('Video prepared — loading player...')
       } else if (data.torrentId) {
         toast.info('Torrent added — waiting for Real-Debrid to process...')
-        pollTorrentStatus(data.torrentId, torrent.infoHash)
+        pollTorrentStatus(data.torrentId, sourceKey, isTV ? selectedSeason : undefined, isTV ? selectedEpisode : undefined)
       } else {
         toast.info(data.message || 'Torrent added to Real-Debrid. Processing...')
       }
@@ -205,7 +221,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
           setOpen(!open)
           if (open) stopPolling()
           setStreamError(null)
-          if (!open && results.length === 0) {
+          if (!open) {
             handleSearch()
           }
         }}
@@ -224,8 +240,10 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                 <select
                   value={selectedSeason}
                   onChange={(e) => {
-                    setSelectedSeason(Number(e.target.value))
+                    const nextSeason = Number(e.target.value)
+                    setSelectedSeason(nextSeason)
                     setSelectedEpisode(1)
+                    void handleSearch(nextSeason, 1)
                   }}
                   className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                 >
@@ -240,7 +258,11 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                 <label className="text-xs text-muted-foreground">Episode</label>
                 <select
                   value={selectedEpisode}
-                  onChange={(e) => setSelectedEpisode(Number(e.target.value))}
+                  onChange={(e) => {
+                    const nextEpisode = Number(e.target.value)
+                    setSelectedEpisode(nextEpisode)
+                    void handleSearch(selectedSeason, nextEpisode)
+                  }}
                   className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                 >
                   {Array.from({ length: maxEpisodes }, (_, i) => i + 1).map((ep) => (
@@ -254,7 +276,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={handleSearch}
+                  onClick={() => void handleSearch()}
                   disabled={searching}
                   className="gap-2"
                 >
@@ -294,7 +316,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
           {/* Accepted streams use Real-Debrid's browser-compatible video output. */}
           {streamUrl && <DebridVideoPlayer key={streamUrl} src={streamUrl} />}
 
-          {results.length > 0 && results.every((torrent) => blockedHashes.has(torrent.infoHash)) && (
+          {results.length > 0 && results.every((torrent) => blockedHashes.has(torrent.torrentId || torrent.infoHash || torrent.title)) && (
             <p role="status" className="text-sm text-muted-foreground">
               Real-Debrid has blocked every source tried for this title. Playback requires an authorised source that Real-Debrid accepts.
             </p>
@@ -304,11 +326,11 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
           {!searching && results.length > 0 && (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               <p className="text-xs text-muted-foreground mb-2">
-                {results.length} torrents found — pick one to stream via Real-Debrid
+                {results.length} sources found — Real-Debrid library entries first; choose an episode source
               </p>
               {results.map((torrent, i) => (
                 <div
-                  key={`${torrent.infoHash}-${i}`}
+                  key={`${torrent.torrentId || torrent.infoHash || torrent.title}-${i}`}
                   className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
                 >
                   <div className="flex-1 min-w-0">
@@ -320,25 +342,25 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
                         {torrent.quality}
                       </span>
                       <span>{torrent.size}</span>
-                      <span>👤 {torrent.seeders}</span>
+                      <span>{torrent.torrentId ? 'In Real-Debrid' : `👤 ${torrent.seeders}`}</span>
                       {torrent.languages?.length > 0 && (
                         <span>🌐 {torrent.languages.join('+')}</span>
                       )}
                     </div>
                   </div>
                   <Button
-                    data-testid={`stream-${torrent.infoHash}`}
+                    data-testid={`stream-${torrent.torrentId || torrent.infoHash || i}`}
                     size="sm"
                     onClick={() => handleAddMagnet(torrent)}
-                    disabled={adding !== null || blockedHashes.has(torrent.infoHash)}
+                    disabled={adding !== null || blockedHashes.has(torrent.torrentId || torrent.infoHash || torrent.title)}
                     className="gap-1 flex-shrink-0"
                   >
-                    {adding === torrent.infoHash ? (
+                    {adding === (torrent.torrentId || torrent.infoHash || torrent.title) ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Play className="w-4 h-4 fill-current" />
                     )}
-                    {blockedHashes.has(torrent.infoHash) ? 'Blocked' : adding === torrent.infoHash ? 'Adding...' : 'Stream'}
+                    {blockedHashes.has(torrent.torrentId || torrent.infoHash || torrent.title) ? 'Blocked' : adding === (torrent.torrentId || torrent.infoHash || torrent.title) ? 'Loading...' : torrent.torrentId ? 'Play' : 'Stream'}
                   </Button>
                 </div>
               ))}
@@ -348,7 +370,7 @@ export function DebridStreamButton({ title, imdbId, mediaType, seasons }: Debrid
           {/* No results */}
           {!searching && results.length === 0 && !streamUrl && (
             <p className="text-sm text-muted-foreground text-center py-4">
-              No torrents found. Try a different season/episode or search again.
+              No matching episode sources were found. Check Real-Debrid is configured, try another episode, or add an authorised file to your Real-Debrid library.
             </p>
           )}
         </div>
