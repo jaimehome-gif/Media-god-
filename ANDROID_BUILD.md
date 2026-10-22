@@ -130,3 +130,28 @@ version tags (`v*`), and manual dispatch. APKs are uploaded as artifacts.
 | `lib/capacitor.ts` | Runtime detection (isCapacitor, isTvDevice) |
 | `hooks/use-tv-navigation.ts` | D-pad/remote navigation, focus, back, fullscreen |
 | `components/tv-navigation-provider.tsx` | Activates TV nav in the layout |
+
+## 5. Episode fix and APK update (version 1.1.0 / versionCode 2)
+
+The episode source changes must **first be deployed to the live Next.js
+server**. Both Android APK flavours are Capacitor WebView clients: a new
+APK alone cannot update a server-side Real-Debrid API route.
+
+Run `pnpm test:episodes`, then `pnpm build` before rebuilding the APKs.
+The GitHub Actions build now runs episode regression tests before Gradle.
+
+**Choose a stable, publicly reachable web deployment URL for
+`CAPACITOR_SERVER_URL`.** The fallback in capacitor.config.ts is a
+temporary Base44 preview host and should not be shipped to testers as a
+permanent or verified production service.
+
+For an update over an existing installation, Android requires both a
+higher `versionCode` and the **same signing certificate**. The workflow's
+debug-key fallback is suitable for fresh test installs only; a key
+generated independently on each CI runner cannot update an APK signed
+with a different key. Configure the four `STREAMVIBE_KEYSTORE_*`
+repository secrets for repeatable, installable updates.
+
+Existing APK files in `public/downloads/` and `release-apks/` are
+legacy assets; they are **not refreshed** by source changes. Use the new
+workflow artifact only after the new build actually completes.
