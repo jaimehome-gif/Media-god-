@@ -12,8 +12,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'A valid torrent ID is required' }, { status: 400 })
   }
 
+  const params = new URL(request.url).searchParams
+  const season = params.get('season')
+  const episode = params.get('episode')
+  const hasEpisode = season !== null || episode !== null
+  if (hasEpisode && (!season || !episode || !/^\d{1,2}$/.test(season) || !/^\d{1,3}$/.test(episode)
+    || Number(episode) < 1)) {
+    return NextResponse.json({ error: 'A valid season and episode are required.' }, { status: 400 })
+  }
+
   try {
-    return NextResponse.json(await prepareTorrentStream(apiKey, torrentId))
+    return NextResponse.json(await prepareTorrentStream(apiKey, torrentId,
+      hasEpisode ? { season: Number(season), episode: Number(episode) } : undefined))
   } catch (error) {
     if (error instanceof DebridError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
