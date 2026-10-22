@@ -16,7 +16,7 @@ function mockModule(routes, calls) {
     const key = `${init.method || 'GET'} ${parsed.pathname}`
     calls.push({ key, body: init.body ? String(init.body) : undefined })
     const result = routes[key]
-    if (!result) throw new Error(`unexpected request: ${key}`)
+    if (!(key in routes)) throw new Error(`unexpected request: ${key}`)
     const response = typeof result === 'function' ? result(calls) : result
     return { ok: true, status: response === null ? 204 : 200, json: async () => response }
   }
