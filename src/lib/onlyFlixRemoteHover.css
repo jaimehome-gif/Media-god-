@@ -1,0 +1,3 @@
+html.mg-onlyflix-remote-idle [data-mg-onlyflix-player="true"] iframe[data-mg-embed-iframe="true"][src^="https://share.cdnm.ink/embed/"] {
+  pointer-events: none !important;
+}

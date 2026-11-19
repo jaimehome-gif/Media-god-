@@ -1,0 +1,422 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --font-heading: ui-sans-serif, system-ui, sans-serif;
+    --font-body: ui-sans-serif, system-ui, sans-serif;
+    --font-display: ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --mg-background: 0 0% 5.5%;
+    --mg-surface: 0 0% 10%;
+    --mg-card: 0 0% 12%;
+    --mg-green: 120 100% 50%;
+    --mg-green-dim: 120 100% 40%;
+    --mg-muted: 0 0% 63.9%;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --mg-background: 0 0% 5.5%;
+    --mg-surface: 0 0% 10%;
+    --mg-card: 0 0% 12%;
+    --mg-green: 120 100% 50%;
+    --mg-green-dim: 120 100% 40%;
+    --mg-muted: 0 0% 63.9%;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    width: 100%;
+    max-width: 100%;
+    min-width: 320px;
+    font-size: 16px;
+    background: hsl(var(--mg-background));
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+    width: 100%;
+    max-width: 100%;
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid hsl(var(--mg-green));
+    outline-offset: 3px;
+  }
+}
+
+/*
+ * Gentle vertical scroll-snap on the Home dashboard so every row section
+ * (header + cards) snaps fully into view instead of straddling the fold.
+ * Proximity is soft — it only engages when the user is already near a row,
+ * so normal scrolling between rows stays smooth.
+ */
+html:has([data-mg-home-dashboard="true"]) {
+  scroll-snap-type: y proximity;
+}
+
+html:has([data-mg-home-dashboard="true"]) [data-mg-home-snap="true"] {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+
+@keyframes mg-episode-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@layer utilities {
+  /* Netflix-style settle when the episode list swaps to another season. */
+  .mg-episode-enter {
+    animation: mg-episode-enter 240ms ease-out both;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .mg-safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .mg-safe-top {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable) .mg-hover-action {
+    opacity: 1 !important;
+  }
+}
+
+/*
+ * Mobile browser/player containment.
+ *
+ * Some Android Chromium builds calculate flex min-content widths from the
+ * source selector/cache statistics before applying the fixed player viewport.
+ * That can make the whole player wider than the phone, producing the visible
+ * horizontal scrollbar and cutting the right side of the Real-Debrid panel.
+ * Keep every player surface constrained to the actual visual viewport while
+ * leaving Fire TV's dedicated sizing rules untouched.
+ */
+@media (max-width: 639px) {
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-root="true"] {
+    box-sizing: border-box !important;
+    position: fixed !important;
+    inset: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    width: 100dvw !important;
+    max-width: 100vw !important;
+    max-width: 100dvw !important;
+    margin: 0 !important;
+    background: #000 !important;
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none !important;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-root="true"] > div {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-root="true"] * {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-options-panel="true"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-options-panel="true"] > label {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-options-panel="true"] select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-root="true"] p,
+  html:not(.mg-fire-tv):not(.mg-fire-tv-mode):not(.mg-fire-tv-stable)
+    [data-mg-player-root="true"] span {
+    overflow-wrap: anywhere;
+  }
+}
+
+/*
+ * Fire TV catalogue sizing and performance rules live only in
+ * src/fire-tv-stable.css. Keeping them out of this global stylesheet avoids
+ * two different sidebar widths/font scales fighting on Android TV WebViews.
+ * Player sizing lives only in src/fire-tv-player-failsafe.css.
+ */
+
+@media (min-width: 1920px) {
+  html:not(.mg-fire-tv) {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 2560px) {
+  html:not(.mg-fire-tv) {
+    font-size: 19px;
+  }
+}
+
+@media (min-width: 3200px) {
+  html:not(.mg-fire-tv) {
+    font-size: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Non-playback accessibility and catalogue UI preferences. */
+html[data-mg-text-scale="large"] {
+  font-size: 18px;
+}
+
+html[data-mg-text-scale="extra-large"] {
+  font-size: 20px;
+}
+
+html.mg-high-contrast {
+  --mg-muted: 0 0% 82%;
+  --mg-surface: 0 0% 7%;
+  --mg-card: 0 0% 9%;
+}
+
+html.mg-high-contrast body {
+  color: white;
+}
+
+html.mg-high-contrast :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline-width: 3px;
+  outline-offset: 4px;
+}
+
+html.mg-reduced-motion *,
+html.mg-reduced-motion *::before,
+html.mg-reduced-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+html.mg-compact-cards [data-mg-home-dashboard="true"] .mg-fire-tv-card {
+  width: 7rem;
+}
+
+@media (min-width: 640px) {
+  html.mg-compact-cards [data-mg-home-dashboard="true"] .mg-fire-tv-card {
+    width: 8rem;
+  }
+}
+
+/*
+ * Strong, consistent catalogue focus without touching player controls.
+ * This is intentionally scoped away from data-mg-player-root.
+ */
+body :is(
+  .mg-fire-tv-nav,
+  [data-mg-home-dashboard="true"],
+  [data-mg-library-view="true"],
+  [data-mg-roadmap-view="true"],
+  [data-mg-settings-view="true"],
+  [data-mg-search-dialog="true"],
+  [data-mg-detail-dialog="true"],
+  [data-mg-diagnostics-view="true"],
+  [data-mg-backup-view="true"]
+) :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid hsl(var(--mg-green));
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(0, 255, 0, 0.14);
+}
+
+@media (max-width: 420px) {
+  [data-mg-settings-view="true"],
+  [data-mg-diagnostics-view="true"],
+  [data-mg-backup-view="true"],
+  [data-mg-roadmap-view="true"] {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  [data-mg-settings-tools="true"] button,
+  [data-mg-diagnostics-view="true"] button,
+  [data-mg-backup-view="true"] button {
+    max-width: 100%;
+  }
+
+  [data-mg-diagnostics-view="true"] p,
+  [data-mg-backup-view="true"] p,
+  [data-mg-settings-view="true"] p {
+    overflow-wrap: anywhere;
+  }
+}
+/*
+ * Scraper verification guidance, outside the locked playback components.
+ * Providers render inside cross-origin iframes, so we cannot reliably detect
+ * a QR challenge or remove it. This unobtrusive, non-interactive instruction
+ * sits over only the regular web-embed stage, without shifting the iframe,
+ * blocking remote clicks, or covering the native/fullscreen video surface.
+ */
+[data-mg-onlyflix-player="true"] [data-mg-player-stage="true"]:not([data-mg-safe-embed-fullscreen="true"])::before {
+  content: "QR code or 'Verify you're human' message? Choose another player from the top row or select Sources instead.";
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  display: block;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin-inline: auto;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  font: 600 12px/1.35 system-ui, sans-serif;
+  text-align: center;
+  pointer-events: none;
+}

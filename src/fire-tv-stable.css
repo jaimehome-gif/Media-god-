@@ -1,0 +1,1114 @@
+/*
+ * Firestick catalogue layout only.
+ *
+ * This file must never resize or zoom the browser viewport and must never
+ * size the video player. Player layout lives only in
+ * fire-tv-player-failsafe.css.
+ */
+
+html.mg-fire-tv,
+html.mg-fire-tv-mode,
+html.mg-fire-tv-stable,
+body.mg-fire-tv,
+body.mg-fire-tv-mode,
+body.mg-fire-tv-stable {
+  scroll-behavior: auto !important;
+}
+
+/* Keep Base44/login screens at the normal readable browser scale. */
+html.mg-fire-tv,
+html.mg-fire-tv-stable {
+  font-size: 16px !important;
+}
+
+body.mg-fire-tv,
+body.mg-fire-tv-mode,
+body.mg-fire-tv-stable {
+  --mg-tv-sidebar-width: 160px;
+  --mg-tv-safe-x: 3vw;
+  --mg-tv-safe-y: 2vh;
+  min-width: 0 !important;
+  overflow-x: hidden !important;
+}
+
+body.mg-fire-tv *,
+body.mg-fire-tv-mode *,
+body.mg-fire-tv-stable * {
+  box-sizing: border-box;
+  scroll-behavior: auto !important;
+}
+
+/* Full Fire TV side navigation with readable labels and D-pad focus. */
+body.mg-fire-tv #root .mg-fire-tv-nav,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav {
+  position: fixed !important;
+  inset: var(--mg-tv-safe-y) auto var(--mg-tv-safe-y) var(--mg-tv-safe-x) !important;
+  z-index: 200 !important;
+  width: var(--mg-tv-sidebar-width) !important;
+  min-width: var(--mg-tv-sidebar-width) !important;
+  max-width: var(--mg-tv-sidebar-width) !important;
+  height: calc(100vh - var(--mg-tv-safe-y) - var(--mg-tv-safe-y)) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav + main,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav + main,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav + main {
+  width: calc(100vw - var(--mg-tv-safe-x) - var(--mg-tv-safe-x) - var(--mg-tv-sidebar-width)) !important;
+  max-width: calc(100vw - var(--mg-tv-safe-x) - var(--mg-tv-safe-x) - var(--mg-tv-sidebar-width)) !important;
+  min-width: 0 !important;
+  margin-left: calc(var(--mg-tv-safe-x) + var(--mg-tv-sidebar-width)) !important;
+  margin-right: var(--mg-tv-safe-x) !important;
+  flex: 0 0 calc(100vw - var(--mg-tv-safe-x) - var(--mg-tv-safe-x) - var(--mg-tv-sidebar-width)) !important;
+  overflow-x: hidden !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav > div:first-child,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:first-child,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:first-child {
+  height: 40px !important;
+  min-height: 40px !important;
+  justify-content: flex-start !important;
+  padding: 4px 7px !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav > div:first-child > span,
+body.mg-fire-tv #root .mg-fire-tv-nav nav button > span,
+body.mg-fire-tv #root .mg-fire-tv-nav > div:last-child button > span,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:first-child > span,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav nav button > span,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:last-child button > span,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:first-child > span,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav nav button > span,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:last-child button > span {
+  display: block !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav nav,
+body.mg-fire-tv #root .mg-fire-tv-nav > div:last-child,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav nav,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:last-child,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav nav,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:last-child {
+  padding: 2px !important;
+  gap: 0 !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv #root .mg-fire-tv-nav > div:last-child button,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:last-child button,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:last-child button {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  justify-content: flex-start !important;
+  padding: 2px 6px !important;
+  gap: 6px !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+}
+
+body.mg-fire-tv #root .mg-fire-tv-nav svg,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav svg,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+/* On Fire Stick, Down/Up follows the actual focused navigation icon.
+ * Keep the existing green palette and distinguish remote focus from the
+ * currently open section without opening pages on every D-pad movement. */
+body.mg-fire-tv #root .mg-fire-tv-nav button:focus,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav button:focus,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav button:focus {
+  outline: 2px solid hsl(var(--mg-green)) !important;
+  outline-offset: -2px !important;
+  background: hsl(var(--mg-green) / 0.25) !important;
+  color: hsl(var(--mg-green)) !important;
+  box-shadow: inset 3px 0 0 hsl(var(--mg-green)) !important;
+}
+
+/* Main catalogue content. */
+body.mg-fire-tv main,
+body.mg-fire-tv-mode main,
+body.mg-fire-tv-stable main,
+body.mg-fire-tv main > *,
+body.mg-fire-tv-mode main > *,
+body.mg-fire-tv-stable main > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* Home gets its own vertical scroller on Fire TV. Amazon WebView can leave
+ * window/body scrolling stuck after overlays/player transitions, which makes
+ * the lower Home rows look as if they were never rendered. Keep the complete
+ * Home catalogue inside one predictable 100vh scroll container so D-pad focus
+ * + scrollIntoView can always reach every row. */
+body.mg-fire-tv [data-mg-home-dashboard="true"],
+body.mg-fire-tv-mode [data-mg-home-dashboard="true"],
+body.mg-fire-tv-stable [data-mg-home-dashboard="true"] {
+  height: 100vh !important;
+  min-height: 0 !important;
+  max-height: 100vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain !important;
+  scroll-padding-top: 18px !important;
+  scroll-padding-bottom: 40px !important;
+  scrollbar-width: none !important;
+}
+
+body.mg-fire-tv [data-mg-home-dashboard="true"]::-webkit-scrollbar,
+body.mg-fire-tv-mode [data-mg-home-dashboard="true"]::-webkit-scrollbar,
+body.mg-fire-tv-stable [data-mg-home-dashboard="true"]::-webkit-scrollbar {
+  display: none !important;
+}
+
+body.mg-fire-tv [data-mg-home-content="true"],
+body.mg-fire-tv-mode [data-mg-home-content="true"],
+body.mg-fire-tv-stable [data-mg-home-content="true"] {
+  gap: 14px !important;
+  padding-top: 10px !important;
+  padding-bottom: 40px !important;
+}
+
+body.mg-fire-tv [data-mg-home-footer="true"],
+body.mg-fire-tv-mode [data-mg-home-footer="true"],
+body.mg-fire-tv-stable [data-mg-home-footer="true"],
+body.mg-fire-tv [data-mg-live-tv-technical="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-technical="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-technical="true"] {
+  display: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero,
+body.mg-fire-tv-mode .mg-fire-tv-hero,
+body.mg-fire-tv-stable .mg-fire-tv-hero {
+  width: 100% !important;
+  height: 34vh !important;
+  min-height: 168px !important;
+  max-height: 205px !important;
+  overflow: hidden !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero > div.relative,
+body.mg-fire-tv-mode .mg-fire-tv-hero > div.relative,
+body.mg-fire-tv-stable .mg-fire-tv-hero > div.relative {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  padding-bottom: 15px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero > div.relative > div,
+body.mg-fire-tv-mode .mg-fire-tv-hero > div.relative > div,
+body.mg-fire-tv-stable .mg-fire-tv-hero > div.relative > div {
+  max-width: 66% !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero h1,
+body.mg-fire-tv-mode .mg-fire-tv-hero h1,
+body.mg-fire-tv-stable .mg-fire-tv-hero h1 {
+  max-width: 100% !important;
+  font-size: 24px !important;
+  line-height: 1.05 !important;
+  margin-bottom: 5px !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero p,
+body.mg-fire-tv-mode .mg-fire-tv-hero p,
+body.mg-fire-tv-stable .mg-fire-tv-hero p {
+  max-width: 100% !important;
+  font-size: 11.5px !important;
+  line-height: 1.24 !important;
+  margin-bottom: 8px !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero button,
+body.mg-fire-tv-mode .mg-fire-tv-hero button,
+body.mg-fire-tv-stable .mg-fire-tv-hero button {
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero button svg,
+body.mg-fire-tv-mode .mg-fire-tv-hero button svg,
+body.mg-fire-tv-stable .mg-fire-tv-hero button svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-hero button:focus-visible,
+body.mg-fire-tv-mode .mg-fire-tv-hero button:focus-visible,
+body.mg-fire-tv-stable .mg-fire-tv-hero button:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.86) !important;
+  transform: none !important;
+}
+
+/* The large previous/next controls are enough on television. Removing the
+ * tiny pagination dots keeps D-pad focus from stopping on six low-value
+ * controls under the hero. */
+body.mg-fire-tv [data-mg-hero-pagination="true"],
+body.mg-fire-tv-mode [data-mg-hero-pagination="true"],
+body.mg-fire-tv-stable [data-mg-hero-pagination="true"],
+body.mg-fire-tv [data-mg-hero-arrow="true"],
+body.mg-fire-tv-mode [data-mg-hero-arrow="true"],
+body.mg-fire-tv-stable [data-mg-hero-arrow="true"],
+body.mg-fire-tv [data-mg-row-arrows="true"],
+body.mg-fire-tv-mode [data-mg-row-arrows="true"],
+body.mg-fire-tv-stable [data-mg-row-arrows="true"] {
+  display: none !important;
+}
+
+/* Poster rows. */
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card),
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card),
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) {
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+}
+
+body.mg-fire-tv .mg-live-tv-card,
+body.mg-fire-tv-mode .mg-live-tv-card,
+body.mg-fire-tv-stable .mg-live-tv-card {
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+/* Fire OS reports a coarse pointer, which used to force every hover action
+ * visible at once. Keep one full-poster focus target and hide secondary
+ * Details/Watchlist bubbles so rows stay clean and even. */
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div {
+  aspect-ratio: 2 / 3 !important;
+  border-radius: 6px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action {
+  opacity: 0 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:not(:first-of-type),
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:not(:first-of-type),
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:not(:first-of-type) {
+  display: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type {
+  display: flex !important;
+  opacity: 1 !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type > span,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type > span,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type > span {
+  width: 34px !important;
+  height: 34px !important;
+  opacity: 0 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 2px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible > span,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible > span,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type:focus-visible > span {
+  opacity: 1 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type svg,
+body.mg-fire-tv-mode .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type svg,
+body.mg-fire-tv-stable .mg-fire-tv-card:not(.mg-live-tv-card) > div > button.mg-hover-action:first-of-type svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+body.mg-fire-tv [data-mg-library-view="true"],
+body.mg-fire-tv-mode [data-mg-library-view="true"],
+body.mg-fire-tv-stable [data-mg-library-view="true"] {
+  padding: 14px !important;
+}
+
+body.mg-fire-tv [data-mg-library-view="true"] > div:first-child,
+body.mg-fire-tv-mode [data-mg-library-view="true"] > div:first-child,
+body.mg-fire-tv-stable [data-mg-library-view="true"] > div:first-child {
+  gap: 8px !important;
+  margin-bottom: 12px !important;
+}
+
+body.mg-fire-tv [data-mg-library-view="true"] input,
+body.mg-fire-tv [data-mg-library-view="true"] select,
+body.mg-fire-tv-mode [data-mg-library-view="true"] input,
+body.mg-fire-tv-mode [data-mg-library-view="true"] select,
+body.mg-fire-tv-stable [data-mg-library-view="true"] input,
+body.mg-fire-tv-stable [data-mg-library-view="true"] select {
+  min-height: 36px !important;
+  height: 36px !important;
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+  font-size: 11px !important;
+}
+
+body.mg-fire-tv [data-mg-library-view="true"] button,
+body.mg-fire-tv-mode [data-mg-library-view="true"] button,
+body.mg-fire-tv-stable [data-mg-library-view="true"] button {
+  font-size: 11px !important;
+}
+
+body.mg-fire-tv [data-mg-library-grid="true"],
+body.mg-fire-tv-mode [data-mg-library-grid="true"],
+body.mg-fire-tv-stable [data-mg-library-grid="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, 112px) !important;
+  justify-content: start !important;
+  align-items: start !important;
+  gap: 10px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card,
+body.mg-fire-tv-mode .mg-fire-tv-library-card,
+body.mg-fire-tv-stable .mg-fire-tv-library-card {
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div {
+  aspect-ratio: 2 / 3 !important;
+  border-radius: 6px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action {
+  opacity: 0 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:not(:first-of-type),
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:not(:first-of-type),
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:not(:first-of-type) {
+  display: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type {
+  display: flex !important;
+  opacity: 1 !important;
+  background: transparent !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type > span,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type > span,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type > span {
+  width: 34px !important;
+  height: 34px !important;
+  opacity: 0 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 2px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible > span,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible > span,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type:focus-visible > span {
+  opacity: 1 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type svg,
+body.mg-fire-tv-mode .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type svg,
+body.mg-fire-tv-stable .mg-fire-tv-library-card > div > button.mg-hover-action:first-of-type svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-library-card p,
+body.mg-fire-tv-mode .mg-fire-tv-library-card p,
+body.mg-fire-tv-stable .mg-fire-tv-library-card p {
+  margin-top: 4px !important;
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+}
+
+/* Fire TV TV Shows tidy-up. Keep one compact, predictable remote path:
+ * category row -> search -> four filters -> poster grid. The large featured
+ * banner and per-card genre buttons add low-value focus stops on a remote, so
+ * they stay available on touch/desktop but are removed from the TV surface. */
+body.mg-fire-tv [data-mg-tv-shows-featured="true"],
+body.mg-fire-tv-mode [data-mg-tv-shows-featured="true"],
+body.mg-fire-tv-stable [data-mg-tv-shows-featured="true"],
+body.mg-fire-tv [data-mg-tv-show-genres="true"],
+body.mg-fire-tv-mode [data-mg-tv-show-genres="true"],
+body.mg-fire-tv-stable [data-mg-tv-show-genres="true"] {
+  display: none !important;
+}
+
+body.mg-fire-tv [data-mg-tv-shows-controls="true"],
+body.mg-fire-tv-mode [data-mg-tv-shows-controls="true"],
+body.mg-fire-tv-stable [data-mg-tv-shows-controls="true"] {
+  gap: 7px !important;
+  margin-bottom: 10px !important;
+}
+
+body.mg-fire-tv [data-mg-tv-category-row="true"],
+body.mg-fire-tv-mode [data-mg-tv-category-row="true"],
+body.mg-fire-tv-stable [data-mg-tv-category-row="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+body.mg-fire-tv [data-mg-tv-category-row="true"] button,
+body.mg-fire-tv-mode [data-mg-tv-category-row="true"] button,
+body.mg-fire-tv-stable [data-mg-tv-category-row="true"] button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 4px 6px !important;
+  font-size: 10.5px !important;
+  white-space: nowrap !important;
+}
+
+body.mg-fire-tv [data-mg-tv-filter-row="true"],
+body.mg-fire-tv-mode [data-mg-tv-filter-row="true"],
+body.mg-fire-tv-stable [data-mg-tv-filter-row="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  align-items: center !important;
+}
+
+body.mg-fire-tv [data-mg-tv-search="true"],
+body.mg-fire-tv-mode [data-mg-tv-search="true"],
+body.mg-fire-tv-stable [data-mg-tv-search="true"] {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+body.mg-fire-tv [data-mg-tv-filter-row="true"] > *,
+body.mg-fire-tv-mode [data-mg-tv-filter-row="true"] > *,
+body.mg-fire-tv-stable [data-mg-tv-filter-row="true"] > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+body.mg-fire-tv [data-mg-tv-filter-row="true"] select,
+body.mg-fire-tv-mode [data-mg-tv-filter-row="true"] select,
+body.mg-fire-tv-stable [data-mg-tv-filter-row="true"] select {
+  width: 100% !important;
+  min-width: 0 !important;
+  padding-left: 8px !important;
+  padding-right: 20px !important;
+  text-overflow: ellipsis !important;
+}
+
+body.mg-fire-tv [data-mg-tv-filter-row="true"] input:focus-visible,
+body.mg-fire-tv [data-mg-tv-filter-row="true"] select:focus-visible,
+body.mg-fire-tv [data-mg-tv-category-row="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-tv-filter-row="true"] input:focus-visible,
+body.mg-fire-tv-mode [data-mg-tv-filter-row="true"] select:focus-visible,
+body.mg-fire-tv-mode [data-mg-tv-category-row="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-tv-filter-row="true"] input:focus-visible,
+body.mg-fire-tv-stable [data-mg-tv-filter-row="true"] select:focus-visible,
+body.mg-fire-tv-stable [data-mg-tv-category-row="true"] button:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 2px !important;
+  border-color: hsl(var(--mg-green)) !important;
+}
+
+body.mg-fire-tv [data-mg-tv-shows-grid="true"],
+body.mg-fire-tv-mode [data-mg-tv-shows-grid="true"],
+body.mg-fire-tv-stable [data-mg-tv-shows-grid="true"] {
+  margin-top: 2px !important;
+}
+
+body.mg-fire-tv [data-mg-tv-show-card="true"],
+body.mg-fire-tv-mode [data-mg-tv-show-card="true"],
+body.mg-fire-tv-stable [data-mg-tv-show-card="true"] {
+  scroll-margin: 76px 12px 24px !important;
+}
+
+/* Live TV on Fire Stick. Keep the new category row compact, keep Search
+ * permanently visible near the top of the page, and fit enough channels on a
+ * 960x540 Fire TV viewport that D-pad navigation does not feel like a mobile
+ * layout stretched onto a television. */
+body.mg-fire-tv [data-mg-live-tv-view="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-view="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-view="true"] {
+  padding: 12px 14px 18px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-header="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-header="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-header="true"] {
+  margin-bottom: 9px !important;
+  gap: 8px !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-header="true"] h1,
+body.mg-fire-tv-mode [data-mg-live-tv-header="true"] h1,
+body.mg-fire-tv-stable [data-mg-live-tv-header="true"] h1 {
+  font-size: 19px !important;
+  line-height: 1.1 !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-header="true"] p,
+body.mg-fire-tv-mode [data-mg-live-tv-header="true"] p,
+body.mg-fire-tv-stable [data-mg-live-tv-header="true"] p,
+body.mg-fire-tv [data-mg-live-tv-regional-note="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-regional-note="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-regional-note="true"],
+body.mg-fire-tv [data-mg-live-tv-quick-section="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-quick-section="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-quick-section="true"] {
+  display: none !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-header="true"] button,
+body.mg-fire-tv-mode [data-mg-live-tv-header="true"] button,
+body.mg-fire-tv-stable [data-mg-live-tv-header="true"] button {
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 4px 10px !important;
+  font-size: 10.5px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-category-row="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-category-row="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-category-row="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  margin-bottom: 7px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-category-row="true"] button,
+body.mg-fire-tv-mode [data-mg-live-tv-category-row="true"] button,
+body.mg-fire-tv-stable [data-mg-live-tv-category-row="true"] button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 3px 7px !important;
+  font-size: 10px !important;
+  justify-content: center !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-category-row="true"] button > span:last-child,
+body.mg-fire-tv-mode [data-mg-live-tv-category-row="true"] button > span:last-child,
+body.mg-fire-tv-stable [data-mg-live-tv-category-row="true"] button > span:last-child {
+  display: none !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-category-row="true"] svg,
+body.mg-fire-tv-mode [data-mg-live-tv-category-row="true"] svg,
+body.mg-fire-tv-stable [data-mg-live-tv-category-row="true"] svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-controls="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  align-items: center !important;
+  margin-bottom: 8px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-search="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-search="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-search="true"] {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-controls="true"] > *,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] > *,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-controls="true"] input,
+body.mg-fire-tv [data-mg-live-tv-controls="true"] select,
+body.mg-fire-tv [data-mg-live-tv-controls="true"] > button,
+body.mg-fire-tv [data-mg-live-tv-controls="true"] > div,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] input,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] select,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] > button,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] > div,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] input,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] select,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] > button,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] > div {
+  min-height: 36px !important;
+  height: 36px !important;
+  font-size: 10.5px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-controls="true"] select,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] select,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] select {
+  padding-left: 8px !important;
+  padding-right: 20px !important;
+  text-overflow: ellipsis !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-controls="true"] input:focus-visible,
+body.mg-fire-tv [data-mg-live-tv-controls="true"] select:focus-visible,
+body.mg-fire-tv [data-mg-live-tv-controls="true"] button:focus-visible,
+body.mg-fire-tv [data-mg-live-tv-category-row="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] input:focus-visible,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] select:focus-visible,
+body.mg-fire-tv-mode [data-mg-live-tv-controls="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-live-tv-category-row="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] input:focus-visible,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] select:focus-visible,
+body.mg-fire-tv-stable [data-mg-live-tv-controls="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-live-tv-category-row="true"] button:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 2px !important;
+  border-color: hsl(var(--mg-green)) !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-grid="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-grid="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-grid="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-card="true"],
+body.mg-fire-tv-mode [data-mg-live-tv-card="true"],
+body.mg-fire-tv-stable [data-mg-live-tv-card="true"] {
+  min-height: 98px !important;
+  scroll-margin: 70px 12px 18px !important;
+}
+
+body.mg-fire-tv .mg-live-tv-channel-button,
+body.mg-fire-tv-mode .mg-live-tv-channel-button,
+body.mg-fire-tv-stable .mg-live-tv-channel-button {
+  min-height: 98px !important;
+  padding: 9px 36px 9px 9px !important;
+  gap: 8px !important;
+  border-radius: 9px !important;
+}
+
+body.mg-fire-tv .mg-live-tv-channel-button > div:first-child,
+body.mg-fire-tv-mode .mg-live-tv-channel-button > div:first-child,
+body.mg-fire-tv-stable .mg-live-tv-channel-button > div:first-child {
+  width: 44px !important;
+  height: 44px !important;
+}
+
+body.mg-fire-tv [data-mg-live-tv-card="true"] > button:last-child,
+body.mg-fire-tv-mode [data-mg-live-tv-card="true"] > button:last-child,
+body.mg-fire-tv-stable [data-mg-live-tv-card="true"] > button:last-child {
+  width: 27px !important;
+  height: 27px !important;
+  right: 6px !important;
+  top: 6px !important;
+}
+
+body.mg-fire-tv [data-mg-tv-row="true"],
+body.mg-fire-tv-mode [data-mg-tv-row="true"],
+body.mg-fire-tv-stable [data-mg-tv-row="true"] {
+  gap: 10px !important;
+  padding-top: 2px !important;
+  padding-bottom: 6px !important;
+  scroll-snap-type: none !important;
+  overscroll-behavior-inline: contain;
+}
+
+body.mg-fire-tv [data-mg-tv-row="true"] > div,
+body.mg-fire-tv-mode [data-mg-tv-row="true"] > div,
+body.mg-fire-tv-stable [data-mg-tv-row="true"] > div {
+  scroll-snap-align: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card p:first-of-type,
+body.mg-fire-tv-mode .mg-fire-tv-card p:first-of-type,
+body.mg-fire-tv-stable .mg-fire-tv-card p:first-of-type {
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+  margin-top: 4px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-card p:last-of-type,
+body.mg-fire-tv-mode .mg-fire-tv-card p:last-of-type,
+body.mg-fire-tv-stable .mg-fire-tv-card p:last-of-type {
+  font-size: 9px !important;
+  line-height: 1.1 !important;
+}
+
+/* Continue / Recently Watched. */
+body.mg-fire-tv .mg-fire-tv-resume-card,
+body.mg-fire-tv-mode .mg-fire-tv-resume-card,
+body.mg-fire-tv-stable .mg-fire-tv-resume-card {
+  width: 168px !important;
+  min-width: 168px !important;
+  max-width: 168px !important;
+}
+
+/* Continue Watching is intentionally the largest home row on television. */
+body.mg-fire-tv .mg-fire-tv-resume-section .mg-fire-tv-resume-card,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section .mg-fire-tv-resume-card,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section .mg-fire-tv-resume-card {
+  width: 184px !important;
+  min-width: 184px !important;
+  max-width: 184px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-section h2,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section h2,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section h2 {
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-section .mg-fire-tv-resume-row,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section .mg-fire-tv-resume-row,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section .mg-fire-tv-resume-row {
+  gap: 10px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-card > div:first-child,
+body.mg-fire-tv-mode .mg-fire-tv-resume-card > div:first-child,
+body.mg-fire-tv-stable .mg-fire-tv-resume-card > div:first-child {
+  border-radius: 7px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-card > div:nth-child(2),
+body.mg-fire-tv-mode .mg-fire-tv-resume-card > div:nth-child(2),
+body.mg-fire-tv-stable .mg-fire-tv-resume-card > div:nth-child(2) {
+  margin-top: 5px !important;
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-card > div:nth-child(3),
+body.mg-fire-tv-mode .mg-fire-tv-resume-card > div:nth-child(3),
+body.mg-fire-tv-stable .mg-fire-tv-resume-card > div:nth-child(3) {
+  margin-top: 2px !important;
+  min-height: 0 !important;
+  font-size: 9px !important;
+  line-height: 1.1 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-section > div:first-child p,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section > div:first-child p,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section > div:first-child p {
+  margin-top: 1px !important;
+  font-size: 9px !important;
+  line-height: 1.15 !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-card:focus,
+body.mg-fire-tv-mode .mg-fire-tv-resume-card:focus,
+body.mg-fire-tv-stable .mg-fire-tv-resume-card:focus {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.92) !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-secondary-action,
+body.mg-fire-tv-mode .mg-fire-tv-secondary-action,
+body.mg-fire-tv-stable .mg-fire-tv-secondary-action {
+  display: none !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-section,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section {
+  padding-top: 4px !important;
+}
+
+body.mg-fire-tv .mg-fire-tv-resume-section > div:first-child,
+body.mg-fire-tv-mode .mg-fire-tv-resume-section > div:first-child,
+body.mg-fire-tv-stable .mg-fire-tv-resume-section > div:first-child {
+  margin-bottom: 10px !important;
+}
+
+body.mg-fire-tv main section:not(.mg-fire-tv-hero),
+body.mg-fire-tv-mode main section:not(.mg-fire-tv-hero),
+body.mg-fire-tv-stable main section:not(.mg-fire-tv-hero) {
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+  scroll-margin-top: 0 !important;
+}
+
+body.mg-fire-tv main section:not(.mg-fire-tv-hero) h2,
+body.mg-fire-tv-mode main section:not(.mg-fire-tv-hero) h2,
+body.mg-fire-tv-stable main section:not(.mg-fire-tv-hero) h2 {
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+}
+
+/* Firestick performance tweaks. */
+body.mg-fire-tv .backdrop-blur,
+body.mg-fire-tv .backdrop-blur-sm,
+body.mg-fire-tv .backdrop-blur-md,
+body.mg-fire-tv .backdrop-blur-lg,
+body.mg-fire-tv .backdrop-blur-xl,
+body.mg-fire-tv-mode .backdrop-blur,
+body.mg-fire-tv-mode .backdrop-blur-sm,
+body.mg-fire-tv-mode .backdrop-blur-md,
+body.mg-fire-tv-mode .backdrop-blur-lg,
+body.mg-fire-tv-mode .backdrop-blur-xl,
+body.mg-fire-tv-stable .backdrop-blur,
+body.mg-fire-tv-stable .backdrop-blur-sm,
+body.mg-fire-tv-stable .backdrop-blur-md,
+body.mg-fire-tv-stable .backdrop-blur-lg,
+body.mg-fire-tv-stable .backdrop-blur-xl {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+body.mg-fire-tv .transition-all,
+body.mg-fire-tv .transition-opacity,
+body.mg-fire-tv .transition-colors,
+body.mg-fire-tv .transition-transform,
+body.mg-fire-tv-mode .transition-all,
+body.mg-fire-tv-mode .transition-opacity,
+body.mg-fire-tv-mode .transition-colors,
+body.mg-fire-tv-mode .transition-transform,
+body.mg-fire-tv-stable .transition-all,
+body.mg-fire-tv-stable .transition-opacity,
+body.mg-fire-tv-stable .transition-colors,
+body.mg-fire-tv-stable .transition-transform {
+  transition-duration: 30ms !important;
+}
+
+body.mg-fire-tv button:focus,
+body.mg-fire-tv [role="button"]:focus,
+body.mg-fire-tv select:focus,
+body.mg-fire-tv a:focus,
+body.mg-fire-tv-mode button:focus,
+body.mg-fire-tv-mode [role="button"]:focus,
+body.mg-fire-tv-mode select:focus,
+body.mg-fire-tv-mode a:focus,
+body.mg-fire-tv-stable button:focus,
+body.mg-fire-tv-stable [role="button"]:focus,
+body.mg-fire-tv-stable select:focus,
+body.mg-fire-tv-stable a:focus {
+  scroll-margin: 16px !important;
+}
+
+/* Every authenticated page gets the same unmistakable television focus ring.
+ * This covers pages that do not have a custom Fire TV stylesheet of their own
+ * (Watchlist, Favorites, Watch Party, RD Library, Sources, Roadmap, Updates,
+ * Downloads, etc.) without changing phone/tablet/desktop presentation. */
+body.mg-fire-tv #root main button:focus-visible,
+body.mg-fire-tv #root main a:focus-visible,
+body.mg-fire-tv #root main input:focus-visible,
+body.mg-fire-tv #root main select:focus-visible,
+body.mg-fire-tv #root main textarea:focus-visible,
+body.mg-fire-tv #root main [role="button"]:focus-visible,
+body.mg-fire-tv #root main [role="menuitem"]:focus-visible,
+body.mg-fire-tv #root main [role="tab"]:focus-visible,
+body.mg-fire-tv-mode #root main button:focus-visible,
+body.mg-fire-tv-mode #root main a:focus-visible,
+body.mg-fire-tv-mode #root main input:focus-visible,
+body.mg-fire-tv-mode #root main select:focus-visible,
+body.mg-fire-tv-mode #root main textarea:focus-visible,
+body.mg-fire-tv-mode #root main [role="button"]:focus-visible,
+body.mg-fire-tv-mode #root main [role="menuitem"]:focus-visible,
+body.mg-fire-tv-mode #root main [role="tab"]:focus-visible,
+body.mg-fire-tv-stable #root main button:focus-visible,
+body.mg-fire-tv-stable #root main a:focus-visible,
+body.mg-fire-tv-stable #root main input:focus-visible,
+body.mg-fire-tv-stable #root main select:focus-visible,
+body.mg-fire-tv-stable #root main textarea:focus-visible,
+body.mg-fire-tv-stable #root main [role="button"]:focus-visible,
+body.mg-fire-tv-stable #root main [role="menuitem"]:focus-visible,
+body.mg-fire-tv-stable #root main [role="tab"]:focus-visible,
+body.mg-fire-tv [role="dialog"] button:focus-visible,
+body.mg-fire-tv [role="dialog"] a:focus-visible,
+body.mg-fire-tv [role="dialog"] input:focus-visible,
+body.mg-fire-tv [role="dialog"] select:focus-visible,
+body.mg-fire-tv-mode [role="dialog"] button:focus-visible,
+body.mg-fire-tv-mode [role="dialog"] a:focus-visible,
+body.mg-fire-tv-mode [role="dialog"] input:focus-visible,
+body.mg-fire-tv-mode [role="dialog"] select:focus-visible,
+body.mg-fire-tv-stable [role="dialog"] button:focus-visible,
+body.mg-fire-tv-stable [role="dialog"] a:focus-visible,
+body.mg-fire-tv-stable [role="dialog"] input:focus-visible,
+body.mg-fire-tv-stable [role="dialog"] select:focus-visible,
+body.mg-fire-tv .mg-fire-tv-nav button:focus-visible,
+body.mg-fire-tv-mode .mg-fire-tv-nav button:focus-visible,
+body.mg-fire-tv-stable .mg-fire-tv-nav button:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.88) !important;
+  scroll-margin: 18px !important;
+}
+
+/* Search, details, Settings and Addons stay inside the same TV-safe area and
+ * expose an obvious D-pad focus target without changing their phone/desktop
+ * layouts. */
+body.mg-fire-tv [data-mg-search-dialog="true"],
+body.mg-fire-tv-mode [data-mg-search-dialog="true"],
+body.mg-fire-tv-stable [data-mg-search-dialog="true"],
+body.mg-fire-tv [data-mg-detail-dialog="true"],
+body.mg-fire-tv-mode [data-mg-detail-dialog="true"],
+body.mg-fire-tv-stable [data-mg-detail-dialog="true"] {
+  padding: 5vh 5vw !important;
+  align-items: center !important;
+}
+
+body.mg-fire-tv [data-mg-search-dialog="true"] > div,
+body.mg-fire-tv-mode [data-mg-search-dialog="true"] > div,
+body.mg-fire-tv-stable [data-mg-search-dialog="true"] > div,
+body.mg-fire-tv [data-mg-detail-dialog="true"] > div,
+body.mg-fire-tv-mode [data-mg-detail-dialog="true"] > div,
+body.mg-fire-tv-stable [data-mg-detail-dialog="true"] > div {
+  max-height: 90vh !important;
+  border-radius: 14px !important;
+}
+
+body.mg-fire-tv [data-mg-search-dialog="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-search-dialog="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-search-dialog="true"] button:focus-visible,
+body.mg-fire-tv [data-mg-detail-dialog="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-detail-dialog="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-detail-dialog="true"] button:focus-visible,
+body.mg-fire-tv [data-mg-detail-dialog="true"] a:focus-visible,
+body.mg-fire-tv-mode [data-mg-detail-dialog="true"] a:focus-visible,
+body.mg-fire-tv-stable [data-mg-detail-dialog="true"] a:focus-visible,
+body.mg-fire-tv [data-mg-settings-view="true"] button:focus-visible,
+body.mg-fire-tv [data-mg-settings-view="true"] select:focus-visible,
+body.mg-fire-tv [data-mg-settings-view="true"] input:focus-visible,
+body.mg-fire-tv [data-mg-settings-view="true"] a:focus-visible,
+body.mg-fire-tv-mode [data-mg-settings-view="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-settings-view="true"] select:focus-visible,
+body.mg-fire-tv-mode [data-mg-settings-view="true"] input:focus-visible,
+body.mg-fire-tv-mode [data-mg-settings-view="true"] a:focus-visible,
+body.mg-fire-tv-stable [data-mg-settings-view="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-settings-view="true"] select:focus-visible,
+body.mg-fire-tv-stable [data-mg-settings-view="true"] input:focus-visible,
+body.mg-fire-tv-stable [data-mg-settings-view="true"] a:focus-visible,
+body.mg-fire-tv [data-mg-addons-view="true"] button:focus-visible,
+body.mg-fire-tv [data-mg-addons-view="true"] input:focus-visible,
+body.mg-fire-tv-mode [data-mg-addons-view="true"] button:focus-visible,
+body.mg-fire-tv-mode [data-mg-addons-view="true"] input:focus-visible,
+body.mg-fire-tv-stable [data-mg-addons-view="true"] button:focus-visible,
+body.mg-fire-tv-stable [data-mg-addons-view="true"] input:focus-visible {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.88) !important;
+}
+
+body.mg-fire-tv [data-mg-settings-view="true"],
+body.mg-fire-tv-mode [data-mg-settings-view="true"],
+body.mg-fire-tv-stable [data-mg-settings-view="true"],
+body.mg-fire-tv [data-mg-addons-view="true"],
+body.mg-fire-tv-mode [data-mg-addons-view="true"],
+body.mg-fire-tv-stable [data-mg-addons-view="true"] {
+  padding-top: 18px !important;
+  padding-bottom: 24px !important;
+}
+
+/* Keep player text readable; sizing is handled by the player failsafe file. */
+body.mg-fire-tv .fixed.inset-0.z-50.bg-black\/95,
+body.mg-fire-tv-mode .fixed.inset-0.z-50.bg-black\/95,
+body.mg-fire-tv-stable .fixed.inset-0.z-50.bg-black\/95 {
+  font-size: 16px !important;
+}
+
+/* Fire Stick remote navigation polish, catalogue ONLY. The protected player
+ * and embedded scraper controls are intentionally outside these selectors.
+ * Increase tiny 27px sidebar targets and give D-pad focus a clear halo.
+ * The nav is scrollable: focus stays within view on short TV screens. */
+body.mg-fire-tv #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv #root .mg-fire-tv-nav > div:last-child button,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav > div:last-child button,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav nav button,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav > div:last-child button {
+  min-height: 34px !important;
+  height: 34px !important;
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+  scroll-margin-block: 20px;
+}
+body.mg-fire-tv #root .mg-fire-tv-nav svg,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav svg,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+body.mg-fire-tv #root .mg-fire-tv-nav button:focus,
+body.mg-fire-tv-mode #root .mg-fire-tv-nav button:focus,
+body.mg-fire-tv-stable #root .mg-fire-tv-nav button:focus {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: -2px !important;
+  background: hsl(var(--mg-green) / 0.3) !important;
+  color: #fff !important;
+  box-shadow: inset 4px 0 0 hsl(var(--mg-green)), 0 0 0 2px rgba(0,0,0,.8) !important;
+}
+/* Results and filters get the same unmistakable D-pad highlight. */
+body.mg-fire-tv [data-mg-search-dialog="true"] button:focus,
+body.mg-fire-tv-mode [data-mg-search-dialog="true"] button:focus,
+body.mg-fire-tv-stable [data-mg-search-dialog="true"] button:focus {
+  outline: 3px solid hsl(var(--mg-green)) !important;
+  outline-offset: -3px !important;
+  background-color: hsl(var(--mg-green) / .17) !important;
+  scroll-margin-block: 16px;
+}
+
+/* Catalogue episode focus only; player surfaces are unchanged. */
+body:is(.mg-fire-tv, .mg-fire-tv-mode, .mg-fire-tv-stable) #mg-episode-selector :is(button, select):focus {
+  outline: 3px solid var(--mg-green, #39ff88) !important;
+  outline-offset: 3px !important;
+  scroll-margin-block: 72px;
+}
