@@ -13,6 +13,7 @@ import {
   getImageUrl,
 } from '@/lib/tmdb'
 import { Star, Calendar, Tv } from 'lucide-react'
+import { OnlyFlixPlayer } from '@/components/onlyflix-player'
 import { VideoPlayer } from '@/components/video-player'
 import { DebridStreamButton } from '@/components/debrid-stream-button'
 
@@ -163,6 +164,14 @@ export default async function TVShowPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
+
+      {show.seasons.some((s) => s.season_number > 0 && s.episode_count > 0) && (
+        <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h2 className="text-2xl font-bold text-foreground mb-4">Watch episode</h2>
+          <OnlyFlixPlayer key={showId} tmdbId={showId} title={show.name}
+            posterPath={show.backdrop_path} seasons={show.seasons} />
+        </section>
+      )}
 
       {/* Trailer Player */}
       {trailer && (

@@ -8,11 +8,6 @@ import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { nanoid } from 'nanoid'
 
-async function getUserId() {
-  const session = await auth?.api.getSession({ headers: await headers() }).catch(() => null)
-  return session?.user?.id || 'guest'
-}
-
 export async function getOptionalUserId() {
   try {
     const session = await auth?.api.getSession({ headers: await headers() })
@@ -29,7 +24,8 @@ export async function addToWatchlist(data: {
   title: string
   posterPath: string | null
 }) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   const existing = await db
     .select()
@@ -60,7 +56,8 @@ export async function addToWatchlist(data: {
 }
 
 export async function removeFromWatchlist(mediaId: number, mediaType: string) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   await db
     .delete(watchlist)
@@ -77,7 +74,8 @@ export async function removeFromWatchlist(mediaId: number, mediaType: string) {
 }
 
 export async function getWatchlist() {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return []
   
   return db
     .select()
@@ -112,7 +110,8 @@ export async function addToFavorites(data: {
   title: string
   posterPath: string | null
 }) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   const existing = await db
     .select()
@@ -143,7 +142,8 @@ export async function addToFavorites(data: {
 }
 
 export async function removeFromFavorites(mediaId: number, mediaType: string) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   await db
     .delete(favorites)
@@ -160,7 +160,8 @@ export async function removeFromFavorites(mediaId: number, mediaType: string) {
 }
 
 export async function getFavorites() {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return []
   
   return db
     .select()
@@ -199,7 +200,8 @@ export async function updateContinueWatching(data: {
   seasonNumber?: number
   episodeNumber?: number
 }) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   const existing = await db
     .select()
@@ -243,7 +245,8 @@ export async function updateContinueWatching(data: {
 }
 
 export async function getContinueWatching() {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return []
   
   return db
     .select()
@@ -253,7 +256,8 @@ export async function getContinueWatching() {
 }
 
 export async function removeContinueWatching(mediaId: number, mediaType: string) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   await db
     .delete(continueWatching)
@@ -276,7 +280,8 @@ export async function createWatchParty(data: {
   title: string
   posterPath: string | null
 }) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   const partyId = nanoid(10)
   
   await db.insert(watchParty).values({
@@ -297,7 +302,8 @@ export async function createWatchParty(data: {
 }
 
 export async function joinWatchParty(partyId: string) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   const party = await db
     .select()
@@ -326,7 +332,8 @@ export async function joinWatchParty(partyId: string) {
 }
 
 export async function endWatchParty(partyId: string) {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return { success: false, message: 'Sign in to continue.' }
   
   const party = await db
     .select()
@@ -361,7 +368,8 @@ export async function getWatchParty(partyId: string) {
 }
 
 export async function getActiveWatchParties() {
-  const userId = await getUserId()
+  const userId = await getOptionalUserId()
+  if (!userId) return []
   
   return db
     .select()

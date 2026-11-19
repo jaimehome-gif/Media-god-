@@ -111,6 +111,8 @@ export function MediaCard({ item, mediaType, showRating = true, size = 'md' }: M
       if (result.success) {
         toast.success('Watch party created!')
         router.push(`/watch-party/${result.partyId}`)
+      } else {
+        toast.info(result.message)
       }
     } catch {
       toast.error('Failed to create watch party')

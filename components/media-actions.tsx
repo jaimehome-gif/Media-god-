@@ -61,6 +61,8 @@ export function MediaActions({ mediaId, mediaType, title, posterPath }: MediaAct
       if (result.success) {
         toast.success('Watch party created!')
         router.push(`/watch-party/${result.partyId}`)
+      } else {
+        toast.info(result.message)
       }
     } catch {
       toast.error('Failed to create watch party')

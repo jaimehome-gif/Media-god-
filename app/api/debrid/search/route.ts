@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getSessionSafe } from '@/lib/auth'
 import { debridRequest } from '@/lib/real-debrid'
 import { matchesEpisodeResult, matchesSeriesTitle, matchesExactEpisode } from '@/lib/episode-matching'
 
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
   // Search the user's existing authorised Real-Debrid library first. The RD
   // API does not offer global title search; /torrents enumerates owned files.
   const apiKey = process.env.REAL_DEBRID_API_KEY
-  if (apiKey && isTV) {
+  if (apiKey && isTV && (await getSessionSafe(request.headers))?.user?.id) {
     tasks.push((async () => {
       const torrents = await debridRequest<LibraryTorrent[]>(apiKey, '/torrents?limit=200')
       return (Array.isArray(torrents) ? torrents : [])
@@ -152,5 +153,6 @@ export async function GET(request: Request) {
     .sort((a, b) => Number(!!b.torrentId) - Number(!!a.torrentId) || b.seeders - a.seeders)
     .slice(0, 40)
 
-  return NextResponse.json({ streams, searched: { title, season: isTV ? season : null, episode: isTV ? episode : null } })
+  return NextResponse.json({ streams, searched: { title, season: isTV ? season : null, episode: isTV ? episode : null } },
+    { headers: { 'Cache-Control': 'private, no-store' } })
 }
