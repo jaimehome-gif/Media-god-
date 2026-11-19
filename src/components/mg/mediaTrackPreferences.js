@@ -1,0 +1,663 @@
+export const MEDIA_TRACK_PREFERENCES_KEY = "mg:media-track-preferences-v1";
+export const MEDIA_TITLE_AUDIO_PREFERENCES_KEY = "mg:title-audio-preferences-v1";
+export const MEDIA_TITLE_SUBTITLE_PREFERENCES_KEY = "mg:title-subtitle-preferences-v2";
+export const SUBTITLE_PREFERENCE_VERSION = 2;
+
+export const DEFAULT_MEDIA_TRACK_PREFERENCES = {
+  audioLanguage: "en",
+  subtitlesEnabled: false,
+  subtitlePreferenceVersion: SUBTITLE_PREFERENCE_VERSION,
+  subtitleLanguage: "en",
+  preferForcedSubtitles: true,
+  preferSdhSubtitles: false,
+  subtitleOffsetSeconds: 0,
+  subtitleSize: "medium",
+  subtitleBackground: "medium",
+};
+
+const normaliseLanguage = (value, fallback = "en") => {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (!text || /^(?:und|unknown|zxx)$/i.test(text)) return fallback;
+
+  const aliases = {
+    english: "en",
+    eng: "en",
+    en: "en",
+    french: "fr",
+    fra: "fr",
+    fre: "fr",
+    fr: "fr",
+    spanish: "es",
+    spa: "es",
+    es: "es",
+    german: "de",
+    ger: "de",
+    deu: "de",
+    de: "de",
+    italian: "it",
+    ita: "it",
+    it: "it",
+    portuguese: "pt",
+    por: "pt",
+    pt: "pt",
+    dutch: "nl",
+    dut: "nl",
+    nld: "nl",
+    nl: "nl",
+    polish: "pl",
+    pol: "pl",
+    pl: "pl",
+    japanese: "ja",
+    jpn: "ja",
+    ja: "ja",
+    korean: "ko",
+    kor: "ko",
+    ko: "ko",
+    chinese: "zh",
+    mandarin: "zh",
+    cantonese: "zh",
+    chi: "zh",
+    zho: "zh",
+    zh: "zh",
+    arabic: "ar",
+    ara: "ar",
+    ar: "ar",
+    hindi: "hi",
+    hin: "hi",
+    hi: "hi",
+    russian: "ru",
+    rus: "ru",
+    ru: "ru",
+    ukrainian: "uk",
+    ukr: "uk",
+    uk: "uk",
+    turkish: "tr",
+    tur: "tr",
+    tr: "tr",
+    multi: "multi",
+    mul: "multi",
+  };
+
+  const primary = text.split(/[-_]/)[0];
+  if (aliases[text]) return aliases[text];
+  if (aliases[primary]) return aliases[primary];
+
+  const labelledLanguage = [
+    { language: "en", pattern: /\b(?:en|eng|english)\b/i },
+    { language: "fr", pattern: /\b(?:fr|fre|fra|french)\b/i },
+    { language: "es", pattern: /\b(?:es|spa|spanish)\b/i },
+    { language: "de", pattern: /\b(?:de|ger|deu|german)\b/i },
+    { language: "it", pattern: /\b(?:it|ita|italian)\b/i },
+    { language: "pt", pattern: /\b(?:pt|por|portuguese)\b/i },
+    { language: "nl", pattern: /\b(?:nl|dut|nld|dutch)\b/i },
+    { language: "pl", pattern: /\b(?:pl|pol|polish)\b/i },
+    { language: "ja", pattern: /\b(?:ja|jpn|japanese)\b/i },
+    { language: "ko", pattern: /\b(?:ko|kor|korean)\b/i },
+    {
+      language: "zh",
+      pattern: /\b(?:zh|chi|zho|chinese|mandarin|cantonese)\b/i,
+    },
+    { language: "ar", pattern: /\b(?:ar|ara|arabic)\b/i },
+    { language: "hi", pattern: /\b(?:hi|hin|hindi)\b/i },
+    { language: "ru", pattern: /\b(?:ru|rus|russian)\b/i },
+    { language: "uk", pattern: /\b(?:uk|ukr|ukrainian)\b/i },
+    { language: "tr", pattern: /\b(?:tr|tur|turkish)\b/i },
+    {
+      language: "multi",
+      pattern: /\b(?:mul|multi(?:[ ._-]?audio)?|dual(?:[ ._-]?audio)?)\b/i,
+    },
+  ].find(({ pattern }) => pattern.test(text));
+
+  return labelledLanguage?.language || primary || fallback;
+};
+
+export const normaliseTrackPreferences = (value) => {
+  const raw = value && typeof value === "object" ? value : {};
+
+  return {
+    audioLanguage: normaliseLanguage(
+      raw.audioLanguage,
+      DEFAULT_MEDIA_TRACK_PREFERENCES.audioLanguage
+    ),
+    subtitlesEnabled:
+      Number(raw.subtitlePreferenceVersion || 0) >= SUBTITLE_PREFERENCE_VERSION &&
+      typeof raw.subtitlesEnabled === "boolean"
+        ? raw.subtitlesEnabled
+        : false,
+    subtitlePreferenceVersion: SUBTITLE_PREFERENCE_VERSION,
+    subtitleLanguage: normaliseLanguage(
+      raw.subtitleLanguage,
+      DEFAULT_MEDIA_TRACK_PREFERENCES.subtitleLanguage
+    ),
+    preferForcedSubtitles:
+      typeof raw.preferForcedSubtitles === "boolean"
+        ? raw.preferForcedSubtitles
+        : DEFAULT_MEDIA_TRACK_PREFERENCES.preferForcedSubtitles,
+    preferSdhSubtitles:
+      typeof raw.preferSdhSubtitles === "boolean"
+        ? raw.preferSdhSubtitles
+        : DEFAULT_MEDIA_TRACK_PREFERENCES.preferSdhSubtitles,
+    subtitleOffsetSeconds: Math.max(
+      -10,
+      Math.min(
+        10,
+        Number.isFinite(Number(raw.subtitleOffsetSeconds))
+          ? Math.round(Number(raw.subtitleOffsetSeconds) * 10) / 10
+          : DEFAULT_MEDIA_TRACK_PREFERENCES.subtitleOffsetSeconds
+      )
+    ),
+    subtitleSize: ["small", "medium", "large", "extra-large"].includes(
+      raw.subtitleSize
+    )
+      ? raw.subtitleSize
+      : DEFAULT_MEDIA_TRACK_PREFERENCES.subtitleSize,
+    subtitleBackground: ["none", "light", "medium", "dark"].includes(
+      raw.subtitleBackground
+    )
+      ? raw.subtitleBackground
+      : DEFAULT_MEDIA_TRACK_PREFERENCES.subtitleBackground,
+  };
+};
+
+export const readTrackPreferences = () => {
+  if (typeof window === "undefined") {
+    return DEFAULT_MEDIA_TRACK_PREFERENCES;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MEDIA_TRACK_PREFERENCES_KEY);
+    return normaliseTrackPreferences(raw ? JSON.parse(raw) : {});
+  } catch {
+    return DEFAULT_MEDIA_TRACK_PREFERENCES;
+  }
+};
+
+export const writeTrackPreferences = (value) => {
+  const next = normaliseTrackPreferences(value);
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        MEDIA_TRACK_PREFERENCES_KEY,
+        JSON.stringify(next)
+      );
+    } catch {
+      // Device-local preference storage is optional.
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("mg:media-track-preferences-changed", {
+        detail: next,
+      })
+    );
+  }
+
+  return next;
+};
+
+export const trackLanguage = (track) =>
+  normaliseLanguage(
+    track?.language ||
+      track?.lang ||
+      track?.srclang ||
+      track?.attrs?.LANGUAGE ||
+      track?.label ||
+      track?.name ||
+      track?.attrs?.NAME ||
+      "",
+    ""
+  );
+
+export const trackLooksForced = (track) =>
+  /\bforced\b|\bforeign parts?\b/i.test(
+    String(track?.label || track?.name || "")
+  );
+
+export const trackLooksSdh = (track) =>
+  /\b(?:sdh|hoh|hearing[ ._-]?impaired|hearing[ ._-]?imp|closed captions?|cc)\b/i.test(
+    String(track?.label || track?.name || "")
+  );
+
+const audioCodecKey = (track) => {
+  const text = [
+    track?.audioCodec,
+    track?.codec,
+    track?.label,
+    track?.name,
+    track?.attrs?.CODECS,
+    track?.attrs?.NAME,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (/\b(?:ac-?4|ac4)\b/i.test(text)) return "ac4";
+  if (/\b(?:xhe-?aac|xheaac|usac)\b/i.test(text)) return "xheaac";
+  if (/\b(?:truehd|mlp)\b/i.test(text)) return "truehd";
+  if (/\b(?:dts(?:-?hd)?|dts:x|dca)\b/i.test(text)) return "dts";
+  if (/\b(?:e-?ac-?3|eac3|ec-?3|ddp|dd\+)\b/i.test(text)) return "eac3";
+  if (/\b(?:ac-?3|ac3|dolby digital)\b/i.test(text)) return "ac3";
+  if (/\b(?:aac|he-?aac|mp4a)\b/i.test(text)) return "aac";
+  if (/\bopus\b/i.test(text)) return "opus";
+  if (/\bflac\b/i.test(text)) return "flac";
+  if (/\b(?:mp3|mpeg audio)\b/i.test(text)) return "mp3";
+  if (/\b(?:wma|windows[ ._-]?media[ ._-]?audio)\b/i.test(text)) return "wma";
+  if (/\b(?:amr(?:[ ._-]?(?:wb|nb))?|adaptive[ ._-]?multi[ ._-]?rate)\b/i.test(text)) return "amr";
+  if (/\b(?:adpcm|ima[ ._-]?adpcm|ms[ ._-]?adpcm|g\.?726|g726)\b/i.test(text)) return "adpcm";
+  if (/\b(?:ape|monkey'?s[ ._-]?audio)\b/i.test(text)) return "ape";
+  if (/\b(?:wavpack|wv)\b/i.test(text)) return "wavpack";
+  if (/\b(?:tta|trueaudio)\b/i.test(text)) return "tta";
+  if (/\bspeex\b/i.test(text)) return "speex";
+  if (/\b(?:atrac(?:[ ._-]?(?:1|3|9|p|p3))?|at3|atrac3plus)\b/i.test(text)) return "atrac";
+  if (/\b(?:dsd(?:64|128)?|dsf|dff)\b/i.test(text)) return "dsd";
+  if (/\bshorten\b/i.test(text)) return "shorten";
+  if (/\btak\b/i.test(text)) return "tak";
+  if (/\b(?:mpc|musepack)\b/i.test(text)) return "musepack";
+  if (/\b(?:g\.?711|g711)\b/i.test(text)) return "g711";
+  return "";
+};
+
+const audioChannelKey = (track) => {
+  const direct =
+    track?.channels ||
+    track?.channelCount ||
+    track?.attrs?.CHANNELS ||
+    track?.attrs?.CHANNEL_COUNT ||
+    "";
+  const text = `${direct} ${track?.label || ""} ${track?.name || ""}`;
+  const match = text.match(/(?:^|[^0-9])(7\.1|5\.1|2\.1|2\.0|1\.0|8|6|2)(?:[^0-9]|$)/i);
+  if (!match) return "";
+  const value = String(match[1]);
+  if (value === "8") return "7.1";
+  if (value === "6") return "5.1";
+  if (value === "2") return "2.0";
+  return value;
+};
+
+const audioTrackText = (track) =>
+  [
+    track?.language,
+    track?.lang,
+    track?.srclang,
+    track?.label,
+    track?.name,
+    track?.audioCodec,
+    track?.codec,
+    track?.attrs?.LANGUAGE,
+    track?.attrs?.NAME,
+    track?.attrs?.CODECS,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+// Most desktop/mobile browsers cannot decode Dolby audio at all; picking such a
+// track in the web player means silent video, so rank it below everything else.
+const browserCanPlayAudio = (mime) => {
+  try {
+    return typeof document !== "undefined" &&
+      Boolean(document.createElement("audio").canPlayType(mime));
+  } catch {
+    return false;
+  }
+};
+
+const audioCodecPreferenceScore = (track) => {
+  const codec = audioCodecKey(track);
+
+  if (codec === "aac") return 2600;
+  if (codec === "eac3") return browserCanPlayAudio('audio/mp4; codecs="ec-3"') ? 1600 : -4000;
+  if (codec === "ac3") return browserCanPlayAudio('audio/mp4; codecs="ac-3"') ? 1400 : -4000;
+  if (codec === "opus") return 1000;
+  if (codec === "flac") return 900;
+  if (codec === "mp3") return 700;
+  if (codec === "truehd" || codec === "dts") return -4500;
+  return 0;
+};
+
+export const preferredAudioTrackScore = (
+  track,
+  preferredLanguage = "en"
+) => {
+  const text = audioTrackText(track);
+  const preferred = normaliseLanguage(preferredLanguage || "en", "en");
+  const language = trackLanguage(track);
+  let score = audioCodecPreferenceScore(track);
+
+  if (language && language === preferred) {
+    score += 100000;
+  } else if (
+    language === "multi" ||
+    /\b(?:mul|multi(?:[ ._-]?audio)?|dual(?:[ ._-]?audio)?)\b/i.test(text)
+  ) {
+    score += 50000;
+  } else if (language) {
+    score -= 5000;
+  }
+
+  if (/\b(?:main|original|primary)\b/i.test(text)) score += 4000;
+  if (/\b(?:commentary|audio description|descriptive|visually impaired)\b/i.test(text)) {
+    score -= 30000;
+  }
+
+  if (track?.default || track?.attrs?.DEFAULT === "YES") score += 250;
+  if (track?.autoselect || track?.attrs?.AUTOSELECT === "YES") score += 100;
+
+  return score;
+};
+
+const mediaPreferenceContextKey = (context = {}) => {
+  const mediaType = String(context?.mediaType || context?.type || "").toLowerCase();
+  const tmdbId = String(context?.tmdbId || context?.tmdb_id || "").trim();
+  const title = String(context?.title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .slice(0, 140);
+
+  if (mediaType === "tv" || context?.season != null || context?.episode != null) {
+    return tmdbId ? `tv:${tmdbId}` : title ? `tv-title:${title}` : "";
+  }
+
+  return tmdbId ? `movie:${tmdbId}` : title ? `movie-title:${title}` : "";
+};
+
+const readTitleAudioStore = () => {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(MEDIA_TITLE_AUDIO_PREFERENCES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeTitleAudioStore = (store) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const entries = Object.entries(store || {})
+      .sort((a, b) => Number(b?.[1]?.updatedAt || 0) - Number(a?.[1]?.updatedAt || 0))
+      .slice(0, 250);
+    window.localStorage.setItem(
+      MEDIA_TITLE_AUDIO_PREFERENCES_KEY,
+      JSON.stringify(Object.fromEntries(entries))
+    );
+  } catch {
+    // Per-title audio memory is best effort only.
+  }
+};
+
+export const audioProfileFromTrack = (track) => ({
+  language: trackLanguage(track),
+  codec: audioCodecKey(track),
+  channels: audioChannelKey(track),
+  commentary: /\bcommentary\b/i.test(String(track?.label || track?.name || "")),
+  descriptive: /\b(?:audio description|descriptive|visually impaired)\b/i.test(
+    String(track?.label || track?.name || "")
+  ),
+});
+
+export const rememberAudioPreference = (context, track) => {
+  const key = mediaPreferenceContextKey(context);
+  if (!key || !track) return null;
+
+  const profile = {
+    ...audioProfileFromTrack(track),
+    updatedAt: Date.now(),
+  };
+  const store = readTitleAudioStore();
+  store[key] = profile;
+  writeTitleAudioStore(store);
+  return profile;
+};
+
+export const readRememberedAudioPreference = (context) => {
+  const key = mediaPreferenceContextKey(context);
+  if (!key) return null;
+  const profile = readTitleAudioStore()?.[key];
+  return profile && typeof profile === "object" ? profile : null;
+};
+
+const readTitleSubtitleStore = () => {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(MEDIA_TITLE_SUBTITLE_PREFERENCES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeTitleSubtitleStore = (store) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const entries = Object.entries(store || {})
+      .sort((a, b) => Number(b?.[1]?.updatedAt || 0) - Number(a?.[1]?.updatedAt || 0))
+      .slice(0, 250);
+    window.localStorage.setItem(
+      MEDIA_TITLE_SUBTITLE_PREFERENCES_KEY,
+      JSON.stringify(Object.fromEntries(entries))
+    );
+  } catch {
+    // Per-title subtitle memory is best effort only.
+  }
+};
+
+export const subtitleProfileFromTrack = (track) => ({
+  language: trackLanguage(track),
+  forced: trackLooksForced(track),
+  sdh: trackLooksSdh(track),
+  label: String(track?.label || track?.name || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120),
+});
+
+export const rememberSubtitlePreference = (context, track, enabled = true) => {
+  const key = mediaPreferenceContextKey(context);
+  if (!key) return null;
+
+  const profile = {
+    ...(track ? subtitleProfileFromTrack(track) : {}),
+    enabled: Boolean(enabled),
+    updatedAt: Date.now(),
+  };
+  const store = readTitleSubtitleStore();
+  store[key] = profile;
+  writeTitleSubtitleStore(store);
+  return profile;
+};
+
+export const readRememberedSubtitlePreference = (context) => {
+  const key = mediaPreferenceContextKey(context);
+  if (!key) return null;
+  const profile = readTitleSubtitleStore()?.[key];
+  return profile && typeof profile === "object" ? profile : null;
+};
+
+export const rememberedSubtitleTrackScore = (track, profile) => {
+  if (!track || !profile || profile.enabled === false) return 0;
+
+  const candidate = subtitleProfileFromTrack(track);
+  let score = 0;
+
+  if (profile.language && candidate.language === profile.language) score += 12000;
+  if (candidate.forced === Boolean(profile.forced)) score += 5500;
+  if (candidate.sdh === Boolean(profile.sdh)) score += 3200;
+  if (profile.label && candidate.label === profile.label) score += 7000;
+
+  return score;
+};
+
+export const rememberedAudioTrackScore = (track, profile) => {
+  if (!track || !profile) return 0;
+
+  const candidate = audioProfileFromTrack(track);
+  let score = 0;
+
+  if (profile.language) {
+    if (candidate.language !== profile.language) return -20000;
+    score += 20000;
+  }
+
+  if (profile.codec && candidate.codec === profile.codec) score += 6500;
+  if (profile.channels && candidate.channels === profile.channels) score += 1800;
+  if (profile.commentary === false && candidate.commentary) score -= 7000;
+  if (profile.descriptive === false && candidate.descriptive) score -= 7000;
+
+  return score;
+};
+
+const languageDisplayName = (value) => {
+  const language = normaliseLanguage(value, "");
+  if (!language) return "";
+
+  const names = {
+    en: "English",
+    fr: "French",
+    es: "Spanish",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    nl: "Dutch",
+    pl: "Polish",
+    ja: "Japanese",
+    ko: "Korean",
+    zh: "Chinese",
+    ar: "Arabic",
+    hi: "Hindi",
+  };
+
+  return names[language] || String(value || language).trim();
+};
+
+const audioCodecLabel = (track) => {
+  const text = [
+    track?.audioCodec,
+    track?.codec,
+    track?.label,
+    track?.name,
+    track?.attrs?.CODECS,
+    track?.attrs?.NAME,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (/\b(?:ac-?4|ac4)\b/i.test(text)) return "AC4";
+  if (/\b(?:xhe-?aac|xheaac|usac)\b/i.test(text)) return "xHE-AAC";
+  if (/\b(?:truehd|mlp)\b/i.test(text)) return "TrueHD";
+  if (/\b(?:dts(?:-?hd)?|dts:x|dca)\b/i.test(text)) return "DTS";
+  if (/\b(?:e-?ac-?3|eac3|ec-?3|ddp|dd\+)\b/i.test(text)) return "EAC3";
+  if (/\b(?:ac-?3|ac3|dolby digital)\b/i.test(text)) return "AC3";
+  if (/\b(?:aac|he-?aac|mp4a)\b/i.test(text)) return "AAC";
+  if (/\bopus\b/i.test(text)) return "Opus";
+  if (/\bflac\b/i.test(text)) return "FLAC";
+  if (/\b(?:alac|apple lossless)\b/i.test(text)) return "ALAC";
+  if (/\bvorbis\b/i.test(text)) return "Vorbis";
+  if (/\b(?:pcm|lpcm)\b/i.test(text)) return "PCM";
+  if (/\bmp2\b/i.test(text)) return "MP2";
+  if (/\b(?:mp3|mpeg audio)\b/i.test(text)) return "MP3";
+  if (/\b(?:wma|windows[ ._-]?media[ ._-]?audio)\b/i.test(text)) return "WMA";
+  if (/\b(?:amr(?:[ ._-]?(?:wb|nb))?|adaptive[ ._-]?multi[ ._-]?rate)\b/i.test(text)) return "AMR";
+  if (/\b(?:adpcm|ima[ ._-]?adpcm|ms[ ._-]?adpcm|g\.?726|g726)\b/i.test(text)) return "ADPCM";
+  if (/\b(?:ape|monkey'?s[ ._-]?audio)\b/i.test(text)) return "APE";
+  if (/\b(?:wavpack|wv)\b/i.test(text)) return "WavPack";
+  if (/\b(?:tta|trueaudio)\b/i.test(text)) return "TTA";
+  if (/\bspeex\b/i.test(text)) return "Speex";
+  if (/\b(?:atrac(?:[ ._-]?(?:1|3|9|p|p3))?|at3|atrac3plus)\b/i.test(text)) return "ATRAC";
+  if (/\b(?:dsd(?:64|128)?|dsf|dff)\b/i.test(text)) return "DSD";
+  if (/\bshorten\b/i.test(text)) return "Shorten";
+  if (/\btak\b/i.test(text)) return "TAK";
+  if (/\b(?:mpc|musepack)\b/i.test(text)) return "Musepack";
+  if (/\b(?:g\.?711|g711)\b/i.test(text)) return "G.711";
+  return "";
+};
+
+const audioChannelLabel = (track) => {
+  const direct =
+    track?.channels ||
+    track?.channelCount ||
+    track?.attrs?.CHANNELS ||
+    track?.attrs?.CHANNEL_COUNT ||
+    "";
+
+  const text = `${direct} ${track?.label || ""} ${track?.name || ""}`;
+  const match = text.match(/(?:^|[^0-9])(7\.1|5\.1|2\.1|2\.0|1\.0|8|6|2)(?:[^0-9]|$)/i);
+  if (!match) return "";
+
+  const value = String(match[1]);
+  if (value === "8") return "7.1";
+  if (value === "6") return "5.1";
+  if (value === "2") return "2.0";
+  return value;
+};
+
+export const friendlyTrackLabel = (track, kind, index) => {
+  const rawLabel = String(track?.label || track?.name || "").trim();
+  const language = String(track?.language || track?.lang || track?.attrs?.LANGUAGE || "").trim();
+
+  if (kind !== "Audio") {
+    const base = rawLabel || languageDisplayName(language) || `${kind} ${index + 1}`;
+    const languageName = languageDisplayName(language);
+    const languageSuffix =
+      languageName && !base.toLowerCase().includes(languageName.toLowerCase())
+        ? ` · ${languageName}`
+        : "";
+    const forcedSuffix = trackLooksForced(track) && !/forced/i.test(base)
+      ? " · Forced"
+      : "";
+    const sdhSuffix = trackLooksSdh(track) && !/\b(?:sdh|hoh)\b/i.test(base)
+      ? " · SDH"
+      : "";
+
+    return `${base}${languageSuffix}${forcedSuffix}${sdhSuffix}`;
+  }
+
+  const languageName = languageDisplayName(language);
+  const codec = audioCodecLabel(track);
+  const channels = audioChannelLabel(track);
+  const commentary = /\bcommentary\b/i.test(rawLabel) ? "Commentary" : "";
+  const descriptive = /\b(?:audio description|descriptive|visually impaired)\b/i.test(rawLabel)
+    ? "Audio description"
+    : "";
+
+  const parts = [
+    languageName,
+    codec,
+    channels,
+    commentary,
+    descriptive,
+  ].filter(Boolean);
+
+  if (parts.length > 0) {
+    return parts.filter((part, partIndex, list) => list.indexOf(part) === partIndex).join(" · ");
+  }
+
+  return rawLabel || language || `${kind} ${index + 1}`;
+};
+
+export const subtitleCueStyle = (preferences = readTrackPreferences()) => {
+  const prefs = normaliseTrackPreferences(preferences);
+
+  const fontSize = {
+    small: "0.85em",
+    medium: "1em",
+    large: "1.2em",
+    "extra-large": "1.4em",
+  }[prefs.subtitleSize];
+
+  const background = {
+    none: "transparent",
+    light: "rgba(0,0,0,0.3)",
+    medium: "rgba(0,0,0,0.58)",
+    dark: "rgba(0,0,0,0.82)",
+  }[prefs.subtitleBackground];
+
+  return { fontSize, background };
+};

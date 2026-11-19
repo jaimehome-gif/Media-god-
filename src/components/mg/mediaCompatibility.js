@@ -1,0 +1,2441 @@
+import {
+  nativeFireTvAppInfo,
+  nativeFireTvCodecInfo,
+} from "@/components/mg/nativeFireTvBridge";
+import {
+  isAndroidMobileRuntime,
+  isFireTvRuntime,
+} from "@/components/mg/runtimePlatform";
+
+const VIDEO_PROBE =
+  typeof document !== "undefined"
+    ? document.createElement("video")
+    : null;
+
+const AUDIO_PROBE =
+  typeof document !== "undefined"
+    ? document.createElement("audio")
+    : null;
+
+const canPlay = (probe, mime) => {
+  if (!probe?.canPlayType) return false;
+
+  try {
+    return Boolean(probe.canPlayType(mime));
+  } catch {
+    return false;
+  }
+};
+
+export const browserCodecSupport = {
+  h264Aac:
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="avc1.42E01E, mp4a.40.2"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="avc1.4D401F, mp4a.40.2"'
+    ),
+
+  hevcAac:
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="hev1.1.6.L93.B0, mp4a.40.2"'
+    ),
+
+  av1Aac: canPlay(
+    VIDEO_PROBE,
+    'video/mp4; codecs="av01.0.05M.08, mp4a.40.2"'
+  ),
+
+  vp8Vorbis:
+    canPlay(
+      VIDEO_PROBE,
+      'video/webm; codecs="vp8, vorbis"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/webm; codecs="vp8, opus"'
+    ),
+
+  vp9Opus:
+    canPlay(
+      VIDEO_PROBE,
+      'video/webm; codecs="vp9, opus"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/webm; codecs="vp09.00.10.08, opus"'
+    ),
+
+  aac:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="mp4a.40.2"'
+    ) ||
+    canPlay(
+      AUDIO_PROBE,
+      "audio/aac"
+    ),
+
+  mp3: canPlay(
+    AUDIO_PROBE,
+    "audio/mpeg"
+  ),
+
+  opus:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/webm; codecs="opus"'
+    ) ||
+    canPlay(
+      AUDIO_PROBE,
+      'audio/ogg; codecs="opus"'
+    ),
+
+  flac:
+    canPlay(
+      AUDIO_PROBE,
+      "audio/flac"
+    ) ||
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="fLaC"'
+    ),
+
+  vorbis:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/ogg; codecs="vorbis"'
+    ) ||
+    canPlay(
+      AUDIO_PROBE,
+      'audio/webm; codecs="vorbis"'
+    ),
+
+  alac:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="alac"'
+    ),
+
+  pcm:
+    canPlay(
+      AUDIO_PROBE,
+      "audio/wav"
+    ) ||
+    canPlay(
+      AUDIO_PROBE,
+      'audio/wav; codecs="1"'
+    ),
+
+  ac3:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="ac-3"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="avc1.4D401F, ac-3"'
+    ),
+
+  eac3:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="ec-3"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="avc1.4D401F, ec-3"'
+    ),
+
+  ac4:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="ac-4"'
+    ) ||
+    canPlay(
+      VIDEO_PROBE,
+      'video/mp4; codecs="avc1.4D401F, ac-4"'
+    ),
+
+  xheAac:
+    canPlay(
+      AUDIO_PROBE,
+      'audio/mp4; codecs="mp4a.40.42"'
+    ),
+
+  // Additional video codecs.
+  mjpeg:
+    canPlay(VIDEO_PROBE, "video/mjpeg") ||
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="jpeg"'),
+  prores:
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="apcn"') ||
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="apch"') ||
+    canPlay(VIDEO_PROBE, "video/quicktime"),
+  dnxhd:
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="avdn"'),
+  mpeg1:
+    canPlay(VIDEO_PROBE, "video/mpeg"),
+  vvc:
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="vvc1"'),
+  avs:
+    canPlay(VIDEO_PROBE, 'video/mp4; codecs="avs1"'),
+  dirac:
+    canPlay(VIDEO_PROBE, "video/dirac"),
+
+  // Additional audio codecs.
+  wma:
+    canPlay(AUDIO_PROBE, "audio/x-ms-wma") ||
+    canPlay(AUDIO_PROBE, "audio/wma"),
+  amr:
+    canPlay(AUDIO_PROBE, "audio/amr") ||
+    canPlay(AUDIO_PROBE, "audio/amr-wb"),
+  adpcm:
+    canPlay(AUDIO_PROBE, 'audio/wav; codecs="2"') ||
+    canPlay(AUDIO_PROBE, 'audio/wav; codecs="17"') ||
+    canPlay(AUDIO_PROBE, "audio/adpcm"),
+  ape:
+    canPlay(AUDIO_PROBE, "audio/x-ape") ||
+    canPlay(AUDIO_PROBE, "audio/ape"),
+  wavpack:
+    canPlay(AUDIO_PROBE, "audio/x-wavpack") ||
+    canPlay(AUDIO_PROBE, "audio/wavpack"),
+  tta:
+    canPlay(AUDIO_PROBE, "audio/x-tta") ||
+    canPlay(AUDIO_PROBE, "audio/tta"),
+  speex:
+    canPlay(AUDIO_PROBE, 'audio/ogg; codecs="speex"'),
+  atrac:
+    canPlay(AUDIO_PROBE, "audio/x-sonyatrac3") ||
+    canPlay(AUDIO_PROBE, "audio/atrac3"),
+  dsd:
+    canPlay(AUDIO_PROBE, "audio/x-dsd") ||
+    canPlay(AUDIO_PROBE, "audio/dsf") ||
+    canPlay(AUDIO_PROBE, "audio/dff"),
+  shorten:
+    canPlay(AUDIO_PROBE, "audio/x-shorten") ||
+    canPlay(AUDIO_PROBE, "audio/shorten"),
+  tak:
+    canPlay(AUDIO_PROBE, "audio/x-tak") ||
+    canPlay(AUDIO_PROBE, "audio/tak"),
+  musepack:
+    canPlay(AUDIO_PROBE, "audio/x-musepack") ||
+    canPlay(AUDIO_PROBE, "audio/musepack"),
+  g711:
+    canPlay(AUDIO_PROBE, 'audio/wav; codecs="6"') ||
+    canPlay(AUDIO_PROBE, 'audio/wav; codecs="7"') ||
+    canPlay(AUDIO_PROBE, "audio/g711"),
+};
+
+const NATIVE_VIDEO_MIME = {
+  h264: ["video/avc"],
+  hevc: ["video/hevc"],
+  av1: ["video/av01", "video/av1"],
+  vp9: ["video/x-vnd.on2.vp9"],
+  vp8: ["video/x-vnd.on2.vp8"],
+  h263: ["video/3gpp"],
+  mpeg2: ["video/mpeg2"],
+  mpeg4: ["video/mp4v-es"],
+  vc1: ["video/wvc1", "video/x-ms-wmv"],
+  prores: ["video/quicktime", 'video/mp4; codecs="apcn"', 'video/mp4; codecs="apch"'],
+  dnxhd: ['video/mp4; codecs="avdn"'],
+  mjpeg: ["video/mjpeg"],
+  mpeg1: ["video/mpeg"],
+  vvc: ['video/mp4; codecs="vvc1"'],
+  avs: ['video/mp4; codecs="avs1"'],
+  dirac: ["video/dirac"],
+};
+
+const NATIVE_AUDIO_MIME = {
+  aac: ["audio/mp4a-latm"],
+  xheaac: ["audio/mp4a-latm"],
+  ac3: ["audio/ac3", "audio/ac-3"],
+  eac3: ["audio/eac3", "audio/e-ac-3", "audio/eac3-joc"],
+  ac4: ["audio/ac4"],
+  dts: ["audio/vnd.dts", "audio/vnd.dts.hd"],
+  truehd: ["audio/true-hd"],
+  opus: ["audio/opus"],
+  flac: ["audio/flac"],
+  vorbis: ["audio/vorbis"],
+  mp3: ["audio/mpeg"],
+  mp2: ["audio/mpeg-l2"],
+  pcm: ["audio/raw"],
+  wma: ["audio/x-ms-wma", "audio/wma"],
+  amr: ["audio/amr", "audio/amr-wb"],
+  adpcm: ["audio/adpcm"],
+  ape: ["audio/x-ape", "audio/ape"],
+  wavpack: ["audio/x-wavpack", "audio/wavpack"],
+  tta: ["audio/x-tta"],
+  speex: ["audio/speex"],
+  atrac: ["audio/x-sonyatrac3", "audio/atrac3"],
+  dsd: ["audio/x-dsd", "audio/dsf"],
+  shorten: ["audio/x-shorten"],
+  tak: ["audio/x-tak"],
+  musepack: ["audio/x-musepack", "audio/musepack"],
+  g711: ["audio/g711"],
+};
+
+const nativeCodecSupportFor = (deviceProfile, kind, codec) => {
+  if (!deviceProfile?.nativePlayerAvailable || !codec) return null;
+
+  const available = Array.isArray(deviceProfile?.nativeCodecSupport?.[kind])
+    ? deviceProfile.nativeCodecSupport[kind].map((value) => String(value).toLowerCase())
+    : [];
+
+  if (available.length === 0) return null;
+
+  const expected =
+    kind === "video"
+      ? NATIVE_VIDEO_MIME[codec] || []
+      : NATIVE_AUDIO_MIME[codec] || [];
+
+  if (expected.length === 0) return null;
+
+  return expected.some((mime) => available.includes(mime.toLowerCase()));
+};
+
+export const getPlaybackDeviceProfile = () => {
+  const userAgent =
+    typeof navigator !== "undefined"
+      ? String(navigator.userAgent || "")
+      : "";
+
+  const androidMobile = isAndroidMobileRuntime();
+  const nativeAppInfo = nativeFireTvAppInfo();
+  const nativePlatform = String(nativeAppInfo?.platform || "")
+    .trim()
+    .toLowerCase();
+
+  let nativePlayerAvailable = false;
+
+  if (typeof window !== "undefined") {
+    try {
+      const nativeBridge = window.MediaGodNative;
+      nativePlayerAvailable = Boolean(
+        nativeBridge &&
+          typeof nativeBridge.play === "function" &&
+          (typeof nativeBridge.isAvailable !== "function" || nativeBridge.isAvailable() !== false)
+      );
+    } catch {
+      nativePlayerAvailable = false;
+    }
+  }
+
+  const nativeAndroidMobile =
+    nativePlayerAvailable &&
+    (androidMobile || nativePlatform === "android-mobile");
+
+  const nativeFireTv =
+    nativePlayerAvailable &&
+    !nativeAndroidMobile &&
+    (nativePlatform === "fire-tv" || isFireTvRuntime());
+
+  const fireTv =
+    !androidMobile &&
+    !nativeAndroidMobile &&
+    (nativeFireTv || isFireTvRuntime());
+
+  const nativeCodecSupport =
+    nativePlayerAvailable
+      ? nativeFireTvCodecInfo() || { video: [], audio: [] }
+      : { video: [], audio: [] };
+
+  const width =
+    typeof window !== "undefined"
+      ? Math.max(
+          Number(window.innerWidth || 0),
+          Number(window.screen?.width || 0)
+        )
+      : 0;
+
+  const height =
+    typeof window !== "undefined"
+      ? Math.max(
+          Number(window.innerHeight || 0),
+          Number(window.screen?.height || 0)
+        )
+      : 0;
+
+  const pixelRatio =
+    typeof window !== "undefined"
+      ? Number(window.devicePixelRatio || 1)
+      : 1;
+
+  const physicalLongEdge =
+    Math.max(width, height) *
+    pixelRatio;
+
+  /*
+   * Do not cap Fire TV at 1080p here.
+   *
+   * Some 4K Fire TV WebViews report a 1920-wide CSS viewport
+   * even though the device can decode/output 4K.
+   *
+   * LiveVideo/HLS still makes the final decoder decision.
+   */
+  const fourKAllowed =
+    fireTv ||
+    physicalLongEdge >= 3000;
+
+  return {
+    name:
+      fireTv
+        ? "Fire TV"
+        : nativeAndroidMobile || androidMobile
+          ? "Android Mobile"
+          : "Browser",
+
+    fireTv,
+    isFireTv: fireTv,
+    nativeFireTv,
+    nativeAndroidMobile,
+    nativePlayerAvailable,
+    mobileApp: androidMobile || nativeAndroidMobile,
+    nativePlatform,
+    nativeCodecSupport,
+    fourKAllowed,
+
+    width,
+    height,
+    pixelRatio,
+
+    codecSupport:
+      browserCodecSupport,
+  };
+};
+
+export const getSourceUrl = (item) =>
+  item?.src ||
+  item?.url ||
+  item?.magnet ||
+  item?.magnetLink ||
+  "";
+
+export const sourceText = (
+  item,
+  extraText = ""
+) =>
+  [
+    item?.label,
+    item?.name,
+    item?.title,
+    item?.filename,
+    item?.file,
+    item?.path,
+    item?.description,
+    item?.quality,
+    item?.resolution,
+    item?.audio,
+    item?.language,
+    item?.languages,
+    item?.audioLanguage,
+    item?.audio_language,
+    item?.audioLanguages,
+    item?.audio_languages,
+    item?.audioCodec,
+    item?.audio_codec,
+    item?.codec,
+    item?.videoCodec,
+    item?.video_codec,
+    item?.behaviorHints?.filename,
+    item?.behaviorHints?.videoHash,
+    extraText,
+    getSourceUrl(item),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+const has = (
+  text,
+  regex
+) =>
+  regex.test(text);
+
+const ENGLISH_LANGUAGE_RE =
+  /(?:^|[\s._\-\[\](){}|+,])(?:eng|en|english)(?=$|[\s._\-\[\](){}|+,])/i;
+
+// AIOStreams and a few Stremio-compatible addons use decorative small-cap
+// language markers (for example "⛿  ᴇɴ" and "⛿  ᴍᴜʟᴛɪ"). Treat those as
+// first-class language metadata instead of leaving them as unknown.
+const DECORATIVE_ENGLISH_LANGUAGE_RE =
+  /(?:⛿\s*)?(?:ᴇɴ|ᴇɴɢ|ᴇɴɢʟɪꜱʜ)(?=$|[\s._\-\[\](){}|+,])/i;
+
+const MULTI_LANGUAGE_RE =
+  /\b(?:multi(?:[ ._-]?audio)?|dual(?:[ ._-]?audio)?|multi(?:[ ._-]?lang(?:uage)?)?)\b|(?:⛿\s*)?ᴍᴜʟᴛɪ/i;
+
+const FOREIGN_LANGUAGE_RE =
+  /(?:^|[\s._\-\[\](){}|+,])(?:rus|russian|ukr|ukrainian|hin|hindi|tam|tamil|tel|telugu|spa|spanish|es|fre|fra|french|fr|ger|deu|german|de|ita|italian|it|por|portuguese|pt|pol|polish|pl|tur|turkish|tr|ara|arabic|ar|jpn|japanese|ja|kor|korean|ko|chi|zho|chinese|mandarin|cantonese|zh|dut|nld|dutch|nl|swe|swedish|sv|nor|norwegian|no|dan|danish|da|fin|finnish|fi|cze|ces|czech|cs|slo|slk|slovak|sk|hun|hungarian|hu|rum|ron|romanian|ro|bul|bulgarian|bg|gre|ell|greek|el|heb|hebrew|he|ind|indonesian|id|tha|thai|th|vie|vietnamese|vi)(?=$|[\s._\-\[\](){}|+,])/i;
+
+export const detectLanguagePreference = (
+  item,
+  extraText = ""
+) => {
+  const text =
+    sourceText(
+      item,
+      extraText
+    );
+
+  const english =
+    ENGLISH_LANGUAGE_RE.test(
+      text
+    ) ||
+    DECORATIVE_ENGLISH_LANGUAGE_RE.test(
+      text
+    );
+
+  const multi =
+    MULTI_LANGUAGE_RE.test(
+      text
+    );
+
+  const foreign =
+    FOREIGN_LANGUAGE_RE.test(
+      text
+    );
+
+  if (english) {
+    return "english";
+  }
+
+  if (multi) {
+    return "multi";
+  }
+
+  if (foreign) {
+    return "foreign";
+  }
+
+  return "unknown";
+};
+
+export const detectStreamTraits = (
+  item,
+  extraText = ""
+) => {
+  const text =
+    sourceText(
+      item,
+      extraText
+    );
+
+  const url =
+    String(
+      getSourceUrl(item) ||
+        ""
+    ).toLowerCase();
+
+  const joined =
+    `${url} ${text}`;
+
+  const traits = {
+    text,
+
+    container:
+      "",
+
+    video:
+      "",
+
+    audio:
+      "",
+
+    resolution:
+      0,
+
+    hdr:
+      false,
+
+    dolbyVision:
+      false,
+
+    atmos:
+      false,
+
+    audioRisk:
+      false,
+
+    language:
+      "unknown",
+  };
+
+  // RD's inspected track is stronger evidence than a release name with several
+  // codec tags. Use the English main track when it is known, otherwise leave
+  // the codec from the title as a hint below.
+  const mediaInfo = item?.mediaInfo || item?.media_info;
+  const inspectedTracks = mediaInfo?.audio_tracks || mediaInfo?.audioTracks;
+  const mainTrack = Array.isArray(inspectedTracks)
+    ? inspectedTracks.find((track) =>
+        /^(en|eng|english)$/i.test(String(track?.language_iso || track?.language || "")) &&
+        !/commentary|description|descriptive/i.test(String(track?.title || track?.name || ""))
+      ) || inspectedTracks[0]
+    : null;
+
+  traits.language =
+    detectLanguagePreference(
+      item,
+      extraText
+    );
+
+  if (
+    has(
+      joined,
+      /\.m3u8(?:[?#\s]|$)|\bhls\b/i
+    )
+  ) {
+    traits.container =
+      "hls";
+  } else if (
+    has(
+      joined,
+      /\.mpd(?:[?#\s]|$)|\bmpeg[ -]?dash\b|\bdash\b/i
+    )
+  ) {
+    traits.container =
+      "dash";
+  } else if (
+    has(
+      joined,
+      /\.m2ts(?:[?#\s]|$)|\bm2ts\b/i
+    )
+  ) {
+    traits.container =
+      "m2ts";
+  } else if (
+    has(
+      joined,
+      /\.mts(?:[?#\s]|$)|\bmts\b/i
+    )
+  ) {
+    traits.container =
+      "mts";
+  } else if (
+    has(
+      joined,
+      /\.ts(?:[?#\s]|$)|\bmpeg[ -]?ts\b|\btransport stream\b/i
+    )
+  ) {
+    traits.container =
+      "ts";
+  } else if (
+    has(
+      joined,
+      /\.flv(?:[?#\s]|$)|\bflv\b/i
+    )
+  ) {
+    traits.container =
+      "flv";
+  } else if (
+    has(
+      joined,
+      /\.mp4(?:[?#\s]|$)|\bmp4\b/i
+    )
+  ) {
+    traits.container =
+      "mp4";
+  } else if (
+    has(
+      joined,
+      /\.m4v(?:[?#\s]|$)|\bm4v\b/i
+    )
+  ) {
+    traits.container =
+      "m4v";
+  } else if (
+    has(
+      joined,
+      /\.webm(?:[?#\s]|$)|\bwebm\b/i
+    )
+  ) {
+    traits.container =
+      "webm";
+  } else if (
+    has(
+      joined,
+      /\.mkv(?:[?#\s]|$)|\bmkv\b|\bmatroska\b/i
+    )
+  ) {
+    traits.container =
+      "mkv";
+  } else if (
+    has(
+      joined,
+      /\.avi(?:[?#\s]|$)|\bavi\b/i
+    )
+  ) {
+    traits.container =
+      "avi";
+  } else if (
+    has(
+      joined,
+      /\.mov(?:[?#\s]|$)|\bmov\b/i
+    )
+  ) {
+    traits.container =
+      "mov";
+  } else if (
+    has(
+      joined,
+      /\.vob(?:[?#\s]|$)|\bvob\b/i
+    )
+  ) {
+    traits.container = "vob";
+  } else if (
+    has(
+      joined,
+      /\.ogv(?:[?#\s]|$)|\bogv\b|\bogg video\b/i
+    )
+  ) {
+    traits.container = "ogv";
+  } else if (
+    has(
+      joined,
+      /\.(?:3gp|3g2)(?:[?#\s]|$)|\b3gp\b|\b3g2\b/i
+    )
+  ) {
+    traits.container = "3gp";
+  } else if (
+    has(
+      joined,
+      /\.wmv(?:[?#\s]|$)|\bwmv\b/i
+    )
+  ) {
+    traits.container = "wmv";
+  } else if (
+    has(
+      joined,
+      /\.asf(?:[?#\s]|$)|\basf\b/i
+    )
+  ) {
+    traits.container = "asf";
+  } else if (
+    has(
+      joined,
+      /\.f4v(?:[?#\s]|$)|\bf4v\b/i
+    )
+  ) {
+    traits.container = "f4v";
+  } else if (
+    has(
+      joined,
+      /\.mxf(?:[?#\s]|$)|\bmxf\b/i
+    )
+  ) {
+    traits.container = "mxf";
+  } else if (
+    has(
+      joined,
+      /\.divx(?:[?#\s]|$)|\bdivx\b/i
+    )
+  ) {
+    traits.container = "divx";
+  }
+
+  if (
+    has(
+      text,
+      /\b(?:h\.?264|avc1?|x264)\b/i
+    )
+  ) {
+    traits.video =
+      "h264";
+  } else if (
+    has(
+      text,
+      /\b(?:h\.?265|hevc|hev1|hvc1|x265)\b/i
+    )
+  ) {
+    traits.video =
+      "hevc";
+  } else if (
+    has(
+      text,
+      /\b(?:av1|av01)\b/i
+    )
+  ) {
+    traits.video =
+      "av1";
+  } else if (
+    has(
+      text,
+      /\b(?:vp9|vp09)\b/i
+    )
+  ) {
+    traits.video =
+      "vp9";
+  } else if (
+    has(
+      text,
+      /\b(?:vp8|vp08)\b/i
+    )
+  ) {
+    traits.video =
+      "vp8";
+  } else if (
+    has(
+      text,
+      /\bh\.?263\b/i
+    )
+  ) {
+    traits.video =
+      "h263";
+  } else if (
+    has(
+      text,
+      /\bmpeg[ -]?2\b/i
+    )
+  ) {
+    traits.video =
+      "mpeg2";
+  } else if (
+    has(
+      text,
+      /\b(?:mpeg[ -]?4|mp4v|xvid|divx)\b/i
+    )
+  ) {
+    traits.video = "mpeg4";
+  } else if (
+    has(
+      text,
+      /\b(?:vc-?1|wmv3|wvc1)\b/i
+    )
+  ) {
+    traits.video = "vc1";
+  } else if (
+    has(
+      text,
+      /\btheora\b/i
+    )
+  ) {
+    traits.video = "theora";
+  } else if (
+    has(
+      text,
+      /\bprores\b|\bapcn\b|\bapch\b|\bapco\b|\bap4h\b/i
+    )
+  ) {
+    traits.video = "prores";
+  } else if (
+    has(
+      text,
+      /\b(?:dnxhd|dnxhr|dnx[ ._-]?hd|dnx[ ._-]?hr|avdn)\b/i
+    )
+  ) {
+    traits.video = "dnxhd";
+  } else if (
+    has(
+      text,
+      /\b(?:mjpeg|mjpg|motion[ ._-]?jpeg)\b/i
+    )
+  ) {
+    traits.video = "mjpeg";
+  } else if (
+    has(
+      text,
+      /\bmpeg[ ._-]?1\b(?!.*\blayer\b)/i
+    )
+  ) {
+    traits.video = "mpeg1";
+  } else if (
+    has(
+      text,
+      /\b(?:h\.?266|vvc|vvc1|vvi1)\b/i
+    )
+  ) {
+    traits.video = "vvc";
+  } else if (
+    has(
+      text,
+      /\bavs(?:\+|2|3)?\b/i
+    )
+  ) {
+    traits.video = "avs";
+  } else if (
+    has(
+      text,
+      /\bdirac\b/i
+    )
+  ) {
+    traits.video = "dirac";
+  }
+
+  /*
+   * Audio detection order matters.
+   *
+   * TrueHD and DTS variants are checked before generic Dolby
+   * labels because release names often contain several tags.
+   */
+  if (
+    has(
+      text,
+      /\b(?:dolby[ ._-]?mat|mat[- ._-]?(?:1|2))\b/i
+    )
+  ) {
+    traits.audio = "eac3";
+  } else if (
+    has(
+      text,
+      /\b(?:ac-?4|ac4)\b/i
+    )
+  ) {
+    traits.audio = "ac4";
+  } else if (
+    has(
+      text,
+      /\b(?:xhe-?aac|xheaac|usac|mpeg-?h[ ._-]?3d[ ._-]?audio)\b/i
+    )
+  ) {
+    traits.audio = "xheaac";
+  } else if (
+    has(
+      text,
+      /\b(?:true[ ._-]?hd|true-hd|mlp)(?:[ ._-]?(?:atmos|7\.1|5\.1))?\b/i
+    )
+  ) {
+    traits.audio =
+      "truehd";
+
+    traits.audioRisk =
+      true;
+  } else if (
+    has(
+      text,
+      /\b(?:dts(?:[ ._-]?hd)?(?:[ ._-]?(?:ma|hra))?|dts[ ._-]?x|dca)(?:[ ._-]?(?:7\.1|5\.1))?\b/i
+    )
+  ) {
+    traits.audio =
+      "dts";
+
+    traits.audioRisk =
+      true;
+  } else if (
+    has(
+      text,
+      /\b(?:e-?ac-?3|eac3|ec-?3|ddp|dd\+|dolby[ ._-]?digital[ ._-]?plus)(?:[ ._-]?(?:atmos|7\.1|5\.1|2\.0))?\b/i
+    )
+  ) {
+    traits.audio =
+      "eac3";
+  } else if (
+    has(
+      text,
+      /\b(?:ac-?3|ac3|dolby[ ._-]?digital|dd)(?:[ ._-]?(?:7\.1|5\.1|2\.0))?\b/i
+    )
+  ) {
+    traits.audio =
+      "ac3";
+  } else if (
+    has(
+      text,
+      /\b(?:eaac\+?|aac(?:[ ._-]?(?:lc|he|eld|2\.0|5\.1))?|heaac|he-aac|mp4a)\b/i
+    )
+  ) {
+    traits.audio =
+      "aac";
+  } else if (
+    has(
+      text,
+      /\bopus\b/i
+    )
+  ) {
+    traits.audio =
+      "opus";
+  } else if (
+    has(
+      text,
+      /\bflac\b/i
+    )
+  ) {
+    traits.audio =
+      "flac";
+  } else if (
+    has(
+      text,
+      /\b(?:alac|apple lossless)\b/i
+    )
+  ) {
+    traits.audio = "alac";
+  } else if (
+    has(
+      text,
+      /\bvorbis\b/i
+    )
+  ) {
+    traits.audio = "vorbis";
+  } else if (
+    has(
+      text,
+      /\b(?:pcm|lpcm|s16le|s24le|wav)\b/i
+    )
+  ) {
+    traits.audio = "pcm";
+  } else if (
+    has(
+      text,
+      /\b(?:mp2|mpeg[ -]?1 layer[ -]?2)\b/i
+    )
+  ) {
+    traits.audio = "mp2";
+  } else if (
+    has(
+      text,
+      /\bmp3\b|\bmpeg audio\b/i
+    )
+  ) {
+    traits.audio =
+      "mp3";
+  } else if (
+    has(
+      text,
+      /\b(?:wma|windows[ ._-]?media[ ._-]?audio)\b/i
+    )
+  ) {
+    traits.audio = "wma";
+  } else if (
+    has(
+      text,
+      /\b(?:amr(?:[ ._-]?(?:wb|nb))?|adaptive[ ._-]?multi[ ._-]?rate)\b/i
+    )
+  ) {
+    traits.audio = "amr";
+  } else if (
+    has(
+      text,
+      /\b(?:adpcm|ima[ ._-]?adpcm|ms[ ._-]?adpcm|g\.?726|g726)\b/i
+    )
+  ) {
+    traits.audio = "adpcm";
+  } else if (
+    has(
+      text,
+      /\b(?:ape|monkey'?s[ ._-]?audio)\b/i
+    )
+  ) {
+    traits.audio = "ape";
+  } else if (
+    has(
+      text,
+      /\b(?:wavpack|wv)\b/i
+    )
+  ) {
+    traits.audio = "wavpack";
+  } else if (
+    has(
+      text,
+      /\b(?:tta|trueaudio)\b/i
+    )
+  ) {
+    traits.audio = "tta";
+  } else if (
+    has(
+      text,
+      /\bspeex\b/i
+    )
+  ) {
+    traits.audio = "speex";
+  } else if (
+    has(
+      text,
+      /\b(?:atrac(?:[ ._-]?(?:1|3|9|p|p3))?|at3|atrac3plus)\b/i
+    )
+  ) {
+    traits.audio = "atrac";
+  } else if (
+    has(
+      text,
+      /\b(?:dsd(?:64|128)?|dsf|dff)\b/i
+    )
+  ) {
+    traits.audio = "dsd";
+  } else if (
+    has(
+      text,
+      /\bshorten\b/i
+    )
+  ) {
+    traits.audio = "shorten";
+  } else if (
+    has(
+      text,
+      /\btak\b/i
+    )
+  ) {
+    traits.audio = "tak";
+  } else if (
+    has(
+      text,
+      /\b(?:mpc|musepack)\b/i
+    )
+  ) {
+    traits.audio = "musepack";
+  } else if (
+    has(
+      text,
+      /\b(?:g\.?711|g711)\b/i
+    )
+  ) {
+    traits.audio = "g711";
+  }
+
+  traits.atmos =
+    has(
+      text,
+      /\b(?:atmos|dolby[ ._-]?mat|mat[- ._-]?(?:1|2))\b/i
+    );
+
+  if (mainTrack?.codec) {
+    const trackCodec = detectStreamTraits({ audioCodec: mainTrack.codec }).audio;
+    if (trackCodec) {
+      traits.audio = trackCodec;
+      traits.audioRisk = trackCodec === "dts" || trackCodec === "truehd";
+      traits.atmos = /joc|atmos/i.test(
+        [mainTrack.codec, mainTrack.profile, mainTrack.title].filter(Boolean).join(" ")
+      );
+    }
+  }
+  traits.audioChannels = Number(
+    mainTrack?.channels || mainTrack?.channel_count ||
+    item?.audioChannels || item?.audioChannelCount || 0
+  );
+  traits.audioSampleRate = Number(
+    mainTrack?.sample_rate || mainTrack?.sampleRate || item?.audioSampleRate || 0
+  );
+  traits.audioProfile = String(mainTrack?.profile || item?.audioProfile || "").toLowerCase();
+
+  traits.dolbyVision =
+    has(
+      text,
+      /\b(?:dolby vision|dovi|dv)\b/i
+    );
+
+  traits.hdr =
+    traits.dolbyVision ||
+    has(
+      text,
+      /\b(?:hdr10\+?|hdr|hlg)\b/i
+    );
+
+  const explicitResolution =
+    Number(
+      item?.resolution ||
+        item?.height ||
+        0
+    );
+
+  if (
+    Number.isFinite(
+      explicitResolution
+    ) &&
+    explicitResolution >=
+      240
+  ) {
+    traits.resolution =
+      explicitResolution;
+  } else {
+    const resolutionMatch =
+      text.match(
+        /\b(4320|2160|1440|1080|720|576|480|360)p\b/i
+      );
+
+    if (
+      resolutionMatch
+    ) {
+      traits.resolution =
+        Number(
+          resolutionMatch[
+            1
+          ]
+        );
+    } else if (
+      has(
+        text,
+        /\b8k\b/i
+      )
+    ) {
+      traits.resolution =
+        4320;
+    } else if (
+      has(
+        text,
+        /\b(?:4k|uhd)\b/i
+      )
+    ) {
+      traits.resolution =
+        2160;
+    }
+  }
+
+  return traits;
+};
+
+const audioSupport = (
+  audio,
+  deviceProfile = null
+) => {
+  if (!audio) {
+    return null;
+  }
+
+  const nativeSupport =
+    nativeCodecSupportFor(
+      deviceProfile,
+      "audio",
+      audio
+    );
+
+  if (nativeSupport === true || nativeSupport === false) {
+    return nativeSupport;
+  }
+
+  if (
+    audio ===
+    "aac"
+  ) {
+    return browserCodecSupport.aac;
+  }
+
+  if (
+    audio ===
+    "mp3"
+  ) {
+    return browserCodecSupport.mp3;
+  }
+
+  if (
+    audio ===
+    "opus"
+  ) {
+    return browserCodecSupport.opus;
+  }
+
+  if (
+    audio ===
+    "flac"
+  ) {
+    return browserCodecSupport.flac;
+  }
+
+  if (audio === "vorbis") {
+    return browserCodecSupport.vorbis;
+  }
+
+  if (audio === "alac") {
+    return browserCodecSupport.alac;
+  }
+
+  if (audio === "pcm") {
+    return browserCodecSupport.pcm;
+  }
+
+  if (audio === "mp2") {
+    return deviceProfile?.fireTv ? null : false;
+  }
+
+  if (
+    audio ===
+    "ac3"
+  ) {
+    if (
+      browserCodecSupport.ac3
+    ) {
+      return true;
+    }
+
+    /*
+     * Fire TV WebView codec reporting is not always accurate.
+     * Treat AC-3 as uncertain rather than an automatic rejection.
+     */
+    return deviceProfile?.fireTv
+      ? null
+      : false;
+  }
+
+  if (
+    audio ===
+    "eac3"
+  ) {
+    if (
+      browserCodecSupport.eac3
+    ) {
+      return true;
+    }
+
+    return deviceProfile?.fireTv
+      ? null
+      : false;
+  }
+
+  if (audio === "ac4") {
+    if (browserCodecSupport.ac4) {
+      return true;
+    }
+
+    return deviceProfile?.nativePlayerAvailable ? null : false;
+  }
+
+  if (audio === "xheaac") {
+    if (browserCodecSupport.xheAac || browserCodecSupport.aac) {
+      return true;
+    }
+
+    return deviceProfile?.nativePlayerAvailable ? null : false;
+  }
+
+  if (
+    audio ===
+      "dts" ||
+    audio ===
+      "truehd"
+  ) {
+    /*
+     * Current Fire TV hardware varies by model/receiver. Media3 can use the
+     * device decoder or HDMI passthrough when available, so the dedicated
+     * native player gets a real attempt instead of being rejected from a
+     * browser codec probe. Web/mobile browsers still treat these as unsafe.
+     */
+    return deviceProfile?.nativePlayerAvailable ? null : false;
+  }
+
+  if (
+    audio === "wma" ||
+    audio === "amr" ||
+    audio === "adpcm" ||
+    audio === "ape" ||
+    audio === "wavpack" ||
+    audio === "tta" ||
+    audio === "speex" ||
+    audio === "atrac" ||
+    audio === "dsd" ||
+    audio === "shorten" ||
+    audio === "tak" ||
+    audio === "musepack" ||
+    audio === "g711"
+  ) {
+    const probed = browserCodecSupport[audio];
+    if (probed) return true;
+
+    /*
+     * These are uncommon, often hardware-specific codecs. A browser codec
+     * probe almost never reports them, but native Fire TV/Android decoders
+     * and passthrough paths frequently can. Leave them uncertain for the
+     * native player instead of rejecting them outright.
+     */
+    return deviceProfile?.nativePlayerAvailable ? null : false;
+  }
+
+  return null;
+};
+
+const sourceAudioSupport = (traits, deviceProfile) => {
+  const support = audioSupport(traits.audio, deviceProfile);
+  if (support !== true || !deviceProfile?.nativePlayerAvailable) return support;
+
+  const mimeTypes = NATIVE_AUDIO_MIME[traits.audio] || [];
+  const capabilities = deviceProfile.nativeCodecSupport?.audioCapabilities || {};
+  const matching = mimeTypes.map((mime) => capabilities[mime]).filter(Boolean);
+  const channels = Number(traits.audioChannels || 0);
+  const sampleRate = Number(traits.audioSampleRate || 0);
+  if (matching.length && (channels > 0 || sampleRate > 0) &&
+      !matching.some((cap) =>
+        (channels <= 0 || channels <= Number(cap.maxChannels || 0)) &&
+        (sampleRate <= 0 || !Array.isArray(cap.sampleRates) ||
+          cap.sampleRates.length === 0 || cap.sampleRates.includes(sampleRate))
+      )) return false;
+
+  // Advertised MIME support alone does not prove that a receiver can output a
+  // compressed home-theatre track. Leave these uncertain for manual choice.
+  if (traits.audio === "truehd" || traits.audio === "dts" ||
+      /joc|atmos/.test(traits.audioProfile) || traits.atmos) return null;
+  return true;
+};
+
+const videoSupport = (
+  video,
+  deviceProfile = null
+) => {
+  if (!video) return null;
+
+  const nativeSupport =
+    nativeCodecSupportFor(
+      deviceProfile,
+      "video",
+      video
+    );
+
+  if (nativeSupport === true || nativeSupport === false) {
+    return nativeSupport;
+  }
+
+  if (video === "h264") return true;
+  if (video === "hevc") {
+    return browserCodecSupport.hevcAac || deviceProfile?.fireTv
+      ? true
+      : false;
+  }
+  if (video === "av1") {
+    return browserCodecSupport.av1Aac || deviceProfile?.nativeFireTv
+      ? true
+      : false;
+  }
+  if (video === "vp9") {
+    return browserCodecSupport.vp9Opus || deviceProfile?.fireTv
+      ? true
+      : false;
+  }
+  if (video === "vp8") {
+    return browserCodecSupport.vp8Vorbis || deviceProfile?.nativeFireTv
+      ? true
+      : false;
+  }
+  if (video === "mpeg2" || video === "mpeg4" || video === "h263") {
+    return deviceProfile?.nativePlayerAvailable || deviceProfile?.fireTv
+      ? true
+      : null;
+  }
+  if (video === "vc1" || video === "theora") return null;
+
+  if (
+    video === "prores" ||
+    video === "dnxhd" ||
+    video === "mjpeg" ||
+    video === "mpeg1" ||
+    video === "vvc" ||
+    video === "avs" ||
+    video === "dirac"
+  ) {
+    const probed = browserCodecSupport[video];
+    if (probed) return true;
+
+    /*
+     * Professional and emerging codecs (ProRes, DNxHD, VVC, AVS, etc.) are
+     * rarely decoded by a stock browser WebView, but Fire TV/Android native
+     * decoders and external players often handle them. Keep them available
+     * for a real native attempt rather than rejecting from a browser probe.
+     */
+    return deviceProfile?.nativePlayerAvailable || deviceProfile?.fireTv
+      ? null
+      : false;
+  }
+
+  return null;
+};
+
+const qualityPreferenceTarget = (
+  preference
+) => {
+  const value =
+    String(
+      preference ||
+        "Auto"
+    ).toLowerCase();
+
+  if (
+    value ===
+      "4k" ||
+    value ===
+      "2160p"
+  ) {
+    return 2160;
+  }
+
+  const parsed =
+    Number.parseInt(
+      value,
+      10
+    );
+
+  return Number.isFinite(
+    parsed
+  )
+    ? parsed
+    : 0;
+};
+
+const qualityScore = (
+  resolution,
+  qualityPreference,
+  deviceProfile
+) => {
+  const value =
+    Number(
+      resolution ||
+        0
+    );
+
+  if (!value) {
+    return 0;
+  }
+
+  const target =
+    qualityPreferenceTarget(
+      qualityPreference
+    );
+
+  if (target) {
+    if (
+      value ===
+      target
+    ) {
+      return 9000;
+    }
+
+    if (
+      value <
+      target
+    ) {
+      return Math.max(
+        500,
+        6500 -
+          Math.abs(
+            target -
+              value
+          ) *
+            2
+      );
+    }
+
+    return 2500;
+  }
+
+  if (
+    value >=
+    4320
+  ) {
+    return deviceProfile?.fourKAllowed
+      ? 3200
+      : 300;
+  }
+
+  if (
+    value >=
+    2160
+  ) {
+    return deviceProfile?.fourKAllowed
+      ? 4200
+      : 800;
+  }
+
+  if (
+    value >=
+    1440
+  ) {
+    return 3300;
+  }
+
+  if (
+    value >=
+    1080
+  ) {
+    return 3000;
+  }
+
+  if (
+    value >=
+    720
+  ) {
+    return 1800;
+  }
+
+  return 800;
+};
+
+export const hasSevereAudioRisk = (
+  item,
+  extraText = ""
+) => {
+  const traits =
+    detectStreamTraits(
+      item,
+      extraText
+    );
+
+  return (
+    traits.audio ===
+      "dts" ||
+    traits.audio ===
+      "truehd" ||
+    traits.audioRisk ||
+    traits.atmos
+  );
+};
+
+export const hasSevereVideoRisk = (
+  item,
+  extraText = "",
+  deviceProfile = getPlaybackDeviceProfile()
+) => {
+  const traits = detectStreamTraits(item, extraText);
+
+  if (traits.resolution >= 4320) {
+    return true;
+  }
+
+  if (traits.container === "avi") {
+    return true;
+  }
+
+  if (
+    traits.video === "av1" &&
+    !deviceProfile?.fireTv &&
+    !browserCodecSupport.av1Aac
+  ) {
+    return true;
+  }
+
+  if (
+    traits.video === "vp9" &&
+    !deviceProfile?.fireTv &&
+    !browserCodecSupport.vp9Opus
+  ) {
+    return true;
+  }
+
+  if (
+    traits.video === "hevc" &&
+    !deviceProfile?.fireTv &&
+    !browserCodecSupport.hevcAac
+  ) {
+    return true;
+  }
+
+  if (
+    traits.container === "mkv" &&
+    traits.video === "av1" &&
+    !deviceProfile?.nativeFireTv &&
+    !browserCodecSupport.av1Aac
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+/*
+ * Coarse playback tier used for ordering, separate from the detailed score.
+ *
+ * 0 = audio and video are both positively compatible.
+ * 1 = no known incompatibility and at least one side is positively compatible.
+ * 2 = compatibility is mostly unknown.
+ * 3 = a known audio/video incompatibility exists.
+ *
+ * Nothing is hidden by this tier. It only controls ordering.
+ */
+export const sourcePlaybackCompatibilityTier = (
+  item,
+  extraText = "",
+  options = {}
+) => {
+  const deviceProfile =
+    options?.deviceProfile ||
+    getPlaybackDeviceProfile();
+  const traits = detectStreamTraits(item, extraText);
+
+  let video = videoSupport(traits.video, deviceProfile);
+  const audio = sourceAudioSupport(traits, deviceProfile);
+
+  if (hasSevereVideoRisk(item, extraText, deviceProfile)) {
+    video = false;
+  }
+
+  if (video === true && audio === true) return 0;
+  if (video === false || audio === false) return 3;
+  if (video === true || audio === true) return 1;
+  return 2;
+};
+
+/*
+ * True only when the browser's own <video> decoder (ignoring any native
+ * Fire TV/Android Media3 player) definitely cannot decode this source's
+ * video or audio. Used to proactively route undecodable codecs to native or
+ * skip to a decodable source instead of attempting and failing in the web
+ * player. A rescue/transcode flag on the resolved stream overrides this so
+ * a Real-Debrid-compatible rendition is never falsely rejected.
+ */
+export const isSourceWebUndecodable = (item, extraText = "") => {
+  const full = getPlaybackDeviceProfile();
+  const browserOnly = {
+    ...full,
+    fireTv: false,
+    isFireTv: false,
+    nativeFireTv: false,
+    nativeAndroidMobile: false,
+    nativePlayerAvailable: false,
+    nativeCodecSupport: { video: [], audio: [] },
+  };
+  return sourcePlaybackCompatibilityTier(item, extraText, {
+    deviceProfile: browserOnly,
+  }) === 3;
+};
+
+export const scoreSourceCompatibility = (
+  item,
+  extraText = "",
+  options = {}
+) => {
+  const traits =
+    detectStreamTraits(
+      item,
+      extraText
+    );
+
+  const type =
+    String(
+      item?.type ||
+        ""
+    ).toLowerCase();
+
+  const deviceProfile =
+    options?.deviceProfile ||
+    getPlaybackDeviceProfile();
+
+  const qualityPreference =
+    options?.qualityPreference ||
+    "Auto";
+
+  const nativeVideoSupport =
+    nativeCodecSupportFor(
+      deviceProfile,
+      "video",
+      traits.video
+    );
+
+  let score =
+    0;
+
+  if (
+    hasSevereVideoRisk(
+      item,
+      extraText,
+      deviceProfile
+    )
+  ) {
+    /*
+     * Keep unusual video formats available. Browser/WebView codec probes can
+     * under-report Fire TV hardware decode support, so this is a ranking hint,
+     * never a reason to effectively blacklist a torrent.
+     */
+    score -= 9000;
+  }
+
+  if (
+    item?.viaRealDebrid
+  ) {
+    score +=
+      1800;
+  }
+
+  if (
+    type ===
+      "provider" ||
+    type ===
+      "youtube" ||
+    type ===
+      "status"
+  ) {
+    score -=
+      30000;
+  }
+
+  /*
+   * English first.
+   *
+   * Multi-audio also gets priority because it commonly contains
+   * English and LiveVideo can switch tracks where supported.
+   */
+  if (
+    traits.language ===
+    "english"
+  ) {
+    score +=
+      15000;
+  } else if (
+    traits.language ===
+    "multi"
+  ) {
+    score +=
+      6500;
+  } else if (
+    traits.language ===
+    "foreign"
+  ) {
+    score -=
+      11000;
+  }
+
+  /*
+   * Browser-friendly containers first.
+   */
+  if (
+    traits.container ===
+    "hls"
+  ) {
+    score +=
+      7000;
+  } else if (
+    traits.container ===
+    "dash"
+  ) {
+    score += deviceProfile.nativeFireTv ? 7200 : 6000;
+  } else if (
+    traits.container ===
+      "mp4" ||
+    traits.container ===
+      "m4v"
+  ) {
+    score +=
+      6500;
+  } else if (
+    traits.container ===
+    "webm"
+  ) {
+    score +=
+      2200;
+  } else if (
+    [
+      "ts",
+      "m2ts",
+      "mts",
+      "flv",
+    ].includes(
+      traits.container
+    )
+  ) {
+    score +=
+      1200;
+  } else if (
+    traits.container ===
+    "mkv"
+  ) {
+    score += deviceProfile.nativeFireTv ? 2600 : -1200;
+  } else if (
+    traits.container ===
+    "avi"
+  ) {
+    score -=
+      4500;
+  } else if (
+    ["mov", "f4v", "3gp"].includes(traits.container)
+  ) {
+    score += 1800;
+  } else if (
+    traits.container === "ogv"
+  ) {
+    score += 700;
+  } else if (
+    ["vob", "wmv", "asf", "mxf", "divx"].includes(traits.container)
+  ) {
+    score -= 2200;
+  }
+
+  if (
+    traits.video ===
+    "h264"
+  ) {
+    score += nativeVideoSupport === true ? 7600 : 6500;
+  } else if (
+    traits.video ===
+    "hevc"
+  ) {
+    score +=
+      nativeVideoSupport === true
+        ? 5200
+        : browserCodecSupport.hevcAac || deviceProfile.fireTv
+          ? 3600
+          : -1400;
+  } else if (
+    traits.video ===
+    "av1"
+  ) {
+    score +=
+      nativeVideoSupport === true
+        ? 4600
+        : browserCodecSupport.av1Aac || deviceProfile.nativeFireTv
+          ? 3200
+          : -1600;
+  } else if (
+    traits.video ===
+    "vp9"
+  ) {
+    score +=
+      nativeVideoSupport === true
+        ? 4000
+        : browserCodecSupport.vp9Opus || deviceProfile.fireTv
+          ? 2200
+          : -800;
+  } else if (
+    traits.video === "vp8"
+  ) {
+    score +=
+      nativeVideoSupport === true
+        ? 3000
+        : browserCodecSupport.vp8Vorbis || deviceProfile.nativeFireTv
+          ? 1800
+          : -500;
+  } else if (
+    traits.video === "h263"
+  ) {
+    score += nativeVideoSupport === true ? 2000 : deviceProfile.nativeFireTv ? 900 : -300;
+  } else if (
+    traits.video === "mpeg2"
+  ) {
+    score +=
+      nativeVideoSupport === true
+        ? 3400
+        : deviceProfile.nativeFireTv
+          ? 2200
+          : deviceProfile.fireTv
+            ? 1400
+            : 300;
+  } else if (
+    traits.video === "mpeg4"
+  ) {
+    score += nativeVideoSupport === true ? 2200 : 900;
+  } else if (
+    traits.video === "vc1"
+  ) {
+    score += nativeVideoSupport === true ? 1200 : -1800;
+  } else if (
+    traits.video === "theora"
+  ) {
+    score += 200;
+  } else if (
+    traits.video === "prores" ||
+    traits.video === "dnxhd" ||
+    traits.video === "mjpeg" ||
+    traits.video === "mpeg1" ||
+    traits.video === "vvc" ||
+    traits.video === "avs" ||
+    traits.video === "dirac"
+  ) {
+    const supported = videoSupport(traits.video, deviceProfile);
+    score +=
+      supported === true
+        ? 2600
+        : supported === null
+          ? 900
+          : -1200;
+  }
+
+  /*
+   * AUDIO IS WEIGHTED ABOVE RESOLUTION.
+   *
+   * A 1080p AAC source is better than a 4K DTS/TrueHD source
+   * that produces a picture with no sound.
+   *
+   * A 4K source with safe audio still receives the 4K quality
+   * bonus below and remains preferred.
+   */
+  if (
+    traits.audio ===
+    "aac"
+  ) {
+    score +=
+      12000;
+  } else if (
+    traits.audio ===
+    "mp3"
+  ) {
+    score +=
+      7000;
+  } else if (
+    traits.audio ===
+    "opus"
+  ) {
+    score +=
+      browserCodecSupport.opus
+        ? 6500
+        : -1200;
+  } else if (
+    traits.audio ===
+    "ac3"
+  ) {
+    const supported =
+      audioSupport(
+        "ac3",
+        deviceProfile
+      );
+
+    score +=
+      supported === true
+        ? 6500
+        : supported === null
+          ? 2500
+          : -1800;
+  } else if (
+    traits.audio ===
+    "eac3"
+  ) {
+    const supported =
+      audioSupport(
+        "eac3",
+        deviceProfile
+      );
+
+    score +=
+      supported === true
+        ? 6200
+        : supported === null
+          ? 2200
+          : -2000;
+  } else if (
+    traits.audio === "ac4"
+  ) {
+    const supported = audioSupport("ac4", deviceProfile);
+    score +=
+      supported === true
+        ? 5200
+        : supported === null
+          ? 1700
+          : -2600;
+  } else if (
+    traits.audio === "xheaac"
+  ) {
+    const supported = audioSupport("xheaac", deviceProfile);
+    score +=
+      supported === true
+        ? 6500
+        : supported === null
+          ? 1800
+          : -1800;
+  } else if (
+    traits.audio ===
+    "flac"
+  ) {
+    score +=
+      browserCodecSupport.flac
+        ? 1800
+        : deviceProfile.fireTv
+          ? 300
+          : -1800;
+  } else if (traits.audio === "vorbis") {
+    score += browserCodecSupport.vorbis ? 1600 : -700;
+  } else if (traits.audio === "alac") {
+    score += browserCodecSupport.alac ? 1200 : deviceProfile.fireTv ? 200 : -900;
+  } else if (traits.audio === "pcm") {
+    score += browserCodecSupport.pcm ? 1300 : deviceProfile.fireTv ? 300 : -700;
+  } else if (traits.audio === "mp2") {
+    score += deviceProfile.fireTv ? 500 : -500;
+  } else if (
+    traits.audio ===
+    "dts"
+  ) {
+    /*
+     * Prefer safer audio when everything else is equal, but positively rank
+     * DTS when this exact Fire TV reports a DTS decoder/passthrough MIME type.
+     */
+    const supported = audioSupport("dts", deviceProfile);
+    score +=
+      supported === true
+        ? 3000
+        : deviceProfile.nativeFireTv
+          ? -5000
+          : -18000;
+  } else if (
+    traits.audio ===
+    "truehd"
+  ) {
+    const supported = audioSupport("truehd", deviceProfile);
+    score +=
+      supported === true
+        ? 2200
+        : deviceProfile.nativeFireTv
+          ? -9000
+          : -22000;
+  } else if (
+    traits.audio === "wma" ||
+    traits.audio === "amr" ||
+    traits.audio === "adpcm" ||
+    traits.audio === "ape" ||
+    traits.audio === "wavpack" ||
+    traits.audio === "tta" ||
+    traits.audio === "speex" ||
+    traits.audio === "atrac" ||
+    traits.audio === "dsd" ||
+    traits.audio === "shorten" ||
+    traits.audio === "tak" ||
+    traits.audio === "musepack" ||
+    traits.audio === "g711"
+  ) {
+    const supported = audioSupport(traits.audio, deviceProfile);
+    score +=
+      supported === true
+        ? 1500
+        : supported === null
+          ? 600
+          : -1500;
+  }
+
+  if (
+    traits.video ===
+      "h264" &&
+    traits.audio ===
+      "aac"
+  ) {
+    score +=
+      10000;
+  }
+
+  if (
+    (
+      traits.container ===
+        "mp4" ||
+      traits.container ===
+        "hls"
+    ) &&
+    traits.audio ===
+      "aac"
+  ) {
+    score +=
+      6000;
+  }
+
+  score +=
+    qualityScore(
+      traits.resolution,
+      qualityPreference,
+      deviceProfile
+    );
+
+  return score;
+};
+
+export const orderSourcesForPlayback = (
+  items,
+  options = {}
+) => {
+  const deviceProfile =
+    options?.deviceProfile ||
+    getPlaybackDeviceProfile();
+
+  const list =
+    (items || []).map(
+      (
+        item,
+        index
+      ) => {
+        const severeAudioRisk =
+          hasSevereAudioRisk(
+            item
+          );
+
+        return {
+          item,
+          index,
+          severeAudioRisk,
+
+          score:
+            scoreSourceCompatibility(
+              item,
+              "",
+              {
+                ...options,
+                deviceProfile,
+              }
+            ),
+        };
+      }
+    );
+
+  return list
+    .sort(
+      (
+        a,
+        b
+      ) =>
+        b.score -
+          a.score ||
+        Number(a.severeAudioRisk) -
+          Number(b.severeAudioRisk) ||
+        a.index -
+          b.index
+    )
+    .map(
+      ({ item }) =>
+        item
+    );
+};
+
+const prettyContainer = {
+  hls:
+    "HLS",
+
+  mp4:
+    "MP4",
+
+  m4v:
+    "M4V",
+
+  webm:
+    "WebM",
+
+  ts:
+    "MPEG-TS",
+
+  m2ts:
+    "M2TS",
+
+  mts:
+    "MTS",
+
+  flv:
+    "FLV",
+
+  mkv:
+    "MKV",
+
+  avi:
+    "AVI",
+
+  mov:
+    "MOV",
+
+  vob: "VOB",
+  ogv: "OGV",
+  "3gp": "3GP",
+  wmv: "WMV",
+  asf: "ASF",
+  f4v: "F4V",
+  mxf: "MXF",
+  divx: "DIVX",
+};
+
+const prettyVideo = {
+  h264:
+    "H.264",
+
+  hevc:
+    "HEVC/H.265",
+
+  av1:
+    "AV1",
+
+  vp9:
+    "VP9",
+
+  mpeg2:
+    "MPEG-2",
+
+  mpeg4: "MPEG-4/Xvid",
+  vc1: "VC-1",
+  theora: "Theora",
+  prores: "ProRes",
+  dnxhd: "DNxHD/HR",
+  mjpeg: "MJPEG",
+  mpeg1: "MPEG-1",
+  vvc: "H.266/VVC",
+  avs: "AVS",
+  dirac: "Dirac",
+};
+
+const prettyAudio = {
+  aac:
+    "AAC",
+
+  mp3:
+    "MP3",
+
+  opus:
+    "Opus",
+
+  flac:
+    "FLAC",
+
+  ac3:
+    "AC-3",
+
+  eac3:
+    "E-AC-3",
+
+  dts:
+    "DTS/DTS-HD",
+
+  truehd:
+    "TrueHD",
+
+  vorbis:
+    "Vorbis",
+
+  alac:
+    "ALAC",
+
+  pcm:
+    "PCM/LPCM",
+
+  mp2:
+    "MP2",
+  wma: "WMA",
+  amr: "AMR",
+  adpcm: "ADPCM",
+  ape: "Monkey's Audio",
+  wavpack: "WavPack",
+  tta: "TTA",
+  speex: "Speex",
+  atrac: "ATRAC",
+  dsd: "DSD",
+  shorten: "Shorten",
+  tak: "TAK",
+  musepack: "Musepack",
+  g711: "G.711",
+};
+
+export const describeSourceCompatibility = (
+  item,
+  extraText = ""
+) => {
+  const traits =
+    detectStreamTraits(
+      item,
+      extraText
+    );
+
+  const deviceProfile =
+    getPlaybackDeviceProfile();
+
+  const parts =
+    [];
+
+  if (
+    traits.resolution
+  ) {
+    parts.push(
+      `${traits.resolution}p`
+    );
+  }
+
+  if (
+    traits.video
+  ) {
+    parts.push(
+      prettyVideo[
+        traits.video
+      ] ||
+        traits.video
+    );
+  }
+
+  if (
+    traits.audio
+  ) {
+    parts.push(
+      prettyAudio[
+        traits.audio
+      ] ||
+        traits.audio
+    );
+  }
+
+  if (
+    traits.container
+  ) {
+    parts.push(
+      prettyContainer[
+        traits.container
+      ] ||
+        traits.container
+    );
+  }
+
+  if (
+    traits.language ===
+    "english"
+  ) {
+    parts.push(
+      "English preferred"
+    );
+  } else if (
+    traits.language ===
+    "multi"
+  ) {
+    parts.push(
+      "multi-audio"
+    );
+  } else if (
+    traits.language ===
+    "foreign"
+  ) {
+    parts.push(
+      "non-English source"
+    );
+  }
+
+  if (
+    hasSevereAudioRisk(
+      item,
+      extraText
+    )
+  ) {
+    parts.push(
+      "Audio Rescue required"
+    );
+  } else {
+    const supported =
+      audioSupport(
+        traits.audio,
+        deviceProfile
+      );
+
+    if (
+      supported ===
+      false
+    ) {
+      parts.push(
+        "audio support uncertain"
+      );
+    } else if (
+      traits.video ===
+        "h264" &&
+      traits.audio ===
+        "aac"
+    ) {
+      parts.push(
+        "best compatibility"
+      );
+    }
+  }
+
+  return (
+    parts.join(
+      " · "
+    ) ||
+    "Codec details not supplied by source"
+  );
+};
+
+export const isMpegTsLike = (
+  src,
+  label = ""
+) => {
+  const text =
+    `${String(
+      src || ""
+    )} ${String(
+      label || ""
+    )}`.toLowerCase();
+
+  return /\.m2ts(?:[?#\s]|$)|\.mts(?:[?#\s]|$)|\.ts(?:[?#\s]|$)|\bm2ts\b|\bmpeg[ -]?ts\b|\btransport stream\b/i.test(
+    text
+  );
+};
+
+export const isFlvLike = (
+  src,
+  label = ""
+) => {
+  const text =
+    `${String(
+      src || ""
+    )} ${String(
+      label || ""
+    )}`.toLowerCase();
+
+  return /\.flv(?:[?#\s]|$)|\bflv\b/i.test(
+    text
+  );
+};
