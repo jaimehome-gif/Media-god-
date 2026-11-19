@@ -38,7 +38,7 @@ The new SHA-256 checks are intentionally strict: they reject *any* byte change i
 
 ## Recovery
 
-Recovery reference: https://github.com/leepeterss85-hue/media-god/tree/stable/playback-known-good-20261024-firetv-1.4.116
+Recovery reference: https://github.com/jaimehome-gif/Media-god-/tree/stable/playback-known-good-20261024-firetv-1.4.116
 
 Restore the specific affected player files from that snapshot or use the Base44 checkpoint after review; do not blindly roll back unrelated app work. The live firetv-latest asset is a moving release pointer and is **not** a permanent restore copy. Keep any still-installed working APK; do not trigger an APK reinstall just because these test/documentation guards were added.
 

@@ -6,7 +6,7 @@ import {
   clearNativeReleaseCache,
 } from "../src/components/mg/nativeReleaseInfo.js";
 
-const REPO = "leepeterss85-hue/media-god";
+const REPO = "jaimehome-gif/Media-god-";
 const SHA = "82b3c736a64cabac2943da2050f25abac96e9c77";
 const targets = {
   "android-mobile": {

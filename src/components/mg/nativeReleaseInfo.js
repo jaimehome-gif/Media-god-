@@ -1,11 +1,11 @@
 const RELEASE_URLS = {
   "fire-tv": [
     "/firetv-update.json",
-    "https://raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/firetv-update.json",
+    "https://raw.githubusercontent.com/jaimehome-gif/Media-god-/main/public/firetv-update.json",
   ],
   "android-mobile": [
     "/android-mobile-update.json",
-    "https://raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/android-mobile-update.json",
+    "https://raw.githubusercontent.com/jaimehome-gif/Media-god-/main/public/android-mobile-update.json",
   ],
 };
 
@@ -25,7 +25,7 @@ const RELEASE_META = {
     manifest: "firetv-update.json",
   },
 };
-const REPOSITORY = "leepeterss85-hue/media-god";
+const REPOSITORY = "jaimehome-gif/Media-god-";
 const releaseCache = new Map();
 const inFlight = new Map();
 

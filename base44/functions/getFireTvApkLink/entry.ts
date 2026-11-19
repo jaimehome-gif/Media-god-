@@ -1,5 +1,5 @@
 const RELEASE_APK_URL =
-  "https://github.com/leepeterss85-hue/media-god/releases/download/firetv-latest/Media-God-Fire-TV.apk";
+  "https://github.com/jaimehome-gif/Media-god-/releases/download/firetv-latest/Media-God-Fire-TV.apk";
 
 const isSafeDirectAsset = (value) => {
   try {

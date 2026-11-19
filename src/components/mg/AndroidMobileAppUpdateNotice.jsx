@@ -12,7 +12,7 @@ import { isFireTvHardware, isMobileUpdaterSignatureError } from "./mobileUpdater
 
 const SESSION_DISMISS_PREFIX = "mg:android-mobile-app-update-dismissed:";
 const OFFICIAL_FIRE_TV_APK =
-  "https://github.com/leepeterss85-hue/media-god/releases/download/firetv-latest/Media-God-Fire-TV.apk";
+  "https://github.com/jaimehome-gif/Media-god-/releases/download/firetv-latest/Media-God-Fire-TV.apk";
 
 const looksLikeAndroidMobile = () => {
   if (typeof window === "undefined" || typeof navigator === "undefined") {

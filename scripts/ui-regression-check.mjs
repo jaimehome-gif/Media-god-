@@ -624,8 +624,8 @@ expect(
   "Settings no longer shows the installed Media God app version or manual update check"
 );
 expect(
-  nativeReleaseInfo.includes("raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/firetv-update.json") &&
-    nativeReleaseInfo.includes("raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/android-mobile-update.json") &&
+  nativeReleaseInfo.includes("raw.githubusercontent.com/jaimehome-gif/Media-god-/main/public/firetv-update.json") &&
+    nativeReleaseInfo.includes("raw.githubusercontent.com/jaimehome-gif/Media-god-/main/public/android-mobile-update.json") &&
     nativeReleaseInfo.includes("AbortController") &&
     nativeReleaseInfo.includes("CACHE_TTL_MS") &&
     fireTvUpdateNotice.includes('fetchLatestNativeRelease("fire-tv"') &&

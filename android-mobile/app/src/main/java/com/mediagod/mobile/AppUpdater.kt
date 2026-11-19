@@ -24,7 +24,7 @@ class AppUpdater(
         private const val KEY_PENDING_UPDATE_PATH = "pending_update_path"
         private const val UPDATE_FILE_NAME = "Media-God-Android-Mobile.apk"
         private const val STABLE_UPDATE_URL =
-            "https://github.com/leepeterss85-hue/media-god/releases/download/android-mobile-latest/Media-God-Android-Mobile.apk"
+            "https://github.com/jaimehome-gif/Media-god-/releases/download/android-mobile-latest/Media-God-Android-Mobile.apk"
 
         private val TRUSTED_UPDATE_HOSTS = setOf(
             "github.com",
