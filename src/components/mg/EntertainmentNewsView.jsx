@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { cn } from "@/lib/utils";
+import { readPublicSection, savePublicSection } from "./publicSectionCache.js";
 
 const TABS = [
   { id: "all", label: "All News", icon: Newspaper },
@@ -35,50 +36,74 @@ const dateLabel = (value) => {
 
 export default function EntertainmentNewsView() {
   const [section, setSection] = useState("all");
-  const [stories, setStories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // A combined feed is limited to 72 stories: fetch each category separately
+  // instead of filtering TV stories out of a film-heavy combined result.
+  const [feeds, setFeeds] = useState(() => Object.fromEntries(
+    TABS.map(({ id }) => [id, readPublicSection("news:" + id)?.data]).filter(([, data]) => data?.stories?.length)
+  ));
+  const [loadingSection, setLoadingSection] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
   const [query, setQuery] = useState("");
-  const [updatedAt, setUpdatedAt] = useState("");
-  const [sourceCount, setSourceCount] = useState(0);
-  const lastQuietRefreshAt = useRef(0);
+  const lastQuietRefreshAt = useRef({});
+  const feed = feeds[section];
+  const stories = feed?.stories || [];
+  const updatedAt = feed?.updatedAt || "";
+  const sourceCount = feed?.sourceCount || 0;
+  const error = errors[section] || "";
+  const loading = loadingSection === section && !stories.length;
 
-  const load = useCallback(async ({ quiet = false } = {}) => {
-    // Focus and visibility events can fire together; avoid duplicate requests.
-    if (quiet && Date.now() - lastQuietRefreshAt.current < 30_000) return;
-    if (quiet) lastQuietRefreshAt.current = Date.now();
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
-    setError("");
+  const load = useCallback(async (category, { quiet = false, forceRefresh = false } = {}) => {
+    // Visibility/focus can fire together. Do not re-fetch recent news just
+    // because someone switched tabs or returned to the Fire Stick app.
+    const cached = readPublicSection("news:" + category);
+    if (quiet && !forceRefresh &&
+        (Date.now() - (lastQuietRefreshAt.current[category] || 0) < 30_000 ||
+        (cached && Date.now() - cached.savedAt < 5 * 60_000))) return;
+    if (quiet) lastQuietRefreshAt.current[category] = Date.now();
+    if (cached?.data?.stories?.length) setRefreshing(true);
+    else setLoadingSection(category);
+    setErrors(previous => ({ ...previous, [category]: "" }));
     try {
-      // Load the combined feed once; switching All/Film/TV is then instant client-side.
-      const response = await base44.functions.invoke("getEntertainmentNews", { section: "all", forceRefresh: quiet });
+      const response = await base44.functions.invoke("getEntertainmentNews", {
+        section: category,
+        forceRefresh,
+      });
       const payload = response?.data || response;
       const nextStories = Array.isArray(payload?.stories) ? payload.stories : [];
-      if (nextStories.length) setStories(nextStories);
-      setUpdatedAt(payload?.updatedAt || new Date().toISOString());
-      setSourceCount(Number(payload?.sourceCount) || 0);
-      if (!nextStories.length) {
-        setError("News is temporarily unavailable. Please try refreshing in a moment.");
-      } else if (payload?.partial) {
-        setError("Some news feeds are temporarily unavailable. Showing the stories we could retrieve.");
+      if (!nextStories.length) throw new Error("No stories returned");
+      const nextFeed = {
+        stories: nextStories,
+        updatedAt: payload?.updatedAt || new Date().toISOString(),
+        sourceCount: Number(payload?.sourceCount) || 0,
+      };
+      setFeeds(previous => ({ ...previous, [category]: nextFeed }));
+      savePublicSection("news:" + category, nextFeed);
+      if (payload?.partial) {
+        setErrors(previous => ({
+          ...previous,
+          [category]: "Some publishers are temporarily unavailable. Showing the latest stories we could retrieve.",
+        }));
       }
     } catch {
-      // Keep the last successful headlines visible if a refresh temporarily fails.
-      setError("News could not be refreshed right now. Showing the last available stories; try again shortly.");
+      // Never discard previously loaded headlines on a temporary upstream error.
+      setErrors(previous => ({
+        ...previous,
+        [category]: cached?.data?.stories?.length
+          ? "News could not be refreshed. Showing saved headlines; try again shortly."
+          : "News is temporarily unavailable. Please try refreshing in a moment.",
+      }));
     } finally {
-      setLoading(false);
+      setLoadingSection(previous => previous === category ? "" : previous);
       setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-    // Keep the feed fresh while open and refresh promptly when the user returns to the app.
-    const refreshTimer = window.setInterval(() => load({ quiet: true }), 5 * 60 * 1000);
+    void load(section, { quiet: Boolean(readPublicSection("news:" + section)) });
+    const refreshTimer = window.setInterval(() => void load(section, { quiet: true }), 5 * 60 * 1000);
     const refreshOnReturn = () => {
-      if (document.visibilityState === "visible") load({ quiet: true });
+      if (document.visibilityState === "visible") void load(section, { quiet: true });
     };
     window.addEventListener("focus", refreshOnReturn);
     document.addEventListener("visibilitychange", refreshOnReturn);
@@ -87,7 +112,7 @@ export default function EntertainmentNewsView() {
       window.removeEventListener("focus", refreshOnReturn);
       document.removeEventListener("visibilitychange", refreshOnReturn);
     };
-  }, [load]);
+  }, [load, section]);
 
   const filtered = useMemo(() => {
     const wanted = query.trim().toLowerCase();
@@ -113,7 +138,7 @@ export default function EntertainmentNewsView() {
           </div>
           <button
             type="button"
-            onClick={() => load({ quiet: true })}
+            onClick={() => load(section, { quiet: true, forceRefresh: true })}
             disabled={loading || refreshing}
             className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white transition hover:border-mg-green/50 hover:bg-white/10 disabled:opacity-50 md:self-auto"
           >
@@ -241,7 +266,7 @@ export default function EntertainmentNewsView() {
             <p className="mt-1 max-w-md text-sm text-white/55">The news providers did not return any stories. Try again, or switch to another news category.</p>
             <button
               type="button"
-              onClick={() => load({ quiet: true })}
+              onClick={() => load(section, { quiet: true, forceRefresh: true })}
               disabled={refreshing}
               className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-50"
             >

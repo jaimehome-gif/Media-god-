@@ -1,4 +1,4 @@
-import { buildEmbedSuEmbedUrl, hostedEmbedPage, hostedEmbedLabel } from "../../../src/components/mg/webEmbedProviders.js";
+import { buildEmbedSuEmbedUrl, hostedEmbedPage, hostedEmbedLabel } from "./webEmbedProviders.mjs";
 
 /** Parse only concrete server embed URLs. Never return media/CDN URLs or page scripts. */
 export const extractEmbedSuServers = (html, load) => {

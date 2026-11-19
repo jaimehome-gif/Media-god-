@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Loader2, RefreshCw, Radio, Tv, Film, AlertCircle, ExternalLink } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { readPublicSection, savePublicSection, orderUpcomingReleases } from "./publicSectionCache.js";
 
 const API = "https://media-god-metadata-api-production.up.railway.app/functions/publicDiscovery";
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
@@ -45,7 +46,7 @@ async function discovery(action, region, signal) {
     body: JSON.stringify({ action, region }),
     signal,
   });
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok || data.error) throw new Error(data.error || "Discovery service unavailable");
   return Array.isArray(data.results) ? data.results : [];
 }
@@ -57,38 +58,45 @@ export default function WatchmodeHub() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const cacheKey = ["watch-next", tab, region, tab === "releases" ? releaseType : "", TODAY()].join(":");
   const load = useCallback(async (signal) => {
-    setLoading(true); setError(""); setRows([]);
+    // Keep previously viewed public schedules visible while refreshing.
+    const maxAge = tab === "releases" ? 12 * 60 * 60_000 : 4 * 60 * 60_000;
+    const cached = readPublicSection(cacheKey, maxAge);
+    const savedRows = Array.isArray(cached?.data?.rows) ? cached.data.rows : [];
+    setRows(savedRows);
+    setError("");
+    setLoading(!cached);
+    setRefreshing(Boolean(cached));
     try {
+      let nextRows;
       if (tab === "releases") {
-        const [films, shows] = await Promise.allSettled([
-          base44.functions.invoke("getTmdbMovies", {category:"upcoming",media_type:"movie",region,include_global_releases:true,date:TODAY()}),
-          base44.functions.invoke("getTmdbMovies", {category:"tv_upcoming",media_type:"tv",region,date:TODAY()}),
-        ]);
+        // Only request the selected release type. Previously each tab switch
+        // waited for both film and TV lookups, doubling network traffic.
+        const response = await base44.functions.invoke("getTmdbMovies", {
+          category: releaseType === "movie" ? "upcoming" : "tv_upcoming",
+          media_type: releaseType, region, date: TODAY(),
+          ...(releaseType === "movie" ? { include_global_releases: true } : {}),
+        });
         if (signal.aborted) return;
-        if (films.status === "rejected" && shows.status === "rejected") throw new Error("Film and TV release data is temporarily unavailable");
-        const filmItems = films.status === "fulfilled" && Array.isArray(films.value?.data?.movies) ? films.value.data.movies : [];
-        const showItems = shows.status === "fulfilled" && Array.isArray(shows.value?.data?.movies) ? shows.value.data.movies : [];
-        const items = releaseType === "movie" ? filmItems : showItems;
-        const today = TODAY();
-        const cleaned = items.map(item => ({
-          ...item,
-          media_type: releaseType,
-          release_date: String(releaseType === "movie" ? (item.first_worldwide_release_date || item.global_release_date || item.release_date || "") : (item.first_air_date || item.release_date || "")),
-          source_name: releaseType === "movie" ? "TMDB · Film" : "TMDB · TV",
-          status: releaseType === "movie" ? "Listed release date" : "Series premiere (not a new episode)",
-        })).filter(item => dateOnly(item.release_date) && item.release_date >= today)
-          .sort((a,b) => a.release_date.localeCompare(b.release_date) || String(a.title||"").localeCompare(String(b.title||"")));
-        const seen = new Set();
-        setRows(cleaned.filter(item => { const key=String(item.tmdb_id||item.id||item.title); if(seen.has(key))return false;seen.add(key);return true; }).slice(0,100));
+        const items = response?.data?.movies || response?.movies;
+        if (!Array.isArray(items)) throw new Error("Film and TV release data is temporarily unavailable");
+        nextRows = orderUpcomingReleases(items, releaseType, TODAY());
       } else {
-        const data = await discovery(tab,region,signal);
-        if (!signal.aborted) setRows(data);
+        nextRows = await discovery(tab, region, signal);
       }
+      if (signal.aborted) return;
+      setRows(nextRows);
+      savePublicSection(cacheKey, { rows: nextRows });
     } catch (e) {
-      if (!signal.aborted) setError(e?.message || "Discovery temporarily unavailable");
-    } finally { if (!signal.aborted) setLoading(false); }
-  },[tab,region,releaseType]);
+      if (!signal.aborted) setError(savedRows.length
+        ? "The live guide could not be refreshed. Showing the last saved results; try again shortly."
+        : e?.message || "Discovery temporarily unavailable");
+    } finally {
+      if (!signal.aborted) { setLoading(false); setRefreshing(false); }
+    }
+  }, [tab, region, releaseType, cacheKey]);
   useEffect(()=> { const controller = new AbortController(); void load(controller.signal); return ()=>controller.abort(); },[load,reload]);
   return <div data-mg-watchmode-hub="true" className="w-full p-3 sm:p-5 md:p-6 text-white">
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -100,7 +108,7 @@ export default function WatchmodeHub() {
     </header>
     <div className="mb-4 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Discovery sections">{tabs.map(t=>{const Icon=t.icon;return <button key={t.id} role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${tab===t.id?"border-mg-green bg-mg-green text-black":"border-white/10 bg-white/5 text-white/70"}`}><Icon className="h-4 w-4" />{t.label}</button>})}</div>
     {tab === "releases" && <div className="mb-4 flex gap-2" role="group" aria-label="Release type"><button onClick={()=>setReleaseType("movie")} aria-pressed={releaseType==="movie"} className={`min-h-10 rounded-lg border px-4 text-sm font-semibold ${releaseType==="movie"?"border-mg-green bg-mg-green text-black":"border-white/10 text-white/70"}`}>Films</button><button onClick={()=>setReleaseType("tv")} aria-pressed={releaseType==="tv"} className={`min-h-10 rounded-lg border px-4 text-sm font-semibold ${releaseType==="tv"?"border-mg-green bg-mg-green text-black":"border-white/10 text-white/70"}`}>TV premieres</button></div>}
-    <div className="mb-4 flex items-center justify-between gap-3"><p className="text-sm text-white/60">{tab==="sports"?"Selected fixtures from TheSportsDB's limited free feed":tab==="tv"?"TVmaze scheduled episodes":releaseType==="movie"?"Upcoming film releases from TMDB":"Upcoming TV series premieres (not new episodes)"}</p><button onClick={()=>setReload(x=>x+1)} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs font-bold"><RefreshCw className="h-4 w-4" />Refresh</button></div>
+    <div className="mb-4 flex items-center justify-between gap-3"><p className="text-sm text-white/60">{tab==="sports"?"Selected fixtures from TheSportsDB's limited free feed":tab==="tv"?"TVmaze scheduled episodes":releaseType==="movie"?"Upcoming film releases from TMDB":"Upcoming TV series premieres (not new episodes)"}</p><button onClick={()=>setReload(x=>x+1)} disabled={loading || refreshing} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs font-bold"><RefreshCw className="h-4 w-4" />Refresh</button></div>
     {loading && <p role="status" className="flex min-h-24 items-center gap-2 text-sm text-white/60"><Loader2 className="h-5 w-5 animate-spin" />Loading discovery…</p>}
     {!loading && error && <p role="alert" className="mb-4 flex gap-2 rounded-lg border border-amber-400/30 p-4 text-sm text-amber-100"><AlertCircle className="h-5 w-5 shrink-0" />{error}</p>}
     {!loading && !error && !rows.length && <p className="rounded-xl bg-mg-card p-6 text-sm text-white/60">No confirmed upcoming entries available for this selection right now.</p>}
