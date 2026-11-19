@@ -1,2 +1,0 @@
-export declare const getDate: (span: number, unit?: "sec" | "ms") => Date;
-//# sourceMappingURL=date.d.ts.map

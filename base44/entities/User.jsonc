@@ -1,17 +1,164 @@
 {
+  "type": "object",
   "properties": {
-    "role": {
-      "type": "string",
-      "description": "The role of the user in the app",
-      "enum": [
-        "admin",
-        "user"
-      ]
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "autoplay": {
+          "type": "boolean",
+          "default": true
+        },
+        "subs": {
+          "type": "boolean",
+          "default": true
+        },
+        "quality": {
+          "type": "string",
+          "enum": [
+            "Auto",
+            "4K",
+            "1080p",
+            "720p",
+            "480p"
+          ],
+          "default": "Auto"
+        },
+        "autoRecovery": {
+          "type": "boolean",
+          "default": true
+        },
+        "audioLanguage": {
+          "type": "string",
+          "default": "en"
+        },
+        "subtitleLanguage": {
+          "type": "string",
+          "default": "en"
+        },
+        "preferForcedSubtitles": {
+          "type": "boolean",
+          "default": true
+        },
+        "preferSdhSubtitles": {
+          "type": "boolean",
+          "default": false
+        },
+        "subtitleOffsetSeconds": {
+          "type": "number",
+          "default": 0
+        },
+        "subtitleSize": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "extra-large"
+          ],
+          "default": "medium"
+        },
+        "subtitleBackground": {
+          "type": "string",
+          "enum": [
+            "none",
+            "light",
+            "medium",
+            "dark"
+          ],
+          "default": "medium"
+        },
+        "sourceSortMode": {
+          "type": "string",
+          "enum": [
+            "best",
+            "cached",
+            "4k",
+            "1080p",
+            "compatible",
+            "smallest"
+          ],
+          "default": "best"
+        },
+        "liveTvFavourites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "liveTvRecent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "rd_token": {
+      "type": "string"
+    },
+    "rd_refresh_token": {
+      "type": "string"
+    },
+    "rd_client_id": {
+      "type": "string"
+    },
+    "rd_client_secret": {
+      "type": "string"
+    },
+    "rd_token_expires_at": {
+      "type": "string"
+    },
+    "rd_connected_at": {
+      "type": "string"
+    },
+    "alldebrid_token": {
+      "type": "string"
+    },
+    "torbox_token": {
+      "type": "string"
+    },
+    "premiumize_token": {
+      "type": "string"
+    },
+    "debridlink_token": {
+      "type": "string"
+    },
+    "debrid_enabled_providers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "debrid_provider_priority": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ssn_auth_token": {
+      "type": "string"
+    },
+    "ssn_refresh_token": {
+      "type": "string"
+    },
+    "ssn_token_expires_at": {
+      "type": "string"
+    },
+    "ssn_connected_at": {
+      "type": "string"
     }
   },
-  "required": [
-    "role"
-  ],
   "name": "User",
-  "type": "object"
+  "required": [
+    "preferences",
+    "rd_token",
+    "rd_refresh_token",
+    "rd_client_id",
+    "rd_client_secret",
+    "rd_token_expires_at",
+    "rd_connected_at",
+    "alldebrid_token",
+    "premiumize_token",
+    "debridlink_token"
+  ]
 }

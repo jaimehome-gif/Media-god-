@@ -1,2 +1,0 @@
-export declare function safeJSONParse<T>(data: string): T | null;
-//# sourceMappingURL=json.d.ts.map

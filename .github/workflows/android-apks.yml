@@ -1,0 +1,313 @@
+name: Android APKs - Test and Release
+
+on:
+  pull_request:
+    paths:
+      - "android-mobile/**"
+      - "firetv-android/**"
+      - "src/components/mg/**"
+      - "public/android-mobile-update.json"
+      - "public/firetv-update.json"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/android-apks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "android-mobile/**"
+      - "firetv-android/**"
+      - "src/components/mg/**"
+      - "public/android-mobile-update.json"
+      - "public/firetv-update.json"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/android-apks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: media-god-android-apks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regression:
+    name: Web and source regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:regression
+
+  ffmpeg-extension:
+    name: Build FFmpeg audio - Media3 ${{ matrix.media3 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - media3: "1.11.0"
+            dir: android-mobile
+            gradle: "9.1.0"
+          - media3: "1.8.0"
+            dir: firetv-android
+            gradle: "8.11.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ matrix.gradle }}
+      - uses: actions/cache@v4
+        id: ffmpeg-cache
+        with:
+          path: ${{ matrix.dir }}/app/libs/decoder-ffmpeg.aar
+          key: media3-ffmpeg-${{ matrix.media3 }}-ffmpeg6-ndk26b-v1
+      - if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-media3-ffmpeg.sh "${{ matrix.media3 }}" "${{ matrix.dir }}/app/libs/decoder-ffmpeg.aar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/app/libs/decoder-ffmpeg.aar
+          if-no-files-found: error
+
+  build-check:
+    name: Build check - ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: ffmpeg-extension
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Android phone/tablet
+            dir: android-mobile
+          - name: Fire TV/Stick
+            dir: firetv-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/app/libs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK platforms
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Compile debug APK
+        run: gradle -p "${{ matrix.dir }}" :app:assembleDebug --stacktrace
+
+  device-regression:
+    name: Device regression - ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: ffmpeg-extension
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Android phone/tablet
+            dir: android-mobile
+          - name: Fire TV/Stick
+            dir: firetv-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-${{ matrix.dir }}
+          path: ${{ matrix.dir }}/app/libs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK platforms
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+      - name: Run playback lifecycle regression on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle -p "${{ matrix.dir }}" :app:connectedDebugAndroidTest --stacktrace
+
+  release:
+    name: Release both APKs
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [regression, ffmpeg-extension, build-check, device-regression]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FIRETV_KEYSTORE_BASE64: ${{ secrets.FIRETV_KEYSTORE_BASE64 }}
+      FIRETV_KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+      FIRETV_KEY_ALIAS: ${{ secrets.FIRETV_KEY_ALIAS }}
+      FIRETV_KEY_PASSWORD: ${{ secrets.FIRETV_KEY_PASSWORD }}
+      MOBILE_KEYSTORE_PATH: mobile-release.jks
+      MOBILE_KEYSTORE_BASE64: ${{ secrets.FIRETV_KEYSTORE_BASE64 }}
+      MOBILE_KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+      MOBILE_KEY_ALIAS: ${{ secrets.FIRETV_KEY_ALIAS }}
+      MOBILE_KEY_PASSWORD: ${{ secrets.FIRETV_KEY_PASSWORD }}
+      FIRETV_KEYSTORE_PATH: firetv-release.jks
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-android-mobile
+          path: android-mobile/app/libs
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-firetv-android
+          path: firetv-android/app/libs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK platforms
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Validate update manifests
+        run: |
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          pairs = [
+              ("android-mobile/app/build.gradle.kts", "public/android-mobile-update.json", "Mobile"),
+              ("firetv-android/app/build.gradle.kts", "public/firetv-update.json", "Fire TV"),
+          ]
+          for gradle_path, manifest_path, label in pairs:
+              gradle = Path(gradle_path).read_text()
+              manifest = json.loads(Path(manifest_path).read_text())
+              code = int(re.search(r"versionCode\s*=\s*(\d+)", gradle).group(1))
+              name = re.search(r'versionName\s*=\s*"([^"]+)"', gradle).group(1)
+              if (manifest.get("versionCode"), manifest.get("versionName")) != (code, name):
+                  raise SystemExit(f"{label} manifest does not match APK version")
+              print(f"{label}: {name} ({code})")
+          PY
+      - name: Restore signing keys
+        run: |
+          set -euo pipefail
+          for value in FIRETV_KEYSTORE_BASE64 FIRETV_KEYSTORE_PASSWORD FIRETV_KEY_ALIAS FIRETV_KEY_PASSWORD; do
+            if [ -z "${!value:-}" ]; then echo "Missing signing secret: $value"; exit 1; fi
+          done
+          printf '%s' "$FIRETV_KEYSTORE_BASE64" | base64 --decode > "firetv-android/app/$FIRETV_KEYSTORE_PATH"
+          printf '%s' "$MOBILE_KEYSTORE_BASE64" | base64 --decode > "android-mobile/app/$MOBILE_KEYSTORE_PATH"
+      - name: Build both signed release APKs
+        run: |
+          gradle -p android-mobile :app:assembleRelease --stacktrace
+          gradle -p firetv-android :app:assembleRelease --stacktrace
+          cp android-mobile/app/build/outputs/apk/release/app-release.apk Media-God-Android-Mobile.apk
+          cp firetv-android/app/build/outputs/apk/release/app-release.apk Media-God-Fire-TV.apk
+      - name: Verify both signed APKs (fail closed)
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Android-Mobile.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Fire-TV.apk
+      - name: Upload coordinated APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Media-God-Android-APKs
+          path: |
+            Media-God-Android-Mobile.apk
+            Media-God-Fire-TV.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve previous known-good phone and TV APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/archive-stable-apks.sh
+          bash scripts/verify-apk-archive.sh
+      - name: Stage and verify permanent APK pair
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/stage-apk-release.sh
+      - name: Publish stable phone and Fire TV downloads from this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-apk-pointers.py
+      - name: Verify both published downloads match signed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          source scripts/github-release-json.sh
+          mkdir -p "$RUNNER_TEMP/verified-phone" "$RUNNER_TEMP/verified-firetv"
+          for item in "android-mobile-latest:Media-God-Android-Mobile.apk:verified-phone" "firetv-latest:Media-God-Fire-TV.apk:verified-firetv"; do
+            IFS=: read -r tag asset dir <<< "$item"
+            release_json "$tag" > "$RUNNER_TEMP/$tag.json"
+            jq -e --arg sha "$GITHUB_SHA" --arg asset "$asset" '
+              .target_commitish == $sha and .draft == false and
+              .published_at != null and
+              (any(.assets[]?; .name == $asset and .state == "uploaded" and .size > 1000000))
+            ' "$RUNNER_TEMP/$tag.json" >/dev/null
+            download_release_asset "$(cat "$RUNNER_TEMP/$tag.json")" "$asset" "$RUNNER_TEMP/$dir"
+            cmp "$asset" "$RUNNER_TEMP/$dir/$asset"
+          done
+          echo "Both signed APKs are published and byte-identical to the tested build"
+      - name: Mark both APK releases ready for update pop-ups
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          source scripts/github-release-json.sh
+          # The client requires this marker from the published release notes.
+          # Never write it until BOTH public downloads are verified above.
+          for spec in "android-mobile-latest:phone/tablet" "firetv-latest:Fire TV/Stick"; do
+            tag="${spec%%:*}"
+            platform="${spec#*:}"
+            printf 'Verified Media God %s release.\n\nVerified-APK-Commit: %s\nBoth phone and Fire TV APKs passed test, signature, and published-download verification.\n' "$platform" "$GITHUB_SHA" > "$RUNNER_TEMP/$tag-verified-notes.txt"
+            release_id="$(release_json "$tag" | jq -er .id)"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --raw-field body="$(cat "$RUNNER_TEMP/$tag-verified-notes.txt")" >/dev/null
+          done

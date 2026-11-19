@@ -1,0 +1,59 @@
+{
+  "name": "ContinueWatching",
+  "type": "object",
+  "properties": {
+    "content_key": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "year": {
+      "type": "string"
+    },
+    "poster_url": {
+      "type": "string"
+    },
+    "video_url": {
+      "type": "string"
+    },
+    "progress": {
+      "type": "number",
+      "default": 0
+    },
+    "duration": {
+      "type": "number",
+      "default": 0
+    },
+    "source_type": {
+      "type": "string",
+      "default": "file"
+    },
+    "episode_name": {
+      "type": "string",
+      "default": ""
+    },
+    "profile_id": {
+      "type": "string",
+      "default": "main"
+    }
+  },
+  "required": [
+    "content_key",
+    "title"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

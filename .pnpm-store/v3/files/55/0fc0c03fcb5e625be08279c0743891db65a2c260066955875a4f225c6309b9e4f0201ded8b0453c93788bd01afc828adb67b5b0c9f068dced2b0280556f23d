@@ -1,6 +1,0 @@
-export declare const getEndpointResponse: <T>(ctx: {
-    context: {
-        returned?: unknown;
-    };
-}) => Promise<T | null>;
-//# sourceMappingURL=plugin-helper.d.ts.map

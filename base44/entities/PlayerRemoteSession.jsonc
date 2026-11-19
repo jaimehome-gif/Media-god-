@@ -1,0 +1,133 @@
+{
+  "name": "PlayerRemoteSession",
+  "type": "object",
+  "properties": {
+    "session_code": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "command": {
+      "type": "string",
+      "default": ""
+    },
+    "command_seq": {
+      "type": "number",
+      "default": 0
+    },
+    "command_value": {
+      "type": "string",
+      "default": ""
+    },
+    "active_source_index": {
+      "type": "number",
+      "default": 0
+    },
+    "source_count": {
+      "type": "number",
+      "default": 0
+    },
+    "source_labels": {
+      "type": "string",
+      "default": "[]"
+    },
+    "file_labels": {
+      "type": "string",
+      "default": "[]"
+    },
+    "active_file_id": {
+      "type": "string",
+      "default": ""
+    },
+    "audio_labels": {
+      "type": "string",
+      "default": "[]"
+    },
+    "active_audio_index": {
+      "type": "number",
+      "default": -1
+    },
+    "subtitle_labels": {
+      "type": "string",
+      "default": "[]"
+    },
+    "active_subtitle_index": {
+      "type": "number",
+      "default": -1
+    },
+    "subtitle_size": {
+      "type": "string",
+      "default": "medium"
+    },
+    "subtitle_background": {
+      "type": "string",
+      "default": "medium"
+    },
+    "media_type": {
+      "type": "string",
+      "default": "movie"
+    },
+    "tmdb_id": {
+      "type": "string",
+      "default": ""
+    },
+    "season_number": {
+      "type": "number",
+      "default": 0
+    },
+    "episode_number": {
+      "type": "number",
+      "default": 0
+    },
+    "auto_next": {
+      "type": "boolean",
+      "default": true
+    },
+    "current_time": {
+      "type": "number",
+      "default": 0
+    },
+    "duration": {
+      "type": "number",
+      "default": 0
+    },
+    "paused": {
+      "type": "boolean",
+      "default": true
+    },
+    "volume": {
+      "type": "number",
+      "default": 1
+    },
+    "status": {
+      "type": "string",
+      "default": "active"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "last_seen_at": {
+      "type": "string"
+    },
+    "remote_last_seen_at": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "required": [
+    "session_code",
+    "expires_at"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {},
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

@@ -1,3 +1,0 @@
-import type { FieldAttribute } from "../db";
-export declare function withApplyDefault(value: any, field: FieldAttribute, action: "create" | "update"): any;
-//# sourceMappingURL=utils.d.ts.map

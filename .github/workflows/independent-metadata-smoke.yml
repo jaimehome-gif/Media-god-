@@ -1,0 +1,61 @@
+name: Independent Media God Metadata Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'deploy/media-god-api/**'
+      - 'src/api/independentMetadata.js'
+      - 'src/api/base44Client.js'
+      - '.github/workflows/independent-metadata-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Independent service health
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 --max-time 20 \
+            https://media-god-metadata-api-production.up.railway.app/health \
+            | jq -e '.status == "ready" and .service == "media-god-metadata"'
+      - name: Real public film catalogue request
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+            -X POST https://media-god-metadata-api-production.up.railway.app/functions/getTmdbMovies \
+            -H "Origin: https://underworldhub.co.uk" \
+            -H 'Content-Type: application/json' \
+            --data '{"media_type":"movie","query":"Inception","page":1}' \
+            | jq -e '(.movies | type == "array") and (.movies | length > 0)'
+      - name: Resolve exact movie IMDb identity without Base44
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+            -X POST https://media-god-metadata-api-production.up.railway.app/functions/resolveImdb \
+            -H "Origin: https://underworldhub.co.uk" \
+            -H 'Content-Type: application/json' \
+            --data '{"tmdb_id":27205,"media_type":"movie"}' \
+            | jq -e '.imdb_id == "tt1375666"'
+      - name: Resolve exact TV IMDb identity without Base44
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+            -X POST https://media-god-metadata-api-production.up.railway.app/functions/resolveTvImdb \
+            -H "Origin: https://underworldhub.co.uk" \
+            -H 'Content-Type: application/json' \
+            --data '{"tmdb_id":1399,"media_type":"tv"}' \
+            | jq -e '.imdb_id == "tt0944947"'
+      - name: Discover public sources without Base44 backend
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 35 \
+            -X POST https://media-god-metadata-api-production.up.railway.app/functions/fetchAddonStreams \
+            -H "Origin: https://underworldhub.co.uk" \
+            -H 'Content-Type: application/json' \
+            --data '{"imdb_id":"tt1375666","tmdb_id":27205,"title":"Inception","media_type":"movie","fast_mode":true}' \
+            | jq -e '(.streams | type == "array") and (.streams | length > 0) and (.diagnostics | type == "array")'

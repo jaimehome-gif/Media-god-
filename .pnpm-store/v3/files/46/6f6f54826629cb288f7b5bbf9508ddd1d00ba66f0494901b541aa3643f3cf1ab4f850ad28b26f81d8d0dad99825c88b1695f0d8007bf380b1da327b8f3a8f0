@@ -1,2 +1,0 @@
-export declare const clone: <T extends object>(object: T) => T;
-//# sourceMappingURL=clone.d.ts.map

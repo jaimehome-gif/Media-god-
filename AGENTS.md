@@ -1,49 +1,51 @@
 # AGENTS.md
 
-## Project Overview
-Next.js 16 app (StreamVibe / media-god) — a streaming UI for movies, TV shows, and live TV with watch-party features. Built with v0.
+## Project Context
 
-## Stack
-- **Framework**: Next.js 16 (App Router), React 19
-- **Language**: TypeScript (build errors ignored via `next.config.mjs`)
-- **Styling**: Tailwind CSS v4
-- **Auth**: better-auth (email/password), backed by PostgreSQL
-- **DB**: PostgreSQL via `pg` + `drizzle-orm` (no drizzle-kit migrations; schema in `lib/db/schema.ts`, DDL in `db/init.sql`)
-- **Package manager**: pnpm 9 (lockfile v9.0)
-- **Data**: TMDB mock data in `lib/tmdb.ts` (no API key required for core pages)
+This is a Base44 app repository. Treat it as user-owned application code, keep changes focused on the user's request, and preserve existing project conventions.
 
-## Environment Setup (Base44)
-- `docker-compose.base44.yml` runs PostgreSQL + Next.js dev server.
-- PostgreSQL schema is auto-created on first boot via `db/init.sql` mounted into `docker-entrypoint-initdb.d` (mirrors `lib/db/schema.ts`; `.base44/schema.sql` is an alternative copy).
-- `DATABASE_URL` is set inline in compose (local infra, not a secret).
-- `next.config.mjs` conditionally adds the preview origin to `allowedDevOrigins` when `BASE44_PREVIEW_MODE === '1'`.
-- No external secrets are required to boot. `GUARDIAN_CONTENT_API_KEY` exists but is not referenced in code.
+Start with `README.md` for local setup, environment variables, and publish workflow.
 
-## Key Architecture Notes
-- `lib/db/index.ts` unconditionally creates a `pg.Pool` — the DB must be reachable for any server action or auth operation.
-- `lib/auth.ts` conditionally creates the better-auth instance (null if `DATABASE_URL` is unset); `getSessionSafe` catches errors and returns null.
-- `lib/tmdb.ts` uses mock data (no external API calls) for the home page and media rows.
-- `src/lib/movie-api.ts` uses `NEXT_PUBLIC_MOVIE_API_KEY` for real TMDB calls but is not imported by core pages.
+## Base44 References
 
-## Verification
-- `docker compose -f docker-compose.base44.yml up -d --build` then curl `http://localhost:3000/`.
-- The home page should render with mock movie/TV data.
-- Auth pages (`/sign-in`, `/sign-up`) require the DB to be up and `BETTER_AUTH_URL` to be set.
-- `/live-tv` lists channels; each links to `/live-tv/{id}` which renders a live HLS player + EPG. `/live-tv/international` shows all channels.
-- The player uses `hls.js` with a public Apple bipbop test stream as the live source.
+- CLI overview: https://docs.base44.com/developers/references/cli/get-started/overview.md
+- Agent skills: https://docs.base44.com/developers/backend/overview/skills.md
 
-## Real-Debrid Playback
-- Both add-magnet and torrent-status use `lib/real-debrid.ts`. Wait for metadata, select the actual largest video file ID (not a provider's zero-based index), and only resolve links after the torrent is downloaded.
-- `unrestrict/link` returns a `streamable` integer flag, not a streaming URL. MKV/HEVC downloads are not reliably browser-playable; obtain the official `streaming/transcode/{id}` HLS URL (`apple.medium`) and use `components/debrid-video-player.tsx` (native HLS on Safari, hls.js elsewhere).
-- Real-Debrid's live MP4 output returned `503 transcoding_error` during verification, while HLS manifests and video segments returned 200. Do not assume a generated URL proves successful video playback: check video readiness/time advancing in the browser.
-- Upstream `451 infringing_file` / error 35 is a provider copyright restriction. Preserve it as `CONTENT_BLOCKED`; never treat it as success or retry blocked files automatically. The UI disables each blocked result after its first rejection.
-- Full-project `pnpm exec tsc --noEmit` currently has pre-existing errors in nullable auth uses, home filters, and other media components. Check changed playback files separately as well as live routes.
-- The sandbox startup installs dependencies from the frozen pnpm lockfile, so new playback dependencies must update both package.json and pnpm-lock.yaml.
+If your agent supports Agent Skills, install or update Base44 skills before Base44-specific work:
 
-## Android Packaging (Capacitor)
-- The Android app is a thin Capacitor WebView wrapper that loads the deployed web app (`server.url` in `capacitor.config.ts`), so all server-side features (auth, DB, server actions, Live TV/Real-Debrid playback) work unchanged inside the native shell.
-- `@capacitor/core` + `@capacitor/app` are runtime deps; `@capacitor/cli` + `@capacitor/android` are dev deps. The web app never imports Capacitor packages statically — `lib/capacitor.ts` checks the `window.Capacitor` global, and `hooks/use-tv-navigation.ts` dynamically imports `@capacitor/app` only when running on a TV. This keeps the web bundle clean and web behaviour unchanged.
-- Two Gradle product flavors in `android/app/build.gradle`: `phone` (touch, LAUNCHER) and `firetv` (D-pad/remote, LEANBACK_LAUNCHER, landscape). Release signing falls back to the debug key when no keystore is configured.
-- TV remote navigation (D-pad spatial focus, Select/OK, Back, auto-fullscreen playback, landscape lock, focus ring) lives in `hooks/use-tv-navigation.ts` and only activates when `isTvDevice()` is true. Test with `?tvMode=1`.
-- `cap sync` regenerates git-ignored files under `android/app/src/main/assets/` and `android/app/src/main/res/xml/`. The committed `android/` project is incomplete until `pnpm cap:sync` runs (standard Capacitor workflow).
-- The Android project is NOT built in the sandbox (no Android SDK); it builds on a developer machine or via `.github/workflows/android-build.yml`. See `ANDROID_BUILD.md`.
+```bash
+npx skills add base44/skills
+```
+
+## Key Files
+
+- `src/`: frontend application source.
+- `src/api/base44Client.js`: frontend Base44 SDK client.
+- `vite.config.js`: Vite config and Base44 Vite plugin setup.
+- `.env.local`: local-only environment values; never commit secrets.
+
+## Working Notes
+
+- Use `base44 dev` as the default local development command when you need the local Base44 backend. It can run the backend and frontend together.
+- When docs or code mention the frontend being started automatically, that usually means the Base44 project config includes `site.serveCommand`, for example `"serveCommand": "npm run dev"` in `base44/config.jsonc`.
+- Use `npm run dev` only for frontend-only work against the hosted Base44 backend.
+- Prefer the existing Base44 CLI workflow over adding new npm scripts for Base44-specific tasks.
+- Reuse the existing SDK client and Vite plugin patterns before adding new Base44 integration paths.
+- Run the relevant checks from `package.json` before finishing code changes.
+
+## Playback / Live TV protection
+
+Playback, source resolution and Live TV are intentionally protected from unrelated work. Unless the user's request explicitly asks to change one of those areas, do **not** edit the protected media core files tracked by:
+
+- `scripts/protected-media-baseline.json`
+- `scripts/protected-media-guard.mjs`
+
+This includes the browser player/provider core, Real-Debrid/addon stream resolution, Live TV catalogue/backend files, and the Android/Fire TV native player activities.
+
+For ordinary catalogue, settings, navigation, accessibility, backup, diagnostics, account or visual work:
+
+1. keep all protected media-core hashes unchanged;
+2. run `npm run test:regression`;
+3. treat a `test:protected` failure as a stop condition, not something to bypass.
+
+If a playback or Live TV change is explicitly requested, make that change separately, review it as media-core work, and only then update the protected baseline to the newly reviewed hashes. Never refresh the baseline merely to make an unrelated build pass.
