@@ -132,3 +132,4 @@
 
         assistControls.visibility = if (listOf(skipRecapButton, skipIntroButton, skipCreditsButton, playNextButton, cancelNextButton).any { it.visibility == View.VISIBLE }) View.VISIBLE else View.GONE
     }
+

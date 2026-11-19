@@ -290,3 +290,4 @@ async function publicDiscovery(req) {
   }
   return json({ results: unique, source: "TheSportsDB", region, selected_league_ids: leagueIds, limited: true, liveSports: false });
 }
+
