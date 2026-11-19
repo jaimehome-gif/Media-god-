@@ -1,0 +1,11 @@
+{
+  "channel": "fire-tv",
+  "versionCode": 131,
+  "versionName": "1.4.126",
+  "title": "Media God Fire TV",
+  "message": "If an ad traps the Fire Stick remote, hold Back for two seconds and release to return to Media God.",
+  "apkUrl": "https://github.com/leepeterss85-hue/media-god/releases/download/firetv-latest/Media-God-Fire-TV.apk",
+  "downloaderCode": "4738952",
+  "downloaderAddress": "https://underworldhub.co.uk/tv.html",
+  "releaseUrl": "https://github.com/leepeterss85-hue/media-god/releases/tag/firetv-latest"
+}

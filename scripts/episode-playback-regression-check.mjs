@@ -1,0 +1,273 @@
+import { readFileSync } from "node:fs";
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const expect = (condition, message) => {
+  if (!condition) {
+    console.error(`FAIL: ${message}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`PASS: ${message}`);
+  }
+};
+
+const provider = read("src/components/mg/PlayerProvider.jsx");
+const episodeExperience = read("src/components/mg/episodeExperience.js");
+const home = read("src/pages/Home.jsx");
+const mediaPlayerProvider = read("src/components/mg/MediaPlayerProvider.jsx");
+const assist = read("src/components/mg/MediaGodV2Assist.jsx");
+const videoPlayer = read("src/components/mg/VideoPlayer.jsx");
+const liveVideo = read("src/components/mg/LiveVideo.jsx");
+const takeover = read("src/components/mg/FireTvPlayerTakeover.jsx");
+const native = read("firetv-android/app/src/main/java/com/mediagod/firetv/PlayerActivity.kt");
+const edition = read("src/components/mg/mediaEdition.js");
+const sourcePreferences = read("src/components/mg/sourceSelectorPreferences.js");
+const controls = read("src/components/mg/MediaPlayerControls.jsx");
+const mobileNative = read("android-mobile/app/src/main/java/com/mediagod/mobile/PlayerActivity.kt");
+const trackPreferences = read("src/components/mg/mediaTrackPreferences.js");
+const nativeBridge = read("src/components/mg/nativeFireTvBridge.js");
+const fireCompatibility = read("firetv-android/app/src/main/java/com/mediagod/firetv/CompatibilityPlayerActivity.kt");
+const mobileCompatibility = read("android-mobile/app/src/main/java/com/mediagod/mobile/CompatibilityPlayerActivity.kt");
+const skipSegments = read("base44/functions/getSkipSegments/entry.ts");
+
+expect(
+  provider.includes("currentTime < 60") &&
+    provider.includes("void queueContinueWatching(next)") &&
+    provider.includes("freshEpisodePreparation(cachedPreload?.prepared)") &&
+    episodeExperience.includes("2 * 60 * 60 * 1000") &&
+    episodeExperience.includes("15 * 60 * 1000") &&
+    !provider.includes("const preloadWindow = Math.min(150"),
+  "next episode prepares early, reuses RD results for long episodes and refreshes expiring public links"
+);
+
+expect(
+  provider.includes('.invoke("getSkipSegments"') &&
+    provider.includes('base44.functions.invoke("resolveTvImdb"') &&
+    provider.includes("hydrateEpisodeSkipMarkers(current, duration)") &&
+    provider.includes("skipMarkerProvenance") &&
+    provider.includes("skipMarkersPending: true") &&
+    provider.includes("skipMarkersPending: false") &&
+    videoPlayer.includes('window.addEventListener("mg:player-context", onPlayerContext)') &&
+    videoPlayer.includes("sourceDiscoveryPending && !episodeReadyForNative") &&
+    !videoPlayer.includes("remainingMarkerWait = 6000") &&
+    nativeBridge.includes("updateNativeEpisodePlaybackContext") &&
+    skipSegments.includes("https://api.skipdb.tv/api/segments") &&
+    skipSegments.includes("https://api.introdb.app/segments") &&
+    skipSegments.includes('skipUrl.searchParams.set("adjust", "conservative")') &&
+    skipSegments.includes('if (match === "out-of-range") return null;') &&
+    !skipSegments.includes("intro_length_estimate_ms"),
+  "episode marker lookup never blocks native launch, supports late updates and conservative release matching"
+);
+
+expect(
+  assist.includes("const suppressEpisodeControls = false") &&
+    assist.includes("const canSkipRecap = exactRecapWindow;") &&
+    assist.includes("const canSkipIntro = !canSkipRecap && exactIntroWindow;") &&
+    !assist.includes("fallbackRecapWindow") &&
+    !assist.includes("fallbackIntroWindow") &&
+    assist.includes("const autoNextCountdownWindow =") &&
+    assist.includes("shouldStartEpisodeCountdown({") &&
+    episodeExperience.includes("autoNext || !playing || cancelled") &&
+    episodeExperience.includes("duration - position <= 10") &&
+    assist.includes('new CustomEvent("mg:cancel-next-episode"') &&
+    provider.includes("event?.detail?.autoNextCancelled === true") &&
+    assist.includes("remaining <= 90") &&
+    assist.includes("const showSkipCredits = creditsWindow && (!isTv || context?.nextEpisodeAvailable === false);") &&
+    provider.includes('"mg:native-playback-ended"') &&
+    provider.includes('document.addEventListener(\n      "ended"'),
+  "episode assist trusts episode markers, uses a ten-second next countdown and honors cancellation"
+);
+
+expect(
+  videoPlayer.includes('reason === "next"') &&
+    videoPlayer.includes('new CustomEvent("mg:play-next-episode")'),
+  "native Fire TV Next returns through the shared episode playback pipeline"
+);
+
+expect(
+  videoPlayer.includes('new CustomEvent("mg:return-to-episode-selector"') &&
+    videoPlayer.includes('playbackMediaType === "tv"') &&
+    provider.includes('new CustomEvent("mg:return-to-episode-selector"') &&
+    provider.includes("close();") &&
+    provider.indexOf('new CustomEvent("mg:return-to-episode-selector"') <
+      provider.indexOf("close();", provider.indexOf("const onChooseEpisode =")) &&
+    home.includes('window.addEventListener(\n      "mg:return-to-episode-selector"') &&
+    home.includes('button[data-mg-player-exit="true"]') &&
+    home.includes('document.getElementById(\n      "mg-episode-selector"') &&
+    home.includes("revealEpisodeSelectorWhenReady") &&
+    home.includes("setSearchResult(item)"),
+  "TV episode Back restores the show season/episode selector instead of falling through to Home"
+);
+
+expect(
+  videoPlayer.includes('__episode_handoff__') &&
+    videoPlayer.includes('playRequestId: currentPlayRequestId') &&
+    videoPlayer.includes('current.playRequestId === currentPlayRequestId'),
+  "ended native episodes cannot relaunch the just-finished URL during next-episode handoff"
+);
+
+expect(
+  !videoPlayer.includes("hostedErrorProvider") &&
+    !videoPlayer.includes("hostedNamedError") &&
+    !videoPlayer.includes("hostedErrorDuration") &&
+    !videoPlayer.includes("loadedDuration >= 115") &&
+    videoPlayer.includes("vodPlaybackIsAdvancing("),
+  "hosted-provider labels and duration cannot override real video progress"
+);
+
+expect(
+  takeover.includes('reason === "ended" || reason === "next"'),
+  "Fire TV keeps the inter-episode native handoff visually seamless"
+);
+
+expect(
+  native.includes("private fun updateAssistControls()") &&
+    native.includes("val recapVisible = tvEpisode && NativeEpisodePolicy.segmentWindow(") &&
+    native.includes("val introVisible = !recapVisible && tvEpisode && NativeEpisodePolicy.segmentWindow(") &&
+    native.includes("val countdownWindow = NativeEpisodePolicy.countdownEligible(") &&
+    native.includes("val nextEpisodeWindow = tvEpisode && hasNextEpisode && exactCredits") &&
+    native.includes("!tvEpisode &&") &&
+    !native.includes("val fallbackRecap =") &&
+    !native.includes("val fallbackIntro =") &&
+    native.includes('finishWithResult("ended")'),
+  "Fire TV uses bounded episode markers and a cancellable verified-credits countdown"
+);
+
+
+expect(
+  sourcePreferences.includes("availableSourceSortOptions") &&
+    sourcePreferences.includes('mediaType !== "tv"') &&
+    sourcePreferences.includes("editionValues.has(option.value)") &&
+    videoPlayer.includes("availableSortOptions") &&
+    controls.includes("availableSortOptions"),
+  "source picker only exposes filters and editions present for the current title and suppresses movie editions for TV"
+);
+
+expect(
+  videoPlayer.includes('({ item }) => sourceIsUserSelectable(item)') &&
+    videoPlayer.includes('failedSourcesRef.current.has(index)') &&
+    videoPlayer.includes('Unavailable • ${visibleLabel}') &&
+    videoPlayer.includes('const automaticReadySourceIndex') &&
+    videoPlayer.includes('Opening a ready source while Media God prepares the other torrents in the background') &&
+    videoPlayer.includes('rdCacheEngineOwnsPollingRef.current = false') &&
+    videoPlayer.includes('}, BACKGROUND_CACHE_SLOT_RETRY_MS);'),
+  "cached source search keeps the full ready list, retries failed rows manually and continues hidden background caching"
+);
+
+expect(
+  videoPlayer.includes('const activeRuntimeReady = Boolean(') &&
+    videoPlayer.includes('const activeHasResolvedStream = Boolean(') &&
+    videoPlayer.includes('!activeHasResolvedStream && sourceNeedsCaching(active)') &&
+    videoPlayer.includes('const qualityBucketFor = (entry) =>') &&
+    videoPlayer.includes('qualityBucket === "4k"'),
+  "resolved cache streams cannot restart and 4K cache candidates keep their own quality bucket"
+);
+
+expect(
+  videoPlayer.includes('if (next === "4k" || next === "1080p")') &&
+    videoPlayer.includes('? Number(entry.resolution || 0) >= 2000') &&
+    videoPlayer.includes('selectSource(match.index, match.item);'),
+  "4K and 1080p quality choices switch to a real ready source instead of only sorting the list"
+);
+
+expect(
+  mediaPlayerProvider.includes('fastMode: false') &&
+    mediaPlayerProvider.includes('excludeAddonNames: []') &&
+    mediaPlayerProvider.includes('every extra torrent hash is another chance') &&
+    mediaPlayerProvider.includes('preservePublishedSourceOrder') &&
+    mediaPlayerProvider.includes('publishedSourceSnapshot') &&
+    mediaPlayerProvider.includes('if (lockedIndex > 0)') &&
+    !mediaPlayerProvider.includes('successfulAddonNames.length >=') &&
+    !mediaPlayerProvider.includes('lockedIsKnownUncachedMagnet && cachedAlternativeExists'),
+  "fast start always expands into full cache discovery and every published source keeps a stable playback index"
+);
+
+expect(
+  mediaPlayerProvider.includes('item?.infoHash') &&
+    mediaPlayerProvider.includes('item?.info_hash') &&
+    mediaPlayerProvider.includes('item?.richMagnet') &&
+    mediaPlayerProvider.includes('Boolean(sourceMagnetHash(item))'),
+  "cache annotation includes torrent hashes carried as metadata on provider and HTTP source rows"
+);
+
+expect(
+  mediaPlayerProvider.includes('const combinedSourceCount = cacheAnnotatedCombined.length') &&
+    mediaPlayerProvider.includes('cacheCandidateCount,') &&
+    mediaPlayerProvider.includes('cachedSourceCount,') &&
+    videoPlayer.includes('data-mg-source-health="true"') &&
+    videoPlayer.includes('Torrent candidates') &&
+    videoPlayer.includes('Shown {selectableSourceCount}'),
+  "player exposes source-health counts for discovery, torrent candidates, cached hits and visible sources"
+);
+
+expect(
+  liveVideo.includes("const stableConfigSignature = (value) =>") &&
+    liveVideo.includes("const onErrorRef = useRef(onError)") &&
+    liveVideo.includes("const headersSignature = stableConfigSignature(headers)") &&
+    liveVideo.includes("const drmSignature = stableConfigSignature(drm)") &&
+    liveVideo.includes("headersSignature,") &&
+    liveVideo.includes("drmSignature,") &&
+    !liveVideo.includes("      sourceLabel,\n      isLive,\n      headers,\n      drm,"),
+  "LiveVideo keeps one decoder for the same URL instead of restarting playback on incidental React prop changes"
+);
+
+expect(
+  nativeBridge.includes("const setNativePlaybackOwnership = (active) =>") &&
+    nativeBridge.includes('document.querySelectorAll("video, audio")') &&
+    nativeBridge.includes("setNativePlaybackOwnership(accepted)") &&
+    liveVideo.includes("window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true") &&
+    videoPlayer.includes("window.__MG_NATIVE_PLAYBACK_ACTIVE__ = false") &&
+    videoPlayer.includes("window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true"),
+  "native playback is the sole owner: WebView media is stopped and cannot restart underneath it"
+);
+
+expect(
+  sourcePreferences.includes("const hasCached = items.some((item) => sourceIsCached(item))") &&
+    sourcePreferences.includes("const movieLike =") &&
+    sourcePreferences.includes("hasCached && (items.length > 1 || movieLike)"),
+  "movies keep the Cached / ready dropdown available even when only one cached source is selectable"
+);
+
+expect(
+  provider.includes('availability: "unknown"') &&
+    provider.includes('availability: "no"') &&
+    provider.includes('availability: "yes"') &&
+    provider.includes("nextEpisodeAvailable:") &&
+    nativeBridge.includes("nextEpisodeAvailable:") &&
+    provider.includes("await play(nextRequest)"),
+  "next episode discovery and prepared handoff remain available"
+);
+
+expect(
+  mobileNative.includes("private fun updateAssistControls()") &&
+    mobileNative.includes("val recapVisible = tvEpisode && NativeEpisodePolicy.segmentWindow(") &&
+    mobileNative.includes("val introVisible = !recapVisible && tvEpisode && NativeEpisodePolicy.segmentWindow(") &&
+    mobileNative.includes("val countdownWindow = NativeEpisodePolicy.countdownEligible(") &&
+    mobileNative.includes("val nextEpisodeWindow = tvEpisode && hasNextEpisode && exactCredits") &&
+    mobileNative.includes("!tvEpisode &&") &&
+    !mobileNative.includes("val fallbackRecap =") &&
+    !mobileNative.includes("val fallbackIntro =") &&
+    mobileNative.includes('finishWithResult("ended")'),
+  "Android mobile uses bounded episode markers and a cancellable verified-credits countdown"
+);
+
+expect(
+  trackPreferences.includes("subtitlesEnabled: false") &&
+    trackPreferences.includes("SUBTITLE_PREFERENCE_VERSION = 2") &&
+    nativeBridge.includes("subtitlesEnabled = false") &&
+    native.includes('optBoolean("subtitlesEnabled", false)') &&
+    mobileNative.includes('optBoolean("subtitlesEnabled", false)') &&
+    fireCompatibility.includes('optBoolean("subtitlesEnabled", false)') &&
+    mobileCompatibility.includes('optBoolean("subtitlesEnabled", false)'),
+  "subtitles default off across web, Fire TV, Android mobile and compatibility playback"
+);
+
+expect(
+  edition.includes('wanted === "theatrical"') &&
+    edition.includes('detected.value === "standard"') &&
+    edition.includes("detected.explicit === false"),
+  "untagged theatrical/original sources satisfy the current regression contract"
+);
+
+if (process.exitCode) {
+  process.exit(process.exitCode);
+}

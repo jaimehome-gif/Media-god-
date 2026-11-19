@@ -1,0 +1,14 @@
+*
+!server.mjs
+!realDebrid.mjs
+!realDebridAuth.mjs
+!findRdLibrary.mjs
+!regressionHelpers.js
+!verifiedUserClient.mjs
+!guestDebrid.mjs
+!package.json
+!multiDebrid.mjs
+
+!fetchAddonStreams.mjs
+
+!deviceClient.mjs

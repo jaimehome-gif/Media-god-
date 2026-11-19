@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Media God embedded video test</title>
+<style>body{margin:0;background:#101725;color:white;font:20px sans-serif;text-align:center}video{display:block;width:100%;height:60vh;background:black}p{margin:.5em}button{font:inherit;padding:.4em 1em}button:focus{outline:3px solid #91e259}</style></head>
+<body><video id="clip" playsinline preload="auto"></video><p id="result" role="status">Loading the four-second test clip…</p><button id="play">Play test clip</button>
+<script>
+var clip=document.getElementById("clip"), result=document.getElementById("result");
+var timer;
+function report(message){
+  result.textContent=message;
+  if(parent!==window) {
+    // srcdoc has an about: URL; its location.origin is not the app origin.
+    try {
+      parent.postMessage({type:"mg-video-test-status",message:message},parent.location.origin);
+    } catch (error) {
+      // Keep the local result and let playback proceed if reporting fails.
+    }
+  }
+}
+function start(){
+  clearTimeout(timer);
+  report("Starting the embedded video…");
+  timer=setTimeout(function(){
+    report("Embedded video stalled at "+clip.currentTime.toFixed(1)+"s (readyState "+clip.readyState+", networkState "+clip.networkState+").");
+  },8000);
+  var attempt=clip.play();
+  if(attempt && attempt.catch) attempt.catch(function(e){
+    clearTimeout(timer);
+    if(!clip.error) report(e.name==="NotAllowedError"?"Playback needs a button press. Select Play test clip again.":"Embedded playback could not start ("+e.name+").");
+  });
+}
+clip.onended=function(){clearTimeout(timer);report("Embedded video reached the end. Check whether you saw moving text and heard the tone.");};
+clip.onerror=function(){
+  clearTimeout(timer);
+  var reasons=["unknown","interrupted","network error","decode error","source unsupported"];
+  var code=clip.error?clip.error.code:0;
+  report("Embedded video error "+code+" ("+(reasons[code]||"unknown")+").");
+};
+document.getElementById("play").onclick=start;
+clip.src="/media-god-test.mp4";
+start();
+</script></body></html>
