@@ -198,16 +198,16 @@ export default async function MoviePage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* OnlyFlix Player */}
-      {externalIds.imdb_id && (
-        <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <h2 className="text-2xl font-bold text-foreground mb-4">Watch Now</h2>
-          <OnlyFlixPlayer
-            imdbId={externalIds.imdb_id}
-            title={movie.title}
-            posterPath={movie.backdrop_path}
-          />
-        </section>
-      )}
+      <section className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h2 className="text-2xl font-bold text-foreground mb-4">Watch Now</h2>
+        <OnlyFlixPlayer
+          key={movieId}
+          tmdbId={movieId}
+          imdbId={externalIds.imdb_id}
+          title={movie.title}
+          posterPath={movie.backdrop_path}
+        />
+      </section>
 
       {/* Trailer Player */}
       {trailer && (

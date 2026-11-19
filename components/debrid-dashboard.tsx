@@ -8,15 +8,23 @@ export function DebridDashboard() {
   const [torrents, setTorrents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [message, setMessage] = useState('')
+
   useEffect(() => {
     // Fetch active torrents from your debrid client/API route
     fetch('/api/debrid/torrents')
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error(res.status === 401 ? 'Sign in to view active streams.' : 'Active streams are unavailable.')
+        return res.json()
+      })
       .then((data) => {
         setTorrents(data.torrents || [])
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch((error) => {
+        setMessage(error.message)
+        setLoading(false)
+      })
   }, [])
 
   return (
@@ -27,6 +35,8 @@ export function DebridDashboard() {
       <CardContent>
         {loading ? (
           <p className="text-zinc-400">Loading active downloads...</p>
+        ) : message ? (
+          <p role="status" className="text-zinc-400">{message}</p>
         ) : torrents.length === 0 ? (
           <p className="text-zinc-400">No active torrents found.</p>
         ) : (
