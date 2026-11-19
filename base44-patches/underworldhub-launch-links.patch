@@ -1,0 +1,258 @@
+diff --git a/.github/workflows/independent-metadata-smoke.yml b/.github/workflows/independent-metadata-smoke.yml
+index 07ee368c..5fb00cb9 100644
+--- a/.github/workflows/independent-metadata-smoke.yml
++++ b/.github/workflows/independent-metadata-smoke.yml
+@@ -28,7 +28,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+             -X POST https://media-god-metadata-api-production.up.railway.app/functions/getTmdbMovies \
+-            -H "Origin: https://mysterious-media-vault-pro.base44.app" \
++            -H "Origin: https://underworldhub.co.uk" \
+             -H 'Content-Type: application/json' \
+             --data '{"media_type":"movie","query":"Inception","page":1}' \
+             | jq -e '(.movies | type == "array") and (.movies | length > 0)'
+@@ -37,7 +37,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+             -X POST https://media-god-metadata-api-production.up.railway.app/functions/resolveImdb \
+-            -H "Origin: https://mysterious-media-vault-pro.base44.app" \
++            -H "Origin: https://underworldhub.co.uk" \
+             -H 'Content-Type: application/json' \
+             --data '{"tmdb_id":27205,"media_type":"movie"}' \
+             | jq -e '.imdb_id == "tt1375666"'
+@@ -46,7 +46,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+             -X POST https://media-god-metadata-api-production.up.railway.app/functions/resolveTvImdb \
+-            -H "Origin: https://mysterious-media-vault-pro.base44.app" \
++            -H "Origin: https://underworldhub.co.uk" \
+             -H 'Content-Type: application/json' \
+             --data '{"tmdb_id":1399,"media_type":"tv"}' \
+             | jq -e '.imdb_id == "tt0944947"'
+@@ -55,7 +55,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 35 \
+             -X POST https://media-god-metadata-api-production.up.railway.app/functions/fetchAddonStreams \
+-            -H "Origin: https://mysterious-media-vault-pro.base44.app" \
++            -H "Origin: https://underworldhub.co.uk" \
+             -H 'Content-Type: application/json' \
+             --data '{"imdb_id":"tt1375666","tmdb_id":27205,"title":"Inception","media_type":"movie","fast_mode":true}' \
+             | jq -e '(.streams | type == "array") and (.streams | length > 0) and (.diagnostics | type == "array")'
+diff --git a/.github/workflows/independent-public-features-smoke.yml b/.github/workflows/independent-public-features-smoke.yml
+index 665b5afd..13c93cc4 100644
+--- a/.github/workflows/independent-public-features-smoke.yml
++++ b/.github/workflows/independent-public-features-smoke.yml
+@@ -20,7 +20,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 60 \
+             -X POST 'https://media-god-metadata-api-production.up.railway.app/functions/getEntertainmentNews' \
+-            -H 'Origin: https://mysterious-media-vault-pro.base44.app' \
++            -H 'Origin: https://underworldhub.co.uk' \
+             -H 'Content-Type: application/json' \
+             --data '{"section":"all"}' \
+             | jq -e '(.stories | type == "array") and (.stories | length > 0) and (.updatedAt | type == "string")'
+@@ -29,7 +29,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 3 --retry-delay 3 --max-time 30 \
+             -X POST 'https://media-god-metadata-api-production.up.railway.app/functions/getSkipSegments' \
+-            -H 'Origin: https://mysterious-media-vault-pro.base44.app' \
++            -H 'Origin: https://underworldhub.co.uk' \
+             -H 'Content-Type: application/json' \
+             --data '{"imdb_id":"tt0944947","season":1,"episode":1,"duration":3600}' \
+             | jq -e '.imdb_id == "tt0944947" and .season == 1 and .episode == 1 and (.markers | type == "object") and (.providers | type == "array")'
+@@ -39,7 +39,7 @@ jobs:
+           set -euo pipefail
+           curl --fail-with-body --silent --show-error --retry 2 --retry-delay 3 --max-time 30 \
+             -X POST 'https://media-god-metadata-api-production.up.railway.app/functions/getFireTvApkLink' \
+-            -H 'Origin: https://mysterious-media-vault-pro.base44.app' \
++            -H 'Origin: https://underworldhub.co.uk' \
+             -H 'Content-Type: application/json' \
+             --data '{}' \
+             | jq -e '(.url | type == "string") and (.url | startswith("https://")) and (.size | type == "number")'
+diff --git a/.github/workflows/independent-real-debrid-smoke.yml b/.github/workflows/independent-real-debrid-smoke.yml
+index 51f53438..c6668284 100644
+--- a/.github/workflows/independent-real-debrid-smoke.yml
++++ b/.github/workflows/independent-real-debrid-smoke.yml
+@@ -37,7 +37,7 @@ jobs:
+           set -euo pipefail
+           status=$(curl -sS -o /tmp/rd-response.json -w '%{http_code}' --max-time 20 \
+             -X POST 'https://media-god-rd-api-production.up.railway.app/functions/realDebrid' \
+-            -H 'Origin: https://mysterious-media-vault-pro.base44.app' \
++            -H 'Origin: https://underworldhub.co.uk' \
+             -H 'Content-Type: application/json' --data '{"action":"status"}')
+           test "$status" = "401"
+           jq -e '.error | type == "string"' /tmp/rd-response.json
+@@ -46,7 +46,7 @@ jobs:
+           set -euo pipefail
+           status=$(curl -sS -o /tmp/rd-response.json -w '%{http_code}' --max-time 20 \
+             -X POST 'https://media-god-rd-api-production.up.railway.app/functions/realDebridAuth' \
+-            -H 'Origin: https://mysterious-media-vault-pro.base44.app' \
++            -H 'Origin: https://underworldhub.co.uk' \
+             -H 'Authorization: Bearer not-a-real-account-token-not-a-real-account-token' \
+             -H 'Content-Type: application/json' --data '{"action":"status"}')
+           test "$status" = "401"
+diff --git a/.github/workflows/torrent-source-diagnostics.yml b/.github/workflows/torrent-source-diagnostics.yml
+index a7b91afe..2967ae86 100644
+--- a/.github/workflows/torrent-source-diagnostics.yml
++++ b/.github/workflows/torrent-source-diagnostics.yml
+@@ -31,7 +31,7 @@ jobs:
+               episode_full) payload='{"imdb_id":"tt0096697","title":"The Simpsons","media_type":"tv","season":1,"episode":1,"fast_mode":false}' ;;
+             esac
+             echo "--- $case ---"
+-            status=$(curl --silent --show-error --max-time 95 -X POST "$api" -o /tmp/result.json -w '%{http_code}' -H 'Origin: https://mysterious-media-vault-pro.base44.app' -H 'Content-Type: application/json' --data "$payload" || true)
++            status=$(curl --silent --show-error --max-time 95 -X POST "$api" -o /tmp/result.json -w '%{http_code}' -H 'Origin: https://underworldhub.co.uk' -H 'Content-Type: application/json' --data "$payload" || true)
+             echo "HTTP $status"
+             jq -c '{count:(.streams|length),checked:.addons_checked,available:.addons_available,reason:(.reason // .error // null),diagnostics:[.diagnostics[]? | {name,status,stream_count,playable_count,message:(.message//""|tostring|.[0:160])}]}' /tmp/result.json
+           done
+diff --git a/android-mobile/app/build.gradle.kts b/android-mobile/app/build.gradle.kts
+index 4c2137f1..4d414c3c 100644
+--- a/android-mobile/app/build.gradle.kts
++++ b/android-mobile/app/build.gradle.kts
+@@ -20,7 +20,7 @@ android {
+         buildConfigField(
+             "String",
+             "MEDIA_GOD_URL",
+-            "\"https://mysterious-media-vault-pro.base44.app/\""
++            "\"https://underworldhub.co.uk/\""
+         )
+     }
+ 
+diff --git a/deploy/media-god-api/server.mjs b/deploy/media-god-api/server.mjs
+index aa46ff62..c6790bdc 100644
+--- a/deploy/media-god-api/server.mjs
++++ b/deploy/media-god-api/server.mjs
+@@ -12,7 +12,7 @@ import getFireTvApkLink from "./getFireTvApkLink.mjs";
+ // credentials are never sent to this service.
+ const allowedOrigins = new Set(
+   (process.env.ALLOWED_ORIGINS ||
+-    "https://mysterious-media-vault-pro.base44.app,http://localhost:5173")
++    "https://underworldhub.co.uk,https://mysterious-media-vault-pro.base44.app,http://localhost:5173")
+     .split(",")
+     .map((x) => x.trim())
+     .filter(Boolean),
+diff --git a/deploy/media-god-rd-api/server.mjs b/deploy/media-god-rd-api/server.mjs
+index 9b7373f1..e8361f04 100644
+--- a/deploy/media-god-rd-api/server.mjs
++++ b/deploy/media-god-rd-api/server.mjs
+@@ -10,7 +10,7 @@ import fetchAddonStreams from "./fetchAddonStreams.mjs";
+ const APP_ID = process.env.BASE44_APP_ID || "6a95b85c1b5a8657bf3906c8";
+ const ALLOWED_ORIGINS = new Set(
+   (process.env.ALLOWED_ORIGINS ||
+-    "https://mysterious-media-vault-pro.base44.app,http://localhost:5173")
++    "https://underworldhub.co.uk,https://mysterious-media-vault-pro.base44.app,http://localhost:5173")
+     .split(",").map(v => v.trim()).filter(Boolean)
+ );
+ const HANDLERS = Object.freeze({
+diff --git a/firetv-android/app/build.gradle.kts b/firetv-android/app/build.gradle.kts
+index d45e9e73..a0ee255c 100644
+--- a/firetv-android/app/build.gradle.kts
++++ b/firetv-android/app/build.gradle.kts
+@@ -20,7 +20,7 @@ android {
+         buildConfigField(
+             "String",
+             "MEDIA_GOD_URL",
+-            "\"https://mysterious-media-vault-pro.base44.app/\""
++            "\"https://underworldhub.co.uk/\""
+         )
+     }
+ 
+diff --git a/public/firetv-update.json b/public/firetv-update.json
+index ec103b8f..102ed82f 100644
+--- a/public/firetv-update.json
++++ b/public/firetv-update.json
+@@ -6,6 +6,6 @@
+   "message": "If an ad traps the Fire Stick remote, hold Back for two seconds and release to return to Media God.",
+   "apkUrl": "https://github.com/leepeterss85-hue/media-god/releases/download/firetv-latest/Media-God-Fire-TV.apk",
+   "downloaderCode": "4738952",
+-  "downloaderAddress": "https://mysterious-media-vault-pro.base44.app/tv.html",
++  "downloaderAddress": "https://underworldhub.co.uk/tv.html",
+   "releaseUrl": "https://github.com/leepeterss85-hue/media-god/releases/tag/firetv-latest"
+ }
+diff --git a/public/open.html b/public/open.html
+index 19fa6af1..933dd55f 100644
+--- a/public/open.html
++++ b/public/open.html
+@@ -13,11 +13,11 @@
+ <h1>Open Media God</h1>
+ <p>If a link opened from WhatsApp, Facebook or another app fails, copy it below and paste it directly into Chrome, Safari or your usual browser.</p>
+ <div class="actions">
+-<a class="primary" href="https://mysterious-media-vault-pro.base44.app/">Continue to Media God</a>
+-<a id="chrome" hidden href="intent://mysterious-media-vault-pro.base44.app/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fmysterious-media-vault-pro.base44.app%2Fopen.html;end">Try opening in Chrome</a>
++<a class="primary" href="https://underworldhub.co.uk/">Continue to Media God</a>
++<a id="chrome" hidden href="intent://underworldhub.co.uk/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Funderworldhub.co.uk%2Fopen.html;end">Try opening in Chrome</a>
+ </div>
+ <label for="link">Website address</label>
+-<input id="link" readonly value="https://mysterious-media-vault-pro.base44.app/">
++<input id="link" readonly value="https://underworldhub.co.uk/">
+ <p><button id="copy" type="button" hidden>Copy website link</button></p>
+ <p id="status" role="status" aria-live="polite"></p>
+ <p>On iPhone or iPad, use the app’s menu to open in Safari, or paste the address into Safari yourself.</p>
+diff --git a/src/lib/mediaGodAuth.js b/src/lib/mediaGodAuth.js
+index 5ec68bcb..21822a5d 100644
+--- a/src/lib/mediaGodAuth.js
++++ b/src/lib/mediaGodAuth.js
+@@ -1,6 +1,6 @@
+ export const MEDIA_GOD_APP_ID = "6a95b85c1b5a8657bf3906c8";
+ export const MEDIA_GOD_PUBLIC_ORIGIN =
+-  "https://mysterious-media-vault-pro.base44.app";
++  "https://underworldhub.co.uk";
+ 
+ const safePath = (value) => {
+   const text = String(value || "/").trim();
+diff --git a/tests/browser-entry.test.mjs b/tests/browser-entry.test.mjs
+index c5e484a2..8200e42a 100644
+--- a/tests/browser-entry.test.mjs
++++ b/tests/browser-entry.test.mjs
+@@ -26,7 +26,7 @@ const helpScript = help.match(/<script>([\s\S]*?)<\/script>/)[1];
+ function openHelp(ua, clipboard) {
+   const elements = Object.fromEntries(['link', 'copy', 'status', 'chrome'].map(id => [id, {
+     hidden: true,
+-    value: id === 'link' ? 'https://mysterious-media-vault-pro.base44.app/' : '',
++    value: id === 'link' ? 'https://underworldhub.co.uk/' : '',
+     textContent: '',
+     addEventListener(event, handler) { this[event] = handler; },
+     focus() { this.focused = true; },
+@@ -36,7 +36,7 @@ function openHelp(ua, clipboard) {
+   vm.runInNewContext(helpScript, {
+     document: { getElementById: id => elements[id] },
+     navigator: { userAgent: ua, clipboard },
+-    location: { href: 'https://mysterious-media-vault-pro.base44.app/open.html?access_token=secret#private' },
++    location: { href: 'https://underworldhub.co.uk/open.html?access_token=secret#private' },
+   });
+   return elements;
+ }
+@@ -46,7 +46,7 @@ test('copying help shares only the public home address, never incoming credentia
+   const elements = openHelp('Android WhatsApp', { writeText: async text => { copied = text; } });
+   elements.copy.click();
+   await new Promise(resolve => setImmediate(resolve));
+-  assert.equal(copied, 'https://mysterious-media-vault-pro.base44.app/');
++  assert.equal(copied, 'https://underworldhub.co.uk/');
+   assert.match(elements.status.textContent, /Link copied/);
+   assert.equal(elements.chrome.hidden, false);
+ });
+diff --git a/tests/media-god-paired-cast.test.mjs b/tests/media-god-paired-cast.test.mjs
+index c6906e65..d6098c61 100644
+--- a/tests/media-god-paired-cast.test.mjs
++++ b/tests/media-god-paired-cast.test.mjs
+@@ -8,7 +8,7 @@ import {
+ } from "../src/components/mg/pairedMediaGodCast.js";
+ 
+ const token = "abcd1234".repeat(4);
+-const origin = "https://mysterious-media-vault-pro.base44.app";
++const origin = "https://underworldhub.co.uk";
+ 
+ test("accepts the existing 32-character Fire TV Phone Remote bearer code or matching origin QR link", () => {
+   assert.equal(pairingCodeFromInput(token, origin), token);
+diff --git a/windows-desktop/main.cjs b/windows-desktop/main.cjs
+index 1266288d..e42abb2d 100644
+--- a/windows-desktop/main.cjs
++++ b/windows-desktop/main.cjs
+@@ -6,7 +6,7 @@ const {
+   shell,
+ } = require("electron");
+ 
+-const MEDIA_GOD_URL = "https://mysterious-media-vault-pro.base44.app/";
++const MEDIA_GOD_URL = "https://underworldhub.co.uk/";
+ 
+ let mainWindow = null;
+ let wasMaximizedBeforeFullscreen = true;
