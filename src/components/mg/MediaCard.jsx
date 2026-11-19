@@ -1,0 +1,177 @@
+import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import React from "react";
+import { Play, Plus, Check } from "lucide-react";
+import { Image } from "@/components/ui/image";
+import { usePlayer } from "@/components/mg/PlayerProvider";
+import ReeznCardAction from "@/components/mg/ReeznCardAction";
+import { resolveCatalogMediaType } from "@/components/mg/catalogMediaIdentity";
+import { formatCatalogueDate } from "@/components/mg/catalogueDateOrder";
+import { cataloguePosterUrl } from "@/components/mg/posterImageSizing";
+import { releaseStatusLabel } from "@/components/mg/releaseDiscovery";
+
+const PosterImage = /** @type {any} */ (Image);
+
+const getMediaType = (item) => resolveCatalogMediaType(item);
+
+export default function MediaCard({
+  item,
+  onOpen,
+  onWatchlist,
+  watched,
+  detailsOnly = false,
+  showReleaseDate = false,
+}) {
+  const player = usePlayer();
+
+  const handlePlay = (event) => {
+    event.stopPropagation();
+
+    const mediaType = getMediaType(item);
+    const tmdbId = item.id || item.tmdb_id;
+
+    const media = {
+      ...item,
+      id: tmdbId,
+      tmdbId,
+      tmdb_id: tmdbId,
+      imdbId: item.imdb_id || item.imdbId,
+      title: item.title,
+      year: item.year,
+      rdYear: item.year,
+      poster: item.poster_url,
+      mediaType,
+      type: mediaType === "tv" ? "series" : "movie",
+      rdTitle: item.title,
+    };
+
+    /*
+     * Movies launch straight into the OnlyFlix embed from the card play button
+     * for instant playback. TV still opens Details first so the user can pick
+     * the exact season and episode before playing.
+     */
+    if (onOpen && (detailsOnly || mediaType === "tv")) {
+      onOpen({ ...item, id: tmdbId, media_type: mediaType, mediaType,
+        type: mediaType === "tv" ? "tv" : "movie" });
+      return;
+    }
+
+    if (mediaType === "movie" && launchFireTvCardPlay(player, media)) return;
+    if (mediaType === "movie" && player.playOnlyFlix) {
+      if (player.playOnlyFlix(media)) return;
+    }
+
+    if (onOpen) {
+      onOpen({
+        ...item,
+        id: tmdbId,
+        media_type: mediaType,
+        mediaType,
+        type: mediaType === "tv" ? "tv" : "movie",
+      });
+      return;
+    }
+
+    player.play(media);
+
+    /*
+     * Fallback for any MediaCard used without an onOpen handler:
+     * once the player mounts, ask it to open the TV picker.
+     */
+    if (mediaType === "tv") {
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("mg:open-episode-picker")
+        );
+      }, 250);
+    }
+  };
+
+  const handleDetails = (event) => {
+    event.stopPropagation();
+
+    const mediaType = getMediaType(item);
+
+    onOpen?.({
+      ...item,
+      media_type: mediaType,
+      mediaType,
+    });
+  };
+
+  const handleWatchlist = (event) => {
+    event.stopPropagation();
+    onWatchlist?.(item);
+  };
+
+  return (
+    <article className="mg-fire-tv-card group shrink-0 w-28 min-[420px]:w-32 sm:w-36 md:w-40 xl:w-44 3xl:w-52 4xl:w-60">
+      <div className="relative aspect-[2/3] rounded-md 3xl:rounded-lg overflow-hidden border border-white/10 bg-mg-card">
+        <PosterImage
+          src={cataloguePosterUrl(item.poster_url)}
+          alt={item.title}
+          className="w-full h-full object-cover"
+          fittingType="fill"
+          loading="lazy"
+        />
+
+        <ReeznCardAction
+          focusKey={`${getMediaType(item)}:${item?.id || item?.tmdb_id || item?.title || "item"}`}
+        />
+
+        {(item.release_context || item.local_streaming_listed) && (
+          <span title={releaseStatusLabel(item)}
+            data-mg-release-status="true"
+            className="pointer-events-none absolute right-1 top-1 z-10 max-w-[65%] truncate rounded bg-black/85 px-1.5 py-1 text-[9px] font-semibold text-white">
+            {releaseStatusLabel(item).split(" · ")[0]}
+          </span>
+        )}
+
+        <button
+          type="button"
+          data-mg-card-primary="true"
+          data-mg-focus-key={`media:${getMediaType(item)}:${item?.id || item?.tmdb_id || item?.title || "item"}`}
+          onClick={handlePlay}
+          className="mg-hover-action absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label={detailsOnly ? `Open ${item.title}` : `Play ${item.title}`}
+        >
+          <span className="w-10 h-10 3xl:w-12 3xl:h-12 4xl:w-14 4xl:h-14 rounded-full bg-[#e50914] text-white flex items-center justify-center shadow-lg">
+            <Play className="w-5 h-5 3xl:w-6 3xl:h-6 4xl:w-7 4xl:h-7 fill-white" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDetails}
+          className="absolute top-1.5 left-1.5 3xl:top-2 3xl:left-2 px-2 py-1 3xl:px-2.5 3xl:py-1.5 rounded bg-black/70 text-white text-[10px] 3xl:text-xs font-semibold transition-opacity"
+        >
+          Details
+        </button>
+
+        {onWatchlist && (
+          <button
+            type="button"
+            onClick={handleWatchlist}
+            className="mg-hover-action absolute bottom-1.5 right-1.5 3xl:bottom-2 3xl:right-2 w-8 h-8 3xl:w-10 3xl:h-10 rounded-full bg-mg-green text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label={watched ? "In Watchlist" : "Add to Watchlist"}
+          >
+            {watched ? (
+              <Check className="w-4 h-4 3xl:w-5 3xl:h-5" />
+            ) : (
+              <Plus className="w-4 h-4 3xl:w-5 3xl:h-5" />
+            )}
+          </button>
+        )}
+      </div>
+
+      <p className="mt-1.5 3xl:mt-2 text-xs sm:text-sm 3xl:text-base 4xl:text-lg text-white truncate">
+        {item.title}
+      </p>
+
+      <p className="text-[10px] sm:text-xs 3xl:text-sm text-white/40">
+        {showReleaseDate && formatCatalogueDate(item)
+          ? `${getMediaType(item) === "tv" ? "Premiered" : "Released"}: ${formatCatalogueDate(item)}`
+          : item.year}
+      </p>
+    </article>
+  );
+}

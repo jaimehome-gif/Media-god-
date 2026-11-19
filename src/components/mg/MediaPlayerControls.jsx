@@ -1,0 +1,2379 @@
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  ArrowLeft, Play, Pause, Volume2, VolumeX, Maximize, Minimize, RotateCcw, RotateCw, SkipBack, SkipForward, ListVideo, Settings2, Gauge, Captions, Languages, Repeat, PictureInPicture2
+} from "lucide-react";
+
+import { safeSeek } from "./safeSeek";
+import { cn } from "@/lib/utils";
+import "@/components/mg/media-player-controls.css";
+import MobileCenterControls from "@/components/mg/MobileCenterControls";
+import usePlayerExtras from "@/components/mg/usePlayerExtras";
+import SubtitleMenu from "@/components/mg/SubtitleMenu";
+import {
+  friendlyTrackLabel,
+  preferredAudioTrackScore,
+  readRememberedSubtitlePreference,
+  readTrackPreferences,
+  rememberAudioPreference,
+  rememberSubtitlePreference,
+  rememberedSubtitleTrackScore,
+  subtitleCueStyle,
+  trackLanguage,
+  trackLooksForced,
+  trackLooksSdh,
+  writeTrackPreferences,
+} from "@/components/mg/mediaTrackPreferences";
+import { concisePlaybackSourceLabel } from "@/components/mg/playbackSourceLabels";
+import {
+  availableSourceSortOptions,
+  readSourceSortMode,
+  sortSourceEntries,
+  sourceIsUserSelectable,
+  SOURCE_SELECTOR_SORT_EVENT,
+  writeSourceSortMode,
+} from "@/components/mg/sourceSelectorPreferences";
+import { sourceHasEdition } from "@/components/mg/mediaEdition";
+
+const isFireTvControlsRuntime = () => {
+  if (typeof document === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+
+  const ua = String(navigator.userAgent || "");
+  return (
+    /(?:AFT[A-Z0-9]*|Fire TV|AmazonWebAppPlatform|Silk|MediaGodFireTV)/i.test(ua) ||
+    document.documentElement.classList.contains("mg-fire-tv") ||
+    document.documentElement.classList.contains("mg-fire-tv-mode") ||
+    document.body?.classList.contains("mg-fire-tv") ||
+    document.body?.classList.contains("mg-fire-tv-mode")
+  );
+};
+
+const formatTime = (seconds) => {
+  if (!seconds || !Number.isFinite(Number(seconds))) {
+    return "0:00";
+  }
+
+  const total = Math.max(0, Math.floor(Number(seconds)));
+  const s = total % 60;
+  const m = Math.floor(total / 60) % 60;
+  const h = Math.floor(total / 3600);
+
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(
+      2,
+      "0"
+    )}`;
+  }
+
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
+
+const sourceRawLabel = (item, index) =>
+  String(
+    item?.label ||
+      item?.name ||
+      item?.title ||
+      `Source ${index + 1}`
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+
+const sourceLabel = (item, index) =>
+  concisePlaybackSourceLabel(item, index);
+
+const subtitleCueOriginalTimes = new WeakMap();
+
+const applySubtitleOffset = (video, offsetSeconds = 0) => {
+  if (!video?.textTracks) return;
+
+  const offset = Math.max(-10, Math.min(10, Number(offsetSeconds || 0)));
+
+  for (let trackIndex = 0; trackIndex < video.textTracks.length; trackIndex += 1) {
+    const track = video.textTracks[trackIndex];
+    let cues = null;
+
+    try {
+      cues = track?.cues;
+    } catch {
+      cues = null;
+    }
+
+    if (!cues) continue;
+
+    for (let cueIndex = 0; cueIndex < cues.length; cueIndex += 1) {
+      const cue = cues[cueIndex];
+      if (!cue) continue;
+
+      let original = subtitleCueOriginalTimes.get(cue);
+      if (!original) {
+        original = {
+          startTime: Number(cue.startTime || 0),
+          endTime: Number(cue.endTime || 0),
+        };
+        subtitleCueOriginalTimes.set(cue, original);
+      }
+
+      try {
+        const startTime = Math.max(0, original.startTime + offset);
+        cue.startTime = startTime;
+        cue.endTime = Math.max(startTime + 0.05, original.endTime + offset);
+      } catch {
+        // Some WebViews expose immutable cue timings.
+      }
+    }
+  }
+};
+
+const normaliseExternalSubtitle = (item, index) => {
+  if (!item) return null;
+
+  if (typeof item === "string") {
+    return {
+      src: item,
+      lang: "en",
+      label: `Subtitle ${index + 1}`,
+    };
+  }
+
+  const src =
+    item.url ||
+    item.src ||
+    item.file ||
+    item.link ||
+    "";
+
+  if (!src) return null;
+
+  const lang =
+    item.lang ||
+    item.language ||
+    item.srclang ||
+    "en";
+
+  const label =
+    item.label ||
+    item.name ||
+    item.language ||
+    item.lang ||
+    `Subtitle ${index + 1}`;
+
+  return {
+    src,
+    lang: String(lang || "en"),
+    label: String(label),
+  };
+};
+
+export default function MediaPlayerControls({
+  videoRef,
+  stageRef,
+  isLive = false,
+  mediaType = "",
+  onFullscreen,
+  isAppFullscreen = false,
+  onBack,
+  title = "",
+  sources = [],
+  activeIdx = 0,
+  failedSources,
+  onSelectSource,
+  onNoSound,
+}) {
+  const [playing, setPlaying] = useState(false);
+  const [sourcePlaybackConfirmed, setSourcePlaybackConfirmed] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const [seeking, setSeeking] = useState(false);
+  const [openMenu, setOpenMenu] = useState("");
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [looping, setLooping] = useState(false);
+  const [sourceSortMode, setSourceSortMode] = useState(
+    () => readSourceSortMode()
+  );
+
+  const [episodeContext, setEpisodeContext] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return window.__MG_PLAYER_CONTEXT__ || null;
+  });
+
+  useEffect(() => {
+    const onContext = (event) => {
+      setEpisodeContext(event?.detail || null);
+    };
+
+    window.addEventListener("mg:player-context", onContext);
+    return () => {
+      window.removeEventListener("mg:player-context", onContext);
+    };
+  }, []);
+
+  const isTvEpisode =
+    !isLive &&
+    episodeContext?.mediaType === "tv" &&
+    Boolean(episodeContext?.tmdbId ?? episodeContext?.tmdb_id) &&
+    Number(episodeContext?.season ?? 0) > 0 &&
+    Number(episodeContext?.episode ?? 0) > 0;
+
+  const playNextEpisode = () => {
+    window.dispatchEvent(new CustomEvent("mg:play-next-episode"));
+    revealControls();
+  };
+
+  const playPreviousEpisode = () => {
+    if (!isTvEpisode) return;
+    const tmdbId = episodeContext?.tmdbId ?? episodeContext?.tmdb_id ?? null;
+    const season = Number(episodeContext?.season ?? 0);
+    const episode = Number(episodeContext?.episode ?? 0);
+
+    if (!tmdbId || !season || episode <= 1) return;
+
+    window.dispatchEvent(
+      new CustomEvent("mg:play-specific-episode", {
+        detail: {
+          tmdbId,
+          seasonNumber: season,
+          episodeNumber: episode - 1,
+        },
+      })
+    );
+    revealControls();
+  };
+
+  const hasNextEpisode = isTvEpisode && episodeContext?.nextEpisodeAvailable !== false;
+  const hasPreviousEpisode =
+    isTvEpisode && Number(episodeContext?.episode ?? 0) > 1;
+
+  const [subtitleTracks, setSubtitleTracks] = useState([]);
+  const [selectedSubtitle, setSelectedSubtitle] = useState(-1);
+
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [selectedAudio, setSelectedAudio] = useState(-1);
+  const hlsAudioTracksRef = useRef([]);
+  const hlsAudioActiveRef = useRef(-1);
+
+  /*
+   * A deliberate Audio-menu choice owns the current playback session.
+   * Automatic language ranking may choose the initial track, but it must not
+   * switch the viewer back a moment after they explicitly chose another one.
+   */
+  const manualAudioChoiceRef = useRef(null);
+
+  const [trackPreferences, setTrackPreferences] = useState(
+    () => readTrackPreferences()
+  );
+
+  const availableSortOptions = availableSourceSortOptions(sources, {
+    mediaType,
+  });
+  const availableSortOptionValues = availableSortOptions
+    .map((option) => option.value)
+    .join("|");
+
+  useEffect(() => {
+    if (!availableSortOptionValues.split("|").includes(sourceSortMode)) {
+      setSourceSortMode(writeSourceSortMode("best"));
+    }
+  }, [availableSortOptionValues, sourceSortMode]);
+
+  const sortedSourceEntries = sortSourceEntries(
+    sources,
+    sourceSortMode,
+    { mediaType }
+  );
+  /*
+   * The manual chooser shows the complete discovered source list, including
+   * uncached/pending rows. Automatic recovery can still avoid unsafe choices,
+   * but visibility is no longer controlled by readiness/cache checks.
+   */
+  const selectableSourceEntries = sortedSourceEntries.filter(
+    ({ item }) => sourceIsUserSelectable(item)
+  );
+
+  const [sourceChoicePinned, setSourceChoicePinned] = useState(false);
+  const sourceChoiceEntriesRef = useRef([]);
+  const sourceChoiceValueRef = useRef(
+    /** @type {number | ""} */ (0)
+  );
+
+  const releaseSourceChoices = () => {
+    setSourceChoicePinned(false);
+    sourceChoiceEntriesRef.current = [];
+  };
+
+  const pinSourceChoices = () => {
+    /*
+     * A Continue Watching launch starts with a single fast-start source. Do not
+     * freeze that temporary one-option list: cached alternatives discovered a
+     * moment later must flow straight into the fullscreen/native selector.
+     */
+    if (selectableSourceEntries.length <= 1) {
+      releaseSourceChoices();
+      sourceChoiceValueRef.current = activeIdx;
+      return;
+    }
+
+    sourceChoiceEntriesRef.current = selectableSourceEntries;
+    sourceChoiceValueRef.current = selectableSourceEntries.some(
+      (entry) => entry.index === activeIdx
+    )
+      ? activeIdx
+      : "";
+    setSourceChoicePinned(true);
+  };
+
+  /*
+   * Native Android/Fire TV selectors do not reliably emit blur when dismissed.
+   * A pinned snapshot may therefore outlive the native popup. If the live list
+   * has grown, render the live list instead of allowing the older snapshot to
+   * hide newly cached/selectable sources.
+   */
+  const sourceChoiceSnapshotIsStale =
+    sourceChoicePinned &&
+    sourceChoiceEntriesRef.current.length > 0 &&
+    selectableSourceEntries.length > sourceChoiceEntriesRef.current.length;
+
+  const visibleSourceChoices =
+    sourceChoicePinned &&
+    !sourceChoiceSnapshotIsStale &&
+    sourceChoiceEntriesRef.current.length > 0
+      ? sourceChoiceEntriesRef.current
+      : selectableSourceEntries;
+
+  const requestedSourceChoiceValue =
+    sourceChoicePinned && !sourceChoiceSnapshotIsStale
+      ? sourceChoiceValueRef.current
+      : activeIdx;
+
+  const visibleSourceChoiceValue = visibleSourceChoices.some(
+    (entry) => String(entry.index) === String(requestedSourceChoiceValue)
+  )
+    ? requestedSourceChoiceValue
+    : "";
+
+  const hideTimerRef = useRef(null);
+  const trackPreferencesRef = useRef(trackPreferences);
+  trackPreferencesRef.current = trackPreferences;
+
+  const playingRef = useRef(false);
+  const seekingRef = useRef(false);
+  const menuOpenRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  const getVideo = () => {
+    return videoRef?.current || null;
+  };
+
+  const clearHideTimer = () => {
+    if (hideTimerRef.current) {
+      window.clearTimeout(
+        hideTimerRef.current
+      );
+
+      hideTimerRef.current = null;
+    }
+  };
+
+  const scheduleHide = (delay = 2400) => {
+    clearHideTimer();
+
+    /*
+     * Native Android/Fire TV selects can keep DOM focus after the chooser has
+     * already closed. Focus must never pin the complete player chrome on top of
+     * the picture. Only an actual open menu/seeking gesture pauses auto-hide.
+     */
+    if (
+      !playingRef.current ||
+      seekingRef.current ||
+      menuOpenRef.current
+    ) {
+      return;
+    }
+
+    hideTimerRef.current =
+      window.setTimeout(() => {
+        if (
+          mountedRef.current &&
+          playingRef.current &&
+          !seekingRef.current &&
+          !menuOpenRef.current
+        ) {
+          setShowControls(false);
+        }
+      }, delay);
+  };
+
+  const revealControls = (delay = 2400) => {
+    setShowControls(true);
+    scheduleHide(delay);
+  };
+
+  const {
+    pipActive,
+    togglePip,
+    translating,
+    translateStatus,
+    translateSubtitles,
+  } = usePlayerExtras({
+    videoRef,
+    subtitleTracks,
+    selectedSubtitle,
+    trackPreferencesRef,
+    revealControls,
+  });
+
+  const refreshTrackLists = () => {
+    const video = getVideo();
+
+    if (!video) {
+      setSubtitleTracks([]);
+      setSelectedSubtitle(-1);
+
+      setAudioTracks([]);
+      setSelectedAudio(-1);
+
+      return;
+    }
+
+    const nextSubtitles = [];
+    let activeSubtitle = -1;
+
+    if (video.textTracks) {
+      for (
+        let index = 0;
+        index < video.textTracks.length;
+        index += 1
+      ) {
+        const track =
+          video.textTracks[index];
+
+        nextSubtitles.push({
+          index,
+          label: friendlyTrackLabel(track, "Subtitle", index),
+          language: track?.language || "",
+          forced: trackLooksForced(track),
+          sdh: trackLooksSdh(track),
+          raw: track,
+        });
+
+        if (
+          track?.mode === "showing"
+        ) {
+          activeSubtitle = index;
+        }
+      }
+    }
+
+    const nextAudio = [];
+    let activeAudio = -1;
+
+    const nativeAudioTracks =
+      video.audioTracks;
+
+    if (
+      nativeAudioTracks &&
+      typeof nativeAudioTracks.length ===
+        "number"
+    ) {
+      for (
+        let index = 0;
+        index < nativeAudioTracks.length;
+        index += 1
+      ) {
+        const track =
+          nativeAudioTracks[index];
+
+        nextAudio.push({
+          index,
+          kind: "native",
+          label: friendlyTrackLabel(track, "Audio", index),
+          language: track?.language || "",
+          raw: track,
+        });
+
+        if (track?.enabled) {
+          activeAudio = index;
+        }
+      }
+    }
+
+    if (nextAudio.length === 0 && hlsAudioTracksRef.current.length > 0) {
+      hlsAudioTracksRef.current.forEach((track, index) => {
+        nextAudio.push({
+          index: Number.isInteger(Number(track?.index)) ? Number(track.index) : index,
+          kind: "hls",
+          label: friendlyTrackLabel(track, "Audio", index),
+          language: track?.language || track?.lang || "",
+          raw: track,
+        });
+      });
+      activeAudio = hlsAudioActiveRef.current;
+    }
+
+    const preferences = trackPreferencesRef.current;
+
+    const subtitleContext =
+      typeof window !== "undefined"
+        ? window.__MG_PLAYER_CONTEXT__ || { title }
+        : { title };
+    const rememberedSubtitle = readRememberedSubtitlePreference(subtitleContext);
+    const subtitlesWanted =
+      rememberedSubtitle
+        ? rememberedSubtitle.enabled !== false
+        : preferences.subtitlesEnabled;
+
+    if (rememberedSubtitle?.enabled === false && activeSubtitle >= 0) {
+      for (let index = 0; index < video.textTracks.length; index += 1) {
+        try {
+          video.textTracks[index].mode = "disabled";
+        } catch {
+          // Some WebViews expose read-only text track state.
+        }
+      }
+      activeSubtitle = -1;
+    }
+
+    if (
+      activeSubtitle < 0 &&
+      subtitlesWanted &&
+      nextSubtitles.length > 0
+    ) {
+      const preferredLanguage = preferences.subtitleLanguage;
+      const ranked = nextSubtitles
+        .map((item) => {
+          let score = rememberedSubtitleTrackScore(
+            item.raw || item,
+            rememberedSubtitle
+          );
+          const language = trackLanguage(item.raw || item);
+
+          if (!preferredLanguage || language === preferredLanguage) {
+            score += 10000;
+          }
+
+          if (item.forced) {
+            score += preferences.preferForcedSubtitles ? 4200 : -500;
+          }
+
+          if (item.sdh) {
+            score += preferences.preferSdhSubtitles ? 1200 : -1400;
+          } else if (!preferences.preferSdhSubtitles) {
+            score += 500;
+          }
+
+          return { item, score };
+        })
+        .sort((a, b) => b.score - a.score || a.item.index - b.item.index);
+      const preferred = ranked[0]?.item || nextSubtitles[0];
+
+      if (preferred) {
+        try {
+          video.textTracks[preferred.index].mode = "showing";
+          window.dispatchEvent(
+            new CustomEvent("mg:subtitle-track-selected", {
+              detail: { index: preferred.index },
+            })
+          );
+          activeSubtitle = preferred.index;
+        } catch {
+          // Some WebViews expose read-only text track state.
+        }
+      }
+    }
+
+    applySubtitleOffset(
+      video,
+      preferences.subtitleOffsetSeconds
+    );
+
+    let orderedAudio = nextAudio;
+
+    if (nextAudio.length > 0) {
+      const preferredLanguage = preferences.audioLanguage;
+      const languageRanked = nextAudio
+        .slice()
+        .sort(
+          (a, b) =>
+            preferredAudioTrackScore(b.raw || b, preferredLanguage) -
+              preferredAudioTrackScore(a.raw || a, preferredLanguage) ||
+            a.index - b.index
+        );
+
+      const manualChoice =
+        manualAudioChoiceRef.current?.sourceIndex === activeIdx
+          ? nextAudio.find(
+              (item) =>
+                item.index === manualAudioChoiceRef.current?.index &&
+                String(item.kind || "native") ===
+                  String(manualAudioChoiceRef.current?.kind || "native")
+            )
+          : null;
+
+      /*
+       * Manual-only audio policy: ranking changes the order shown in the Audio
+       * menu, never the active decoder track. The current stream/track is left
+       * exactly as-is until chooseAudio() is called by a real user selection.
+       */
+      orderedAudio = manualChoice
+        ? [
+            manualChoice,
+            ...languageRanked.filter(
+              (item) =>
+                item.index !== manualChoice.index ||
+                item.kind !== manualChoice.kind
+            ),
+          ]
+        : languageRanked;
+    }
+
+    setSubtitleTracks(nextSubtitles);
+    setSelectedSubtitle(activeSubtitle);
+    setAudioTracks(orderedAudio);
+    setSelectedAudio(activeAudio);
+
+    setPlaybackRate(
+      video.playbackRate || 1
+    );
+  };
+
+  useEffect(() => {
+    manualAudioChoiceRef.current = null;
+  }, [activeIdx]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    const onHlsAudioTracks = (event) => {
+      const tracks = Array.isArray(event?.detail?.tracks)
+        ? event.detail.tracks
+        : [];
+      const activeIndex = Number(event?.detail?.activeIndex);
+
+      hlsAudioTracksRef.current = tracks;
+      hlsAudioActiveRef.current = Number.isInteger(activeIndex)
+        ? activeIndex
+        : -1;
+
+      window.setTimeout(refreshTrackLists, 0);
+    };
+
+    const onPreferencesChanged = (event) => {
+      const next = event?.detail || readTrackPreferences();
+      trackPreferencesRef.current = next;
+      setTrackPreferences(next);
+      window.setTimeout(refreshTrackLists, 30);
+    };
+
+    window.addEventListener(
+      "mg:media-track-preferences-changed",
+      onPreferencesChanged
+    );
+
+    const onSourceSortChanged = (event) => {
+      setSourceSortMode(
+        String(event?.detail?.mode || readSourceSortMode())
+      );
+    };
+
+    window.addEventListener(
+      "mg:hls-audio-tracks",
+      onHlsAudioTracks
+    );
+    window.addEventListener(
+      SOURCE_SELECTOR_SORT_EVENT,
+      onSourceSortChanged
+    );
+
+    return () => {
+      mountedRef.current = false;
+      clearHideTimer();
+      window.removeEventListener(
+        "mg:media-track-preferences-changed",
+        onPreferencesChanged
+      );
+      window.removeEventListener(
+        "mg:hls-audio-tracks",
+        onHlsAudioTracks
+      );
+      window.removeEventListener(
+        SOURCE_SELECTOR_SORT_EVENT,
+        onSourceSortChanged
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const apply = () => {
+      applySubtitleOffset(
+        getVideo(),
+        trackPreferences.subtitleOffsetSeconds
+      );
+    };
+
+    apply();
+    const timer = window.setInterval(apply, 900);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    activeIdx,
+    trackPreferences.subtitleOffsetSeconds,
+  ]);
+
+  /*
+   * Add subtitles supplied by an add-on
+   * to the actual HTML video element.
+   */
+  useEffect(() => {
+    const video = getVideo();
+
+    const activeSource =
+      sources?.[activeIdx];
+
+    if (!video) {
+      return undefined;
+    }
+
+    const existing =
+      Array.from(
+        video.querySelectorAll(
+          "track[data-mg-external-subtitle='true']"
+        )
+      );
+
+    existing.forEach((track) => {
+      track.remove();
+    });
+
+    const raw =
+      Array.isArray(
+        activeSource?.subtitles
+      )
+        ? activeSource.subtitles
+        : [];
+
+    const externalTracks =
+      raw
+        .map(
+          normaliseExternalSubtitle
+        )
+        .filter(Boolean);
+
+    const created =
+      externalTracks.map(
+        (track) => {
+          const element =
+            document.createElement(
+              "track"
+            );
+
+          element.kind =
+            "subtitles";
+
+          element.src =
+            track.src;
+
+          element.srclang =
+            track.lang;
+
+          element.label =
+            track.label;
+
+          element.default =
+            false;
+
+          element.dataset.mgExternalSubtitle =
+            "true";
+
+          video.appendChild(
+            element
+          );
+
+          return element;
+        }
+      );
+
+    const timer =
+      window.setTimeout(
+        () => {
+          refreshTrackLists();
+        },
+        250
+      );
+
+    return () => {
+      window.clearTimeout(timer);
+
+      created.forEach(
+        (track) => {
+          try {
+            track.remove();
+          } catch {
+            // Ignore cleanup errors.
+          }
+        }
+      );
+    };
+  }, [
+    videoRef,
+    sources,
+    activeIdx,
+  ]);
+
+  /*
+   * Keep controls synced with the
+   * real video element.
+   */
+  useEffect(() => {
+    const video = getVideo();
+
+    if (!video) {
+      return undefined;
+    }
+
+    const onPlay = () => {
+      playingRef.current = true;
+
+      setPlaying(true);
+      setShowControls(true);
+
+      scheduleHide(2200);
+    };
+
+    const onPlaying = () => {
+      playingRef.current = true;
+
+      setPlaying(true);
+
+      scheduleHide(2200);
+    };
+
+    const onPause = () => {
+      playingRef.current = false;
+
+      setPlaying(false);
+
+      clearHideTimer();
+
+      setShowControls(true);
+    };
+
+    const onEnded = () => {
+      playingRef.current = false;
+
+      setPlaying(false);
+
+      clearHideTimer();
+
+      setShowControls(true);
+    };
+
+    const onWaiting = () => {
+      /*
+       * Live HLS/DASH streams can emit short `waiting` events repeatedly while
+       * staying healthy. The old handler forced the controls visible every
+       * time but did not start a new hide timer, so mobile Live TV chrome could
+       * remain permanently over the picture after a tiny buffer event.
+       */
+      setShowControls(true);
+
+      if (playingRef.current) {
+        scheduleHide(isLive ? 1800 : 2800);
+      }
+    };
+
+    const onTime = () => {
+      const currentTime = Number(video.currentTime || 0);
+
+      if (
+        !seekingRef.current
+      ) {
+        setCurrent(
+          currentTime
+        );
+      }
+
+      /*
+       * "Playing" in the source chooser must mean actual playback progress,
+       * not merely that video.play() resolved or a black surface emitted a
+       * playing event at 0:00.
+       */
+      if (currentTime > 0.25 && !video.ended && !video.error) {
+        setSourcePlaybackConfirmed(true);
+      }
+    };
+
+    const onDuration = () => {
+      setDuration(
+        video.duration || 0
+      );
+
+      refreshTrackLists();
+    };
+
+    const onVolumeChange = () => {
+      setMuted(
+        Boolean(video.muted)
+      );
+
+      setVolume(
+        Number.isFinite(
+          video.volume
+        )
+          ? video.volume
+          : 1
+      );
+    };
+
+    const onRateChange = () => {
+      setPlaybackRate(
+        video.playbackRate || 1
+      );
+    };
+
+    video.addEventListener(
+      "play",
+      onPlay
+    );
+
+    video.addEventListener(
+      "playing",
+      onPlaying
+    );
+
+    video.addEventListener(
+      "pause",
+      onPause
+    );
+
+    video.addEventListener(
+      "ended",
+      onEnded
+    );
+
+    video.addEventListener(
+      "waiting",
+      onWaiting
+    );
+
+    video.addEventListener(
+      "timeupdate",
+      onTime
+    );
+
+    video.addEventListener(
+      "durationchange",
+      onDuration
+    );
+
+    video.addEventListener(
+      "loadedmetadata",
+      onDuration
+    );
+
+    video.addEventListener(
+      "loadeddata",
+      refreshTrackLists
+    );
+
+    video.addEventListener(
+      "volumechange",
+      onVolumeChange
+    );
+
+    video.addEventListener(
+      "ratechange",
+      onRateChange
+    );
+
+    playingRef.current =
+      !video.paused &&
+      !video.ended;
+
+    setPlaying(
+      playingRef.current
+    );
+
+    setSourcePlaybackConfirmed(
+      Number(video.currentTime || 0) > 0.25 &&
+      !video.ended &&
+      !video.error
+    );
+
+    setMuted(
+      Boolean(video.muted)
+    );
+
+    setVolume(
+      Number.isFinite(
+        video.volume
+      )
+        ? video.volume
+        : 1
+    );
+
+    setCurrent(
+      video.currentTime || 0
+    );
+
+    setDuration(
+      video.duration || 0
+    );
+
+    setPlaybackRate(
+      video.playbackRate || 1
+    );
+
+    refreshTrackLists();
+
+    if (
+      playingRef.current
+    ) {
+      scheduleHide(2600);
+    } else {
+      setShowControls(true);
+    }
+
+    return () => {
+      video.removeEventListener(
+        "play",
+        onPlay
+      );
+
+      video.removeEventListener(
+        "playing",
+        onPlaying
+      );
+
+      video.removeEventListener(
+        "pause",
+        onPause
+      );
+
+      video.removeEventListener(
+        "ended",
+        onEnded
+      );
+
+      video.removeEventListener(
+        "waiting",
+        onWaiting
+      );
+
+      video.removeEventListener(
+        "timeupdate",
+        onTime
+      );
+
+      video.removeEventListener(
+        "durationchange",
+        onDuration
+      );
+
+      video.removeEventListener(
+        "loadedmetadata",
+        onDuration
+      );
+
+      video.removeEventListener(
+        "loadeddata",
+        refreshTrackLists
+      );
+
+      video.removeEventListener(
+        "volumechange",
+        onVolumeChange
+      );
+
+      video.removeEventListener(
+        "ratechange",
+        onRateChange
+      );
+
+      clearHideTimer();
+    };
+  }, [
+    videoRef,
+  ]);
+
+  useEffect(() => {
+    setSourcePlaybackConfirmed(false);
+  }, [activeIdx]);
+
+  /*
+   * Backup wake-up listeners.
+   *
+   * These remain on the video stage for
+   * desktop mouse, TV remote and browsers
+   * where pointer events work normally.
+   */
+  useEffect(() => {
+    const stage =
+      stageRef?.current;
+
+    if (!stage) {
+      return undefined;
+    }
+
+    const wake = () => {
+      revealControls();
+    };
+
+    const wakeLonger = () => {
+      revealControls(2600);
+    };
+
+    stage.addEventListener(
+      "pointerdown",
+      wakeLonger,
+      true
+    );
+
+    stage.addEventListener(
+      "pointermove",
+      wake,
+      true
+    );
+
+    stage.addEventListener(
+      "touchstart",
+      wakeLonger,
+      {
+        passive: true,
+        capture: true,
+      }
+    );
+
+    stage.addEventListener(
+      "mousemove",
+      wake,
+      true
+    );
+
+    stage.addEventListener(
+      "wheel",
+      wake,
+      {
+        passive: true,
+        capture: true,
+      }
+    );
+
+    window.addEventListener(
+      "keydown",
+      wakeLonger,
+      true
+    );
+
+    window.addEventListener(
+      "mg:player-reveal-controls",
+      wakeLonger
+    );
+
+    return () => {
+      stage.removeEventListener(
+        "pointerdown",
+        wakeLonger,
+        true
+      );
+
+      stage.removeEventListener(
+        "pointermove",
+        wake,
+        true
+      );
+
+      stage.removeEventListener(
+        "touchstart",
+        wakeLonger,
+        true
+      );
+
+      stage.removeEventListener(
+        "mousemove",
+        wake,
+        true
+      );
+
+      stage.removeEventListener(
+        "wheel",
+        wake,
+        true
+      );
+
+      window.removeEventListener(
+        "keydown",
+        wakeLonger,
+        true
+      );
+
+      window.removeEventListener(
+        "mg:player-reveal-controls",
+        wakeLonger
+      );
+    };
+  }, [
+    stageRef,
+  ]);
+
+  /*
+   * Show controls briefly when fullscreen
+   * mode changes.
+   */
+  useEffect(() => {
+    setShowControls(true);
+
+    if (
+      playingRef.current
+    ) {
+      scheduleHide(
+        isAppFullscreen
+          ? 2200
+          : 2600
+      );
+    }
+  }, [
+    isAppFullscreen,
+  ]);
+
+  const togglePlay = () => {
+    const video = getVideo();
+
+    if (!video) return;
+
+    revealControls();
+
+    if (
+      video.paused ||
+      video.ended
+    ) {
+      if (
+        video.dataset
+          ?.mgAutoplayMuted ===
+        "true"
+      ) {
+        video.muted = false;
+
+        delete video.dataset
+          .mgAutoplayMuted;
+      }
+
+      video
+        .play()
+        .catch(() => {});
+    } else {
+      video.pause();
+    }
+  };
+
+  const toggleMute = () => {
+    const video = getVideo();
+
+    if (!video) return;
+
+    video.muted =
+      !video.muted;
+
+    revealControls();
+  };
+
+  const onVolume = (event) => {
+    const video = getVideo();
+
+    if (!video) return;
+
+    const nextVolume =
+      Number(
+        event.target.value
+      );
+
+    video.volume =
+      nextVolume;
+
+    video.muted =
+      nextVolume === 0;
+
+    revealControls();
+  };
+
+  const seekTo = (event) => {
+    const video = getVideo();
+
+    if (
+      !video ||
+      !video.duration
+    ) {
+      return;
+    }
+
+    const ratio =
+      Number(
+        event.target.value
+      ) / 100;
+
+    if (safeSeek(video, ratio * video.duration)) {
+      setCurrent(video.currentTime);
+    }
+
+    revealControls(4200);
+  };
+
+  const startSeeking = () => {
+    seekingRef.current = true;
+
+    setSeeking(true);
+
+    clearHideTimer();
+
+    setShowControls(true);
+  };
+
+  const finishSeeking = () => {
+    seekingRef.current = false;
+
+    setSeeking(false);
+
+    revealControls();
+  };
+
+  const skip = (delta) => {
+    const video = getVideo();
+
+    if (!video) return;
+
+    if (safeSeek(video, (video.currentTime || 0) + delta)) {
+      setCurrent(video.currentTime);
+    }
+
+    revealControls();
+  };
+
+  const changeRate = (event) => {
+    const video = getVideo();
+
+    if (!video) return;
+
+    const rate =
+      Number(
+        event.target.value
+      ) || 1;
+
+    video.playbackRate =
+      rate;
+
+    setPlaybackRate(rate);
+
+    setOpenMenu("");
+    menuOpenRef.current = false;
+
+    revealControls();
+  };
+
+  const toggleLoop = () => {
+    const video = getVideo();
+    const next = !looping;
+    if (video) video.loop = next;
+    setLooping(next);
+    revealControls();
+  };
+
+  const toggleFullscreen = () => {
+    revealControls(4200);
+
+    /*
+     * IMPORTANT:
+     * Do not call requestFullscreen here.
+     * VideoPlayer supplies the safe
+     * in-app fullscreen function.
+     */
+    if (
+      typeof onFullscreen ===
+      "function"
+    ) {
+      onFullscreen();
+    }
+  };
+
+  const chooseSubtitle = (index) => {
+    const video = getVideo();
+
+    if (
+      !video?.textTracks
+    ) {
+      return;
+    }
+
+    for (
+      let trackIndex = 0;
+      trackIndex <
+      video.textTracks.length;
+      trackIndex += 1
+    ) {
+      try {
+        video.textTracks[
+          trackIndex
+        ].mode =
+          trackIndex === index
+            ? "showing"
+            : "disabled";
+      } catch {
+        // Some WebViews expose read-only tracks.
+      }
+    }
+
+    setSelectedSubtitle(index);
+
+    const chosenTrack =
+      index >= 0 ? video.textTracks[index] : null;
+    const context =
+      typeof window !== "undefined"
+        ? window.__MG_PLAYER_CONTEXT__ || { title }
+        : { title };
+
+    rememberSubtitlePreference(
+      context,
+      chosenTrack,
+      index >= 0
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("mg:subtitle-track-selected", {
+        detail: { index },
+      })
+    );
+
+    const nextPreferences = writeTrackPreferences({
+      ...trackPreferencesRef.current,
+      subtitlesEnabled: index >= 0,
+      ...(chosenTrack
+        ? { subtitleLanguage: trackLanguage(chosenTrack) || "en" }
+        : {}),
+    });
+    trackPreferencesRef.current = nextPreferences;
+    setTrackPreferences(nextPreferences);
+
+    setOpenMenu("");
+
+    menuOpenRef.current =
+      false;
+
+    revealControls();
+  };
+
+  const changeSubtitleOffset = (delta) => {
+    const currentOffset = Number(
+      trackPreferencesRef.current.subtitleOffsetSeconds || 0
+    );
+    const nextOffset = Math.max(
+      -10,
+      Math.min(10, Math.round((currentOffset + Number(delta || 0)) * 10) / 10)
+    );
+    const nextPreferences = writeTrackPreferences({
+      ...trackPreferencesRef.current,
+      subtitleOffsetSeconds: nextOffset,
+    });
+
+    trackPreferencesRef.current = nextPreferences;
+    setTrackPreferences(nextPreferences);
+    applySubtitleOffset(getVideo(), nextOffset);
+    revealControls(5000);
+  };
+
+  const resetSubtitleOffset = () => {
+    const nextPreferences = writeTrackPreferences({
+      ...trackPreferencesRef.current,
+      subtitleOffsetSeconds: 0,
+    });
+
+    trackPreferencesRef.current = nextPreferences;
+    setTrackPreferences(nextPreferences);
+    applySubtitleOffset(getVideo(), 0);
+    revealControls(5000);
+  };
+
+  const chooseAudio = (trackChoice) => {
+    const choice =
+      typeof trackChoice === "object" && trackChoice
+        ? trackChoice
+        : audioTracks.find((track) => track.index === Number(trackChoice));
+
+    if (!choice) return;
+
+    const video = getVideo();
+
+    if (choice.kind === "hls") {
+      window.dispatchEvent(
+        new CustomEvent("mg:hls-audio-track-selected", {
+          detail: { index: choice.index },
+        })
+      );
+      hlsAudioActiveRef.current = choice.index;
+      setSelectedAudio(choice.index);
+    } else {
+      const tracks = video?.audioTracks;
+
+      if (!tracks || typeof tracks.length !== "number") {
+        return;
+      }
+
+      for (let trackIndex = 0; trackIndex < tracks.length; trackIndex += 1) {
+        try {
+          tracks[trackIndex].enabled = trackIndex === choice.index;
+        } catch {
+          // Some Android WebViews expose audio tracks as read-only.
+        }
+      }
+
+      setSelectedAudio(choice.index);
+    }
+
+    manualAudioChoiceRef.current = {
+      sourceIndex: activeIdx,
+      kind: String(choice.kind || "native"),
+      index: choice.index,
+    };
+    if (!isLive) {
+      window.dispatchEvent(new CustomEvent("mg:manual-audio-track-selected"));
+    }
+
+    const chosenTrack = choice.raw || choice;
+    const context =
+      typeof window !== "undefined"
+        ? window.__MG_PLAYER_CONTEXT__ || { title }
+        : { title };
+
+    /*
+     * Remembering a track helps this title, but choosing a track in the player
+     * must NOT rewrite the account/device-wide preferred language. That global
+     * setting belongs to Settings > Preferred audio language.
+     */
+    rememberAudioPreference(context, chosenTrack);
+
+    setOpenMenu("");
+    menuOpenRef.current = false;
+    revealControls();
+  };
+
+  const toggleMenu = (name) => {
+    setOpenMenu(
+      (currentMenu) => {
+        const nextMenu =
+          currentMenu === name
+            ? ""
+            : name;
+
+        menuOpenRef.current =
+          Boolean(nextMenu);
+
+        if (nextMenu) {
+          clearHideTimer();
+          setShowControls(true);
+        } else {
+          scheduleHide();
+        }
+
+        return nextMenu;
+      }
+    );
+  };
+
+  const focusControl = () => {
+    clearHideTimer();
+
+    setShowControls(true);
+
+    /*
+     * TV focus stays on the last D-pad control even after the viewer stops
+     * interacting. Do not let that persistent focus pin the overlay forever;
+     * while video is playing the chrome should still fade away naturally.
+     */
+    if (
+      isFireTvControlsRuntime() &&
+      playingRef.current &&
+      !menuOpenRef.current
+    ) {
+      scheduleHide(2400);
+    }
+  };
+
+  const blurControl = () => {
+    if (
+      !menuOpenRef.current
+    ) {
+      scheduleHide();
+    }
+  };
+
+  const focusSelectControl = () => {
+    /*
+     * Focus survives the native chooser on Android and Fire TV, so treating
+     * focus as "menu still open" leaves the source selector and every button on
+     * screen until another remote action. Always let the chrome fade again.
+     */
+    setShowControls(true);
+
+    if (playingRef.current && !menuOpenRef.current) {
+      scheduleHide(2400);
+    }
+  };
+
+  const blurSelectControl = () => {
+    if (!menuOpenRef.current) {
+      scheduleHide();
+    }
+  };
+
+  const sourceFailed = (index) => {
+    if (!failedSources) {
+      return false;
+    }
+
+    if (
+      typeof failedSources.has ===
+      "function"
+    ) {
+      return failedSources.has(
+        index
+      );
+    }
+
+    if (
+      Array.isArray(
+        failedSources
+      )
+    ) {
+      return failedSources.includes(
+        index
+      );
+    }
+
+    return false;
+  };
+
+  const progress =
+    duration > 0
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            (current / duration) *
+              100
+          )
+        )
+      : 0;
+
+  const controlsVisible =
+    showControls ||
+    !playing ||
+    seeking ||
+    Boolean(openMenu);
+
+  useEffect(() => {
+    const stage = stageRef?.current;
+    const root = stage?.closest?.(
+      '[data-mg-player-root="true"]'
+    );
+
+    if (!(root instanceof HTMLElement)) {
+      return undefined;
+    }
+
+    root.dataset.mgControlsVisible = controlsVisible
+      ? "true"
+      : "false";
+
+    return () => {
+      if (root.dataset.mgControlsVisible != null) {
+        delete root.dataset.mgControlsVisible;
+      }
+    };
+  }, [controlsVisible, stageRef]);
+
+  const cueStyle = subtitleCueStyle(trackPreferences);
+
+  return (
+    <div
+      data-mg-player-controls="true"
+      data-mg-player-vod={isLive ? "false" : "true"}
+      className="absolute inset-0 z-[60] pointer-events-none"
+    >
+      <style>{`
+        video::cue {
+          font-size: ${cueStyle.fontSize};
+          background: ${cueStyle.background};
+          color: white;
+          text-shadow: 0 2px 4px rgba(0,0,0,.95);
+        }
+      `}</style>
+      {/*
+       * MOBILE WAKE LAYER
+       *
+       * This is the important phone/tablet fix.
+       *
+       * When controls disappear this transparent
+       * button remains over the WHOLE video.
+       *
+       * Android WebView therefore does not need
+       * to pass the touch through the <video>.
+       *
+       * One tap wakes the controls.
+       */}
+      {!controlsVisible && (
+        <button
+          type="button"
+          className="absolute inset-0 z-[61] h-full w-full border-0 bg-transparent p-0 pointer-events-auto touch-manipulation"
+          aria-label="Show playback controls"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const video = getVideo();
+            if (video?.dataset?.mgAutoplayMuted === "true") {
+              video.muted = false;
+              video.volume = 1;
+              delete video.dataset.mgAutoplayMuted;
+              video.play().catch(() => {});
+            }
+
+            revealControls(
+              4200
+            );
+          }}
+          onTouchStart={(event) => {
+            event.stopPropagation();
+
+            revealControls(
+              4200
+            );
+          }}
+          onTouchEnd={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            revealControls(
+              4200
+            );
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            revealControls(
+              4200
+            );
+          }}
+        />
+      )}
+
+      <div
+        className={cn(
+          "absolute inset-0 z-[62] flex flex-col justify-between transition-opacity duration-200 pointer-events-none",
+
+          controlsVisible
+            ? "opacity-100"
+            : "opacity-0"
+        )}
+      >
+        {isAppFullscreen ? (
+          <div data-mg-player-control-topbar="true" className="pointer-events-auto flex items-center gap-2 bg-gradient-to-b from-black/90 via-black/55 to-transparent px-3 pb-10 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5">
+            <button
+              type="button"
+              onClick={() => {
+                onBack?.();
+              }}
+              onFocus={
+                focusControl
+              }
+              onBlur={
+                blurControl
+              }
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-black/50 px-3 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/70 focus:bg-black/70 focus:outline-none focus:ring-2 focus:ring-mg-green sm:min-h-10 sm:text-sm"
+              aria-label="Back to main menu"
+              title="Back to main menu"
+            >
+              <ArrowLeft className="h-4 w-4" />
+
+              <span className="hidden sm:inline">
+                Back
+              </span>
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white sm:text-base">
+                {title ||
+                  "Now playing"}
+              </p>
+            </div>
+
+            {availableSortOptions.length > 1 ? (
+              <select
+                value={sourceSortMode}
+                onChange={(event) => {
+                  const next = writeSourceSortMode(event.target.value);
+                  setSourceSortMode(next);
+
+                  if (next.startsWith("edition:")) {
+                    const edition = next.slice("edition:".length);
+                    const match = sortSourceEntries(
+                      sources,
+                      next,
+                      { mediaType }
+                    ).find(
+                      (entry) =>
+                        sourceIsUserSelectable(entry.item) &&
+                        sourceHasEdition(entry.item, edition)
+                    );
+
+                    if (match && match.index !== activeIdx) {
+                      onSelectSource?.(match.index, match.item);
+                    }
+                  }
+                }}
+                onFocus={focusSelectControl}
+                onBlur={blurSelectControl}
+                className="hidden min-h-10 w-[10.5rem] shrink-0 rounded-lg border border-white/15 bg-black/60 px-2 text-xs font-medium text-white outline-none backdrop-blur transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 md:block"
+                aria-label="Filter available playback sources"
+                title="Filter available playback sources"
+              >
+                {availableSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
+            {typeof onNoSound ===
+            "function" ? (
+              <button
+                type="button"
+                onClick={
+                  onNoSound
+                }
+                onFocus={
+                  focusControl
+                }
+                onBlur={
+                  blurControl
+                }
+                className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-black/50 px-2.5 text-xs font-semibold text-white/80 backdrop-blur transition hover:bg-black/70 hover:text-white focus:bg-black/70 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                aria-label="No sound"
+                title="No sound"
+              >
+                <VolumeX className="h-4 w-4" />
+
+                <span className="hidden md:inline">
+                  No sound?
+                </span>
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={
+                toggleFullscreen
+              }
+              onFocus={
+                focusControl
+              }
+              onBlur={
+                blurControl
+              }
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/45 text-white backdrop-blur hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-mg-green/60"
+              aria-label="Exit fullscreen"
+              title="Exit fullscreen"
+            >
+              <Minimize className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div />
+        )}
+
+        <MobileCenterControls
+          visible={controlsVisible}
+          isLive={isLive}
+          playing={playing}
+          togglePlay={togglePlay}
+          skip={skip}
+          hasPreviousEpisode={hasPreviousEpisode}
+          hasNextEpisode={hasNextEpisode}
+          playPreviousEpisode={playPreviousEpisode}
+          playNextEpisode={playNextEpisode}
+        />
+
+        <div data-mg-player-controls-bottom="true" className="pointer-events-auto relative bg-gradient-to-t from-black/95 via-black/60 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-12 select-none sm:px-5 sm:pt-16">
+          {!isAppFullscreen && (title || isTvEpisode) ? (
+            <div className="mb-2 px-1 sm:px-2">
+              <p className="truncate text-sm font-semibold text-white sm:text-base">{title || "Now playing"}</p>
+              {isTvEpisode ? (
+                <p className="truncate text-[11px] text-white/70 sm:text-xs">
+                  S{Number(episodeContext?.season ?? 0)} · E{Number(episodeContext?.episode ?? 0)}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {!isLive ? (
+            <div data-mg-player-seek-row="true" className="mb-2 flex items-center gap-2 sm:mb-3">
+              <span className="w-11 shrink-0 text-right text-[10px] tabular-nums text-white/85 sm:w-14 sm:text-xs">
+                {formatTime(
+                  current
+                )}
+              </span>
+
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={0.1}
+                value={
+                  progress
+                }
+                style={{ background: `linear-gradient(to right, #e50914 ${progress}%, rgba(255, 255, 255, .38) ${progress}%)` }}
+                onChange={
+                  seekTo
+                }
+                onPointerDown={
+                  startSeeking
+                }
+                onPointerUp={
+                  finishSeeking
+                }
+                onTouchStart={
+                  startSeeking
+                }
+                onTouchEnd={
+                  finishSeeking
+                }
+                onFocus={
+                  focusControl
+                }
+                onBlur={
+                  blurControl
+                }
+                className="mg-player-seek h-1.5 min-w-0 flex-1 cursor-pointer sm:h-2"
+                aria-label="Seek through video"
+              />
+
+              <span className="w-11 shrink-0 text-[10px] tabular-nums text-white/65 sm:w-14 sm:text-xs">
+                {formatTime(
+                  duration
+                )}
+              </span>
+            </div>
+          ) : null}
+
+          <div data-mg-player-button-row="true" className="flex items-center gap-2 sm:gap-3">
+            {hasPreviousEpisode ? (
+              <button
+                type="button"
+                onClick={playPreviousEpisode}
+                onFocus={focusControl}
+                onBlur={blurControl}
+                data-mg-transport="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white transition hover:bg-white/15 hover:text-mg-green focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+                aria-label="Previous episode"
+                title="Previous episode"
+              >
+                <SkipBack className="h-4 w-4" />
+              </button>
+            ) : null}
+
+            {!isLive ? (
+              <>
+                <button
+                  type="button"
+                  data-mg-transport="true"
+                  onClick={() => {
+                    skip(-10);
+                  }}
+                  onFocus={
+                    focusControl
+                  }
+                  onBlur={
+                    blurControl
+                  }
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white transition hover:bg-white/15 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+                  aria-label="Back 10 seconds"
+                  title="Back 10 seconds"
+                >
+                  <RotateCcw className="h-5 w-5" strokeWidth={2.3} />
+                  <span aria-hidden="true" className="mg-player-ten">10</span>
+                </button>
+
+              </>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={togglePlay}
+              onFocus={focusControl}
+              onBlur={blurControl}
+              data-mg-transport="true"
+              className="mg-player-primary flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-mg-green focus:ring-offset-2 focus:ring-offset-black sm:h-11 sm:w-11"
+              aria-label={playing ? "Pause" : "Play"}
+              title={playing ? "Pause" : "Play"}
+            >
+              {playing ? (
+                <Pause className="h-5 w-5 fill-current" />
+              ) : (
+                <Play className="ml-0.5 h-5 w-5 fill-current" />
+              )}
+            </button>
+
+            {!isLive ? (
+              <button
+                type="button"
+                onClick={() => skip(10)}
+                data-mg-transport="true"
+                onFocus={focusControl}
+                onBlur={blurControl}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white transition hover:bg-white/15 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+                aria-label="Forward 10 seconds"
+                title="Forward 10 seconds"
+              >
+                <RotateCw className="h-5 w-5" strokeWidth={2.3} />
+                <span aria-hidden="true" className="mg-player-ten">10</span>
+              </button>
+            ) : null}
+
+            {hasNextEpisode ? (
+              <button
+                type="button"
+                onClick={playNextEpisode}
+                onFocus={focusControl}
+                onBlur={blurControl}
+                data-mg-transport="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-mg-green/30 bg-mg-green/10 text-mg-green transition hover:bg-mg-green/20 focus:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+                aria-label="Next episode"
+                title="Next episode"
+              >
+                <SkipForward className="h-4 w-4" />
+              </button>
+            ) : null}
+
+            <div className="group flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={
+                  toggleMute
+                }
+                onFocus={
+                  focusControl
+                }
+                onBlur={
+                  blurControl
+                }
+                data-mg-utility="true"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+                aria-label={
+                  muted
+                    ? "Unmute"
+                    : "Mute"
+                }
+                title={
+                  muted
+                    ? "Unmute"
+                    : "Mute"
+                }
+              >
+                {muted ||
+                volume === 0 ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </button>
+
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  muted
+                    ? 0
+                    : volume
+                }
+                onChange={
+                  onVolume
+                }
+                onFocus={
+                  focusControl
+                }
+                onBlur={
+                  blurControl
+                }
+                className="hidden h-1 w-16 cursor-pointer accent-mg-green sm:block lg:w-20"
+                aria-label="Volume"
+              />
+            </div>
+
+            <div data-mg-player-controls-spacer="true" className="min-w-0 flex-1" />
+
+            {selectableSourceEntries.length > 0 ? (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  data-mg-utility="true"
+                  aria-label="Sources and quality"
+                  title="Sources and quality"
+                  aria-expanded={openMenu === "sources"}
+                  aria-controls="mg-player-source-menu"
+                  onClick={() => {
+                    if (openMenu === "sources") releaseSourceChoices();
+                    else pinSourceChoices();
+                    toggleMenu("sources");
+                  }}
+                  onFocus={focusControl}
+                  onBlur={blurControl}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-mg-green"
+                >
+                  <ListVideo className="h-5 w-5" />
+                </button>
+                {openMenu === "sources" ? (
+                  <div id="mg-player-source-menu" data-mg-source-menu="true" className="mg-player-menu absolute bottom-12 right-0 z-[90] w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-white/20 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur">
+                    <label className="mb-2 block text-xs font-semibold text-white/80" htmlFor="mg-player-source-select">
+                      Sources &amp; quality
+                    </label>
+                <select
+                  id="mg-player-source-select"
+                  value={visibleSourceChoiceValue}
+                  onPointerDown={pinSourceChoices}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const selectedEntry = visibleSourceChoices.find(
+                      (entry) => String(entry.index) === String(value)
+                    );
+                    releaseSourceChoices();
+                    onSelectSource?.(value, selectedEntry?.item || null);
+                    setOpenMenu("");
+                    menuOpenRef.current = false;
+                    revealControls();
+                  }}
+                  onFocus={() => {
+                    if (!sourceChoicePinned) {
+                      pinSourceChoices();
+                    }
+                    focusSelectControl();
+                  }}
+                  onBlur={() => {
+                    releaseSourceChoices();
+                    blurSelectControl();
+                  }}
+                  className="min-h-11 w-full rounded-lg border border-white/20 bg-zinc-900 px-3 py-2.5 text-sm font-medium text-white outline-none focus:border-mg-green focus:ring-2 focus:ring-mg-green/30"
+                  aria-label="Choose source or quality"
+                  title="Choose source or quality"
+                >
+                  {visibleSourceChoiceValue === "" ? (
+                    <option value="" disabled>
+                      Preparing uncached sources…
+                    </option>
+                  ) : null}
+                  {visibleSourceChoices.map(({ item, index }) => (
+                    <option
+                      key={`${index}-${sourceRawLabel(item, index)}`}
+                      value={index}
+                      data-mg-source-label={sourceRawLabel(item, index)}
+                    >
+                      {sourceFailed(index)
+                        ? "Unavailable • "
+                        : index === activeIdx
+                          ? sourcePlaybackConfirmed
+                            ? "Playing • "
+                            : "Selected • "
+                          : ""}
+                      {sourceLabel(item, index)}
+                    </option>
+                  ))}
+                </select>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                data-mg-utility="true"
+                onClick={() => toggleMenu("settings")}
+                onFocus={focusControl}
+                onBlur={blurControl}
+                aria-label="Playback settings"
+                title="Playback settings"
+                aria-expanded={openMenu === "settings"}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-mg-green"
+              >
+                <Settings2 className="h-5 w-5" />
+              </button>
+              {openMenu === "settings" ? (
+                <div data-mg-settings-menu="true" className="mg-player-menu absolute bottom-12 right-0 z-[90] w-48 max-w-[calc(100vw-1.5rem)] rounded-xl border border-white/20 bg-zinc-950/95 p-2 shadow-2xl backdrop-blur">
+                  <p className="px-2 py-1 text-xs font-semibold text-white/75">Playback settings</p>
+                  {!isLive ? (
+                    <>
+                      <p className="flex items-center gap-2 px-2 pt-2 text-xs text-white/70"><Gauge className="h-4 w-4" /> Playback speed</p>
+                      <div className="my-1 grid grid-cols-3 gap-1" role="group" aria-label="Playback speed">
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                          <button key={`rate-${rate}`} type="button"
+                            onClick={() => changeRate({ target: { value: rate } })}
+                            aria-label={`Playback speed ${rate}x`}
+                            aria-pressed={playbackRate === rate}
+                            className={cn("rounded-lg px-1 py-2 text-xs hover:bg-white/15", playbackRate === rate ? "bg-white/15 text-mg-green" : "text-white")}>
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" onClick={toggleLoop} aria-pressed={looping}
+                        className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-sm text-white hover:bg-white/15">
+                        <Repeat className="h-4 w-4" /> {looping ? "Repeat on" : "Repeat off"}
+                      </button>
+                    </>
+                  ) : null}
+                  <button type="button" onClick={togglePip} aria-pressed={pipActive}
+                    className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-sm text-white hover:bg-white/15">
+                    <PictureInPicture2 className="h-4 w-4" />
+                    {pipActive ? "Exit picture-in-picture" : "Picture in picture"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  toggleMenu(
+                    "subtitles"
+                  );
+                }}
+                onFocus={
+                  focusControl
+                }
+                data-mg-utility="true"
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10",
+                  selectedSubtitle >= 0 ? "text-mg-green" : "text-white"
+                )}
+                aria-label="Subtitles"
+                title="Subtitles"
+              >
+                <Captions className="h-5 w-5" />
+              </button>
+
+              {openMenu === "subtitles" ? (
+                <SubtitleMenu
+                  selectedSubtitle={selectedSubtitle}
+                  subtitleTracks={subtitleTracks}
+                  trackPreferences={trackPreferences}
+                  translating={translating}
+                  translateStatus={translateStatus}
+                  onChooseSubtitle={chooseSubtitle}
+                  onChangeSubtitleOffset={changeSubtitleOffset}
+                  onResetSubtitleOffset={resetSubtitleOffset}
+                  onTranslateSubtitles={translateSubtitles}
+                />
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  toggleMenu(
+                    "audio"
+                  );
+                }}
+                onFocus={
+                  focusControl
+                }
+                data-mg-utility="true"
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10",
+                  selectedAudio >= 0 ? "text-mg-green" : "text-white"
+                )}
+                aria-label="Audio track"
+                title="Audio track"
+              >
+                <Languages className="h-5 w-5" />
+              </button>
+
+              {openMenu ===
+              "audio" ? (
+                <div className="absolute bottom-12 right-0 z-[80] max-h-64 w-52 overflow-y-auto rounded-xl border border-white/15 bg-black/95 p-1.5 shadow-2xl backdrop-blur sm:w-60">
+                  {audioTracks.length >
+                  0 ? (
+                    audioTracks.map(
+                      (track) => (
+                        <button
+                          type="button"
+                          key={`audio-${track.kind || "native"}-${track.index}`}
+                          onClick={() => {
+                            chooseAudio(track);
+                          }}
+                          className={cn(
+                            "w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-white/10",
+
+                            selectedAudio ===
+                              track.index
+                              ? "text-mg-green"
+                              : "text-white"
+                          )}
+                        >
+                          {track.label}
+                        </button>
+                      )
+                    )
+                  ) : (
+                    <p className="px-3 py-2 text-xs leading-relaxed text-white/45">
+                      This browser or source does not expose separate audio tracks.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                toggleFullscreen
+              }
+              onFocus={
+                focusControl
+              }
+              onBlur={
+                blurControl
+              }
+              data-mg-utility="true"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green sm:h-10 sm:w-10"
+              aria-label={
+                isAppFullscreen
+                  ? "Exit fullscreen"
+                  : "Fullscreen"
+              }
+              title={
+                isAppFullscreen
+                  ? "Exit fullscreen"
+                  : "Fullscreen"
+              }
+            >
+              {isAppFullscreen ? (
+                <Minimize className="h-4 w-4" />
+              ) : (
+                <Maximize className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

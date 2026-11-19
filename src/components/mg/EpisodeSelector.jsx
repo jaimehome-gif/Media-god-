@@ -1,0 +1,1653 @@
+import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { activeHouseholdProfileId, PROFILE_CHANGED_EVENT, profiledLibrary } from "@/components/mg/householdProfiles";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Calendar,
+  CheckCircle2,
+  Download,
+  Loader2,
+  ListVideo,
+  MessageSquare,
+  Play,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react";
+
+import { base44 } from "@/api/base44Client";
+import { Image } from "@/components/ui/image";
+import MediaReviews from "@/components/mg/MediaReviews";
+import StreamSourcesBox from "@/components/mg/StreamSourcesBox";
+import MediaDownloadPicker from "@/components/mg/MediaDownloadPicker";
+import SeasonDownloadPicker from "@/components/mg/SeasonDownloadPicker";
+import SeasonRail from "@/components/mg/SeasonRail";
+
+import {
+  buildMediaSources,
+  usePlayer,
+} from "@/components/mg/PlayerProvider";
+
+const asPositiveInt = (
+  value
+) => {
+  const number =
+    Number(
+      value
+    );
+
+  return (
+    Number.isInteger(
+      number
+    ) &&
+    number > 0
+  )
+    ? number
+    : null;
+};
+
+const episodeKey = (
+  season,
+  episode
+) =>
+  `${Number(
+    season
+  )}:${Number(
+    episode
+  )}`;
+
+const progressRatio = (
+  record
+) => {
+  const progress =
+    Number(
+      record
+        ?.progress ||
+        0
+    );
+
+  const duration =
+    Number(
+      record
+        ?.duration ||
+        0
+    );
+
+  if (
+    !duration ||
+    duration <= 0
+  ) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      progress /
+        duration
+    )
+  );
+};
+
+const parseProgressRecord = (
+  record
+) => {
+  const key =
+    String(
+      record
+        ?.content_key ||
+        ""
+    );
+
+  if (
+    key.startsWith(
+      "mg2|"
+    )
+  ) {
+    const [
+      ,
+      tmdbId,
+      mediaType,
+      ,
+      season,
+      episode,
+    ] =
+      key.split(
+        "|"
+      );
+
+    return {
+      tmdbId:
+        String(
+          tmdbId ||
+            ""
+        ),
+
+      mediaType:
+        mediaType ===
+        "tv"
+          ? "tv"
+          : "movie",
+
+      season:
+        asPositiveInt(
+          season
+        ),
+
+      episode:
+        asPositiveInt(
+          episode
+        ),
+    };
+  }
+
+  const parts =
+    key.split(
+      "|"
+    );
+
+  return {
+    tmdbId:
+      "",
+
+    mediaType:
+      asPositiveInt(
+        parts[2]
+      ) &&
+      asPositiveInt(
+        parts[3]
+      )
+        ? "tv"
+        : "movie",
+
+    season:
+      asPositiveInt(
+        parts[2]
+      ),
+
+    episode:
+      asPositiveInt(
+        parts[3]
+      ),
+  };
+};
+
+const showTitleOf = (
+  item
+) =>
+  item?.title ||
+  item?.name ||
+  "TV Show";
+
+export default function EpisodeSelector({
+  item,
+  seasons,
+  trailerUrl,
+  providers,
+}) {
+  const player =
+    usePlayer();
+
+  const regularSeasons =
+    useMemo(
+      () =>
+        (
+          seasons ||
+          []
+        )
+          .filter(
+            (
+              seasonItem
+            ) =>
+              Number(
+                seasonItem
+                  ?.season_number
+              ) > 0
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              Number(
+                a
+                  .season_number
+              ) -
+              Number(
+                b
+                  .season_number
+              )
+          ),
+      [
+        seasons,
+      ]
+    );
+
+  const [
+    season,
+    setSeason,
+  ] =
+    useState(
+      ""
+    );
+
+  const [
+    episodes,
+    setEpisodes,
+  ] =
+    useState(
+      []
+    );
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    progressRows,
+    setProgressRows,
+  ] =
+    useState(
+      []
+    );
+
+  const [
+    progressLoading,
+    setProgressLoading,
+  ] =
+    useState(
+      true
+    );
+
+  const [
+    reviewEpisode,
+    setReviewEpisode,
+  ] =
+    useState(
+      null
+    );
+  const [profileId, setProfileId] = useState(activeHouseholdProfileId);
+  useEffect(() => {
+    const updateProfile = () => setProfileId(activeHouseholdProfileId());
+    window.addEventListener(PROFILE_CHANGED_EVENT, updateProfile);
+    return () => window.removeEventListener(PROFILE_CHANGED_EVENT, updateProfile);
+  }, []);
+  const [progressFailed, setProgressFailed] = useState(false);
+  const watchLock = useRef(false);
+  const [watchSaving, setWatchSaving] = useState(false);
+  const [watchMessage, setWatchMessage] = useState("");
+  const [sourcesEpisode, setSourcesEpisode] = useState(null);
+  const [downloadEpisode, setDownloadEpisode] = useState(null);
+  const [downloadSeasonOpen, setDownloadSeasonOpen] = useState(false);
+  useEffect(() => { setSourcesEpisode(null); setDownloadEpisode(null); setDownloadSeasonOpen(false); }, [season]);
+
+  // Episode lists are revalidated rather than trusted forever: an explicit
+  // refresh, a returning tab, or a long-open screen must not show stale
+  // episode data or watched state.
+  const [episodeRefresh, setEpisodeRefresh] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const episodesLoadedAtRef = useRef(0);
+  const seasonScrollReadyRef = useRef(false);
+  const containerRef = useRef(null);
+
+  const showTitle =
+    showTitleOf(
+      item
+    );
+
+  const tmdbId =
+    String(
+      asPositiveInt(item?.tmdb_id) ||
+      asPositiveInt(item?.tmdbId) ||
+      asPositiveInt(item?.id) ||
+      ""
+    );
+
+  useEffect(() => {
+    let mounted =
+      true;
+
+    const loadProgress =
+      async () => {
+        setProgressFailed(false);
+        setProgressLoading(
+          true
+        );
+
+        try {
+          const rows =
+            await profiledLibrary.ContinueWatching.list(
+              "-updated_date",
+              500
+            );
+
+          if (
+            !mounted
+          ) {
+            return;
+          }
+
+          const matching =
+            (
+              Array.isArray(rows)
+                ? rows
+                : []
+            ).filter(
+              (
+                record
+              ) => {
+                const parsed =
+                  parseProgressRecord(
+                    record
+                  );
+
+                if (
+                  parsed.mediaType !==
+                    "tv" ||
+                  !parsed.season ||
+                  !parsed.episode
+                ) {
+                  return false;
+                }
+
+                if (
+                  parsed.tmdbId &&
+                  tmdbId &&
+                  parsed.tmdbId ===
+                    tmdbId
+                ) {
+                  return true;
+                }
+
+                if (parsed.tmdbId && tmdbId) return false;
+
+                const storedTitle =
+                  String(
+                    record
+                      ?.title ||
+                      record
+                        ?.content_key ||
+                      ""
+                  ).toLowerCase();
+
+                return storedTitle.includes(
+                  showTitle.toLowerCase()
+                );
+              }
+            );
+
+          setProgressRows(
+            matching
+          );
+        } catch {
+          if (
+            mounted
+          ) {
+            setProgressFailed(true);
+            setProgressRows(
+              []
+            );
+          }
+        } finally {
+          if (
+            mounted
+          ) {
+            setProgressLoading(
+              false
+            );
+          }
+        }
+      };
+
+    loadProgress();
+
+    let unsubscribe =
+      null;
+
+    try {
+      unsubscribe =
+        profiledLibrary.ContinueWatching.subscribe(
+          () =>
+            loadProgress()
+        );
+    } catch {
+      unsubscribe =
+        null;
+    }
+
+    return () => {
+      mounted =
+        false;
+
+      if (
+        typeof unsubscribe ===
+        "function"
+      ) {
+        unsubscribe();
+      }
+    };
+  }, [
+    showTitle,
+    tmdbId,
+    profileId,
+  ]);
+
+  const progressMap =
+    useMemo(
+      () => {
+        const map =
+          new Map();
+
+        progressRows.forEach(
+          (
+            record
+          ) => {
+            const parsed =
+              parseProgressRecord(
+                record
+              );
+
+            if (
+              !parsed.season ||
+              !parsed.episode
+            ) {
+              return;
+            }
+
+            const key =
+              episodeKey(
+                parsed.season,
+                parsed.episode
+              );
+
+            const existing =
+              map.get(
+                key
+              );
+
+            if (
+              !existing ||
+              Number(
+                record
+                  ?.progress ||
+                  0
+              ) >
+                Number(
+                  existing
+                    ?.progress ||
+                    0
+                )
+            ) {
+              map.set(
+                key,
+                record
+              );
+            }
+          }
+        );
+
+        return map;
+      },
+      [
+        progressRows,
+      ]
+    );
+
+  const latestProgress =
+    useMemo(
+      () =>
+        progressRows
+          .map(
+            (
+              record
+            ) => ({
+              record,
+
+              parsed:
+                parseProgressRecord(
+                  record
+                ),
+            })
+          )
+          .filter(
+            ({
+              parsed,
+              record,
+            }) =>
+              parsed.season &&
+              parsed.episode &&
+              Number(
+                record
+                  ?.progress ||
+                  0
+              ) >= 5 &&
+              progressRatio(
+                record
+              ) < 0.96
+          )
+          .sort(
+            (
+              a,
+              b
+            ) => {
+              const aDate =
+                new Date(
+                  a.record
+                    ?.updated_date ||
+                    a.record
+                      ?.created_date ||
+                    0
+                ).getTime();
+
+              const bDate =
+                new Date(
+                  b.record
+                    ?.updated_date ||
+                    b.record
+                      ?.created_date ||
+                    0
+                ).getTime();
+
+              return (
+                bDate -
+                aDate
+              );
+            }
+          )[0] ||
+        null,
+      [
+        progressRows,
+      ]
+    );
+
+  useEffect(() => {
+    if (
+      !regularSeasons.length
+    ) {
+      return;
+    }
+
+    const resumeSeason =
+      latestProgress
+        ?.parsed
+        ?.season;
+
+    const hasResumeSeason =
+      resumeSeason &&
+      regularSeasons.some(
+        (
+          seasonItem
+        ) =>
+          Number(
+            seasonItem
+              .season_number
+          ) ===
+          Number(
+            resumeSeason
+          )
+      );
+
+    setSeason(
+      String(
+        hasResumeSeason
+          ? resumeSeason
+          : regularSeasons[0]
+              .season_number
+      )
+    );
+  }, [
+    regularSeasons,
+    latestProgress
+      ?.parsed
+      ?.season,
+  ]);
+
+  useEffect(() => {
+    if (
+      season ===
+      ""
+    ) {
+      return;
+    }
+
+    let mounted =
+      true;
+
+    /*
+     * A season switch starts from a clean list, while a background refresh
+     * keeps the episodes already on screen so nothing flickers.
+     */
+    const keepPrevious =
+      refreshingRef.current ===
+      true;
+
+    if (!keepPrevious) {
+      setLoading(
+        true
+      );
+
+      setEpisodes(
+        []
+      );
+    }
+
+    const loadEpisodes =
+      async () => {
+        try {
+          const response =
+            await base44.functions.invoke(
+              "getTmdbMovies",
+              {
+                media_type:
+                  "tv",
+
+                movie_id:
+                  item?.id ||
+                  item
+                    ?.tmdb_id ||
+                  item
+                    ?.tmdbId,
+
+                season_number:
+                  Number(
+                    season
+                  ),
+              }
+            );
+
+          if (
+            !mounted
+          ) {
+            return;
+          }
+
+          const first =
+            response?.data ??
+            response ??
+            {};
+
+          const payload =
+            first &&
+            typeof first ===
+              "object" &&
+            !Array.isArray(
+              first
+            ) &&
+            first.data &&
+            typeof first.data ===
+              "object" &&
+            !Array.isArray(
+              first.data
+            )
+              ? first.data
+              : first;
+
+          setEpisodes(
+            Array.isArray(
+              payload
+                ?.episodes
+            )
+              ? payload
+                  .episodes
+              : []
+          );
+        } catch {
+          if (
+            mounted &&
+            !keepPrevious
+          ) {
+            setEpisodes(
+              []
+            );
+          }
+        } finally {
+          if (
+            mounted
+          ) {
+            refreshingRef.current =
+              false;
+
+            episodesLoadedAtRef.current =
+              Date.now();
+
+            setRefreshing(
+              false
+            );
+
+            setLoading(
+              false
+            );
+          }
+        }
+      };
+
+    loadEpisodes();
+
+    return () => {
+      mounted =
+        false;
+    };
+  }, [
+    item?.id,
+    item?.tmdb_id,
+    item?.tmdbId,
+    season,
+    episodeRefresh,
+  ]);
+
+  useEffect(() => {
+    setReviewEpisode(
+      null
+    );
+  }, [
+    season,
+  ]);
+
+  const refreshEpisodeList =
+    () => {
+      if (
+        !season ||
+        loading ||
+        refreshing
+      ) {
+        return;
+      }
+
+      refreshingRef.current =
+        true;
+
+      setRefreshing(
+        true
+      );
+
+      setEpisodeRefresh(
+        (value) =>
+          value + 1
+      );
+    };
+
+  /*
+   * Returning to a long-open screen must not show yesterday's episode list
+   * or watched state. Revalidate quietly once the data is a few minutes old.
+   */
+  useEffect(() => {
+    if (
+      typeof document ===
+      "undefined"
+    ) {
+      return undefined;
+    }
+
+    const revalidate =
+      () => {
+        if (
+          document.visibilityState !==
+            "visible" ||
+          !season ||
+          refreshingRef.current
+        ) {
+          return;
+        }
+
+        if (
+          Date.now() -
+            Number(
+              episodesLoadedAtRef.current ||
+                0
+            ) <
+          5 *
+            60 *
+            1000
+        ) {
+          return;
+        }
+
+        refreshingRef.current =
+          true;
+
+        setRefreshing(
+          true
+        );
+
+        setEpisodeRefresh(
+          (value) =>
+            value + 1
+        );
+      };
+
+    document.addEventListener(
+      "visibilitychange",
+      revalidate
+    );
+
+    window.addEventListener(
+      "focus",
+      revalidate
+    );
+
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        revalidate
+      );
+
+      window.removeEventListener(
+        "focus",
+        revalidate
+      );
+    };
+  }, [
+    season,
+  ]);
+
+  /*
+   * Netflix keeps the episode list anchored when the season changes instead
+   * of leaving the viewer stranded half-way down the previous season.
+   */
+  useEffect(() => {
+    if (!season) {
+      return;
+    }
+
+    if (!seasonScrollReadyRef.current) {
+      seasonScrollReadyRef.current =
+        true;
+
+      return;
+    }
+
+    const node =
+      containerRef.current;
+
+    if (
+      !node ||
+      typeof node.getBoundingClientRect !==
+        "function"
+    ) {
+      return;
+    }
+
+    const rect =
+      node.getBoundingClientRect();
+
+    if (
+      rect.top < 0 ||
+      rect.top >
+        window.innerHeight *
+          0.5
+    ) {
+      node.scrollIntoView({
+        behavior:
+          "smooth",
+
+        block:
+          "start",
+      });
+    }
+  }, [
+    season,
+  ]);
+
+  const playEpisodeNumber =
+    async ({
+      seasonNumber,
+      episodeNumber,
+      episodeData = null,
+      startTime = 0,
+      includeAddonNames = [],
+    }) => {
+      const episodeTitle =
+        `${showTitle} — S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")}`;
+      const poster =
+        episodeData?.still_url ||
+        item?.poster_url ||
+        item?.poster ||
+        "";
+      // Prefer explicit numeric TMDB identity; item.id may be a Base44 row id.
+      const showId =
+        asPositiveInt(item?.tmdb_id) ||
+        asPositiveInt(item?.tmdbId) ||
+        asPositiveInt(item?.id);
+      const showImdbId = String(item?.imdb_id || item?.imdbId || "").trim();
+
+      const baseRequest = {
+        id: showId,
+        tmdbId: showId,
+        tmdb_id: showId,
+        imdbId: showImdbId,
+        imdb_id: showImdbId,
+        rdImdbId: showImdbId,
+        title: episodeTitle,
+        poster,
+        year: item?.year,
+        mediaType: "tv",
+        type: "series",
+        season: Number(seasonNumber),
+        episode: Number(episodeNumber),
+        rdTitle: showTitle,
+        rdYear: item?.year,
+        rdSeason: Number(seasonNumber),
+        rdEpisode: Number(episodeNumber),
+        startTime: Number(startTime || 0),
+        // A normal episode tap uses the verified one-click pipeline.
+        // Query all active addons and Real-Debrid instead of forcing
+        // manual playback or restricting discovery to MediaFusion.
+        skipRdLookup: false,
+        skipAddonLookup: false,
+        verifiedPlaybackPolicy: "strict",
+        includeAddonNames,
+      };
+
+      // Fresh episodes use the embedded player and source-switching tabs.
+      // If OnlyFlix lacks an embed, try VidCore before falling into torrents.
+      // Resume stays on the seek-aware source pipeline.
+      if (!startTime && launchFireTvCardPlay(player, baseRequest)) return;
+      if (!startTime && player.playOnlyFlix?.(baseRequest)) return;
+      if (!startTime && player.playVidCore?.(baseRequest)) return;
+
+      player.play({
+        ...baseRequest,
+        preferRd: true,
+        sources: includeAddonNames.length > 0
+          ? []
+          : buildMediaSources({
+              title: episodeTitle,
+              id: showId,
+              poster,
+              providers,
+            }).map((fallbackSource) => ({
+              ...fallbackSource,
+              episodeFallbackOnly: true,
+            })),
+      });
+    };
+
+  const playEpisode =
+    (
+      episodeData
+    ) => {
+      const episodeNumber =
+        Number(
+          episodeData
+            ?.episode_number
+        );
+
+      const seasonNumber =
+        Number(
+          season
+        );
+
+      const progressRecord =
+        progressMap.get(
+          episodeKey(
+            seasonNumber,
+            episodeNumber
+          )
+        );
+
+      const ratio =
+        progressRatio(
+          progressRecord
+        );
+
+      const startTime =
+        progressRecord &&
+        Number(
+          progressRecord
+            ?.progress ||
+            0
+        ) >= 5 &&
+        ratio <
+          0.96
+          ? Number(
+              progressRecord
+                .progress ||
+                0
+            )
+          : 0;
+
+      playEpisodeNumber({
+        seasonNumber,
+        episodeNumber,
+        episodeData,
+        startTime,
+        includeAddonNames: [],
+      });
+    };
+
+  const resumeLatest =
+    () => {
+      if (
+        !latestProgress
+      ) {
+        return;
+      }
+
+      playEpisodeNumber({
+        seasonNumber:
+          latestProgress
+            .parsed
+            .season,
+
+        episodeNumber:
+          latestProgress
+            .parsed
+            .episode,
+
+        startTime:
+          Number(
+            latestProgress
+              .record
+              ?.progress ||
+              0
+          ),
+      });
+    };
+
+  // Never guess which episode was completed: use the existing saved
+  // playback progress for this exact season. The next unwatched button
+  // stays within the currently loaded season and ignores future air dates.
+  const airedEpisodes = [...episodes]
+    .filter(episode => {
+      const airDate = String(episode?.air_date || "").slice(0, 10);
+      const today = new Date().toISOString().slice(0, 10);
+      return !airDate || airDate <= today;
+    })
+    .sort((a, b) => Number(a?.episode_number || 0) - Number(b?.episode_number || 0));
+  const completedEpisodeCount = airedEpisodes.filter(episode =>
+    progressRatio(progressMap.get(episodeKey(Number(season), Number(episode?.episode_number)))) >= 0.92
+  ).length;
+  const nextUnwatchedEpisode = airedEpisodes.find(episode =>
+    progressRatio(progressMap.get(episodeKey(Number(season), Number(episode?.episode_number)))) < 0.92
+  );
+
+  const markEpisodes = async (targets, watched) => {
+    if (watchLock.current || progressLoading || progressFailed || !tmdbId) return;
+    watchLock.current = true;
+    setWatchSaving(true);
+    setWatchMessage("");
+    const profileId = activeHouseholdProfileId();
+    let saved = 0;
+    try {
+      for (const episode of targets) {
+        if (activeHouseholdProfileId() !== profileId) throw new Error("Profile changed");
+        const number = Number(episode.episode_number);
+        const key = ["mg2", tmdbId, "tv", item?.year || "", season, number, encodeURIComponent(showTitle)].join("|");
+        const exact = await profiledLibrary.ContinueWatching.filter({ content_key: key });
+        const matching = progressRows.filter(row => {
+          if (String(row.profile_id || "main") !== profileId) return false;
+          const parsed = parseProgressRecord(row);
+          return parsed.season === Number(season) && parsed.episode === number;
+        });
+        const rows = [...new Map([...matching, ...exact].map(row => [row.id, row])).values()];
+        const results = [];
+        for (const row of rows) {
+          const duration = Number(row.duration) > 0 ? Number(row.duration) : (Number(episode.runtime) || 45) * 60;
+          const patch = { duration, progress: watched ? duration : 0 };
+          await base44.entities.ContinueWatching.update(row.id, patch);
+          results.push({ ...row, ...patch });
+        }
+        if (!rows.length && watched) {
+          const duration = (Number(episode.runtime) || 45) * 60;
+          results.push(await base44.entities.ContinueWatching.create({
+            content_key: key, title: showTitle, year: String(item?.year || ""),
+            poster_url: item?.poster_url || item?.poster || "", video_url: "",
+            episode_name: episode.name || "", source_type: "queued",
+            duration, progress: duration, profile_id: profileId,
+          }));
+        }
+        if (activeHouseholdProfileId() === profileId) setProgressRows(current => {
+          const ids = new Set(results.map(row => row.id));
+          return [...current.filter(row => !ids.has(row.id)), ...results];
+        });
+        saved++;
+      }
+      if (activeHouseholdProfileId() === profileId) setWatchMessage(saved + " episodes marked " + (watched ? "watched." : "unwatched."));
+    } catch {
+      if (activeHouseholdProfileId() === profileId) setWatchMessage("Saved " + saved + " of " + targets.length + " episodes. Could not finish saving; please try again.");
+    } finally {
+      watchLock.current = false;
+      setWatchSaving(false);
+    }
+  };
+  const jumpToEpisode = last => {
+    const buttons = document.querySelectorAll('#mg-episode-selector [data-mg-episode-art]');
+    const target = buttons[last ? buttons.length - 1 : 0];
+    target?.focus();
+    target?.scrollIntoView({ block: "center", behavior: "auto" });
+  };
+
+  if (
+    !regularSeasons.length
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      id="mg-episode-selector"
+      ref={containerRef}
+      className="mt-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 className="text-white/80 text-xs font-bold uppercase tracking-wider">
+          Episodes
+        </h3>
+
+        <div className="flex items-center gap-2">
+          {progressLoading && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-white/35">
+              <Loader2 className="w-3 h-3 animate-spin" />
+
+              Syncing progress
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={refreshEpisodeList}
+            disabled={!season || loading || refreshing}
+            aria-label="Refresh episode list"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[11px] font-semibold text-white/60 hover:text-white disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-mg-green"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading || refreshing ? "animate-spin" : ""}`} />
+
+            {loading || refreshing ? "Updating…" : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      <SeasonRail
+        seasons={regularSeasons}
+        value={season}
+        onChange={setSeason}
+        focusPrefix={`episode-season:${tmdbId || showTitle}`}
+      />
+
+      {!loading && airedEpisodes.length > 0 && (
+        <div data-mg-season-watch-progress="true"
+          className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+          <span>{completedEpisodeCount} of {airedEpisodes.length} released episodes watched this season</span>
+          {nextUnwatchedEpisode && (
+            <button type="button" onClick={() => playEpisode(nextUnwatchedEpisode)}
+              className="min-h-11 rounded-lg border border-mg-green/30 bg-mg-green/10 px-3 font-semibold text-mg-green focus:outline-none focus:ring-2 focus:ring-mg-green">
+              {progressRatio(progressMap.get(episodeKey(Number(season), Number(nextUnwatchedEpisode.episode_number)))) > 0
+                ? "Continue" : "Play next unwatched"} · E{nextUnwatchedEpisode.episode_number}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="mb-3 flex flex-wrap gap-2" aria-label="Episode list controls">
+        {[true, false].map(watched => (
+          <button key={String(watched)} type="button"
+            disabled={watchSaving || progressLoading || progressFailed || loading || !tmdbId || !airedEpisodes.length}
+            onClick={() => markEpisodes(airedEpisodes, watched)}
+            className="min-h-11 rounded-lg border border-mg-green/30 px-3 text-xs text-mg-green disabled:opacity-40 focus:ring-2 focus:ring-mg-green">
+            Mark released season {watched ? "watched" : "unwatched"}
+          </button>
+        ))}
+        {[false, true].map(last => (
+          <button key={String(last)} type="button" onClick={() => jumpToEpisode(last)} disabled={loading || !episodes.length}
+            className="min-h-11 rounded-lg border border-white/20 px-3 text-xs text-white/80 focus:ring-2 focus:ring-mg-green">
+            {last ? "Last episode" : "First episode"}
+          </button>
+        ))}
+      </div>
+      <p role="status" aria-live="polite" className="mb-2 text-xs text-white/70">
+        {progressFailed ? "Could not load watched status. Reopen this title to retry." : watchSaving ? "Saving watched status…" : watchMessage}
+      </p>
+
+      {latestProgress && (
+        <button
+          type="button"
+          onClick={
+            resumeLatest
+          }
+          className="mb-3 w-full min-h-11 flex items-center justify-between gap-3 rounded-lg border border-mg-green/25 bg-mg-green/10 px-3 py-2.5 text-left hover:bg-mg-green/15 focus:outline-none focus:ring-2 focus:ring-mg-green"
+        >
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-mg-green">
+              Continue this series
+            </span>
+
+            <span className="block text-[11px] text-white/55 mt-0.5">
+              Resume S
+              {String(
+                latestProgress
+                  .parsed
+                  .season
+              ).padStart(
+                2,
+                "0"
+              )}
+              E
+              {String(
+                latestProgress
+                  .parsed
+                  .episode
+              ).padStart(
+                2,
+                "0"
+              )}
+              {" · "}
+              {Math.round(
+                progressRatio(
+                  latestProgress
+                    .record
+                ) *
+                  100
+              )}
+              % watched
+            </span>
+          </span>
+
+          <RotateCcw className="w-4 h-4 text-mg-green shrink-0" />
+        </button>
+      )}
+
+      {!loading && airedEpisodes.length > 0 && (
+        <div className="mb-3">
+          <button type="button"
+            data-mg-download-season="true"
+            data-mg-focus-key={"season:" + (tmdbId || showTitle) + ":" + season + ":download"}
+            aria-expanded={downloadSeasonOpen}
+            onClick={() => setDownloadSeasonOpen((open) => !open)}
+            className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-mg-green/30 bg-mg-green/10 px-3 text-xs font-semibold text-mg-green focus:outline-none focus:ring-2 focus:ring-mg-green">
+            <Download className="w-4 h-4" />
+            Download Season {season} · {airedEpisodes.length} episodes
+          </button>
+          {downloadSeasonOpen && (
+            <SeasonDownloadPicker
+              tmdbId={tmdbId}
+              key={"season-download:" + tmdbId + ":" + season}
+              title={showTitle}
+              year={item?.year}
+              season={Number(season)}
+              episodes={airedEpisodes}
+              onClose={() => setDownloadSeasonOpen(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="space-y-2" data-mg-episode-skeleton="true">
+          {Array.from({
+            length:
+              5,
+          }).map(
+            (
+              _,
+              index
+            ) => (
+              <div
+                key={
+                  index
+                }
+                className="flex gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-2"
+              >
+                <div className="w-full sm:w-32 aspect-video shrink-0 animate-pulse rounded-md bg-mg-card" />
+
+                <div className="flex-1 space-y-2 py-1">
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-mg-card" />
+                  <div className="h-3 w-1/3 animate-pulse rounded bg-mg-card" />
+                  <div className="h-3 w-full animate-pulse rounded bg-mg-card" />
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      ) : (
+        <div key={season} className="mg-episode-enter space-y-2">
+          {episodes.map(
+            (
+              episodeData
+            ) => {
+              const episodeNumber =
+                Number(
+                  episodeData
+                    ?.episode_number
+                );
+
+              const seasonNumber =
+                Number(
+                  season
+                );
+
+              const progressRecord =
+                progressMap.get(
+                  episodeKey(
+                    seasonNumber,
+                    episodeNumber
+                  )
+                );
+
+              const ratio =
+                progressRatio(
+                  progressRecord
+                );
+
+              const percent =
+                Math.round(
+                  ratio *
+                    100
+                );
+
+              const hasResume =
+                Number(
+                  progressRecord
+                    ?.progress ||
+                    0
+                ) >=
+                  5 &&
+                ratio >
+                  0 &&
+                ratio <
+                  0.96;
+
+              const nearlyWatched =
+                ratio >=
+                0.92;
+
+              return (
+                <div
+                  key={
+                    episodeData.id ||
+                    `${seasonNumber}-${episodeNumber}`
+                  }
+                  className="group relative flex flex-col sm:flex-row gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-2 hover:bg-white/[0.04] focus-within:border-mg-green/30"
+                >
+                  <button
+                    type="button"
+                    data-mg-episode-art="true"
+                    data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:art`}
+                    onClick={() =>
+                      playEpisode(
+                        episodeData
+                      )
+                    }
+                    className="relative w-full sm:w-32 aspect-video shrink-0 overflow-hidden rounded-md bg-mg-card border border-white/10 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                    aria-label={`${
+                      hasResume
+                        ? "Resume"
+                        : "Play"
+                    } episode ${episodeNumber}`}
+                  >
+                    {episodeData
+                      .still_url ? (
+                      <Image
+                        src={
+                          episodeData
+                            .still_url
+                        }
+                        alt={
+                          episodeData
+                            .name ||
+                          `Episode ${episodeNumber}`
+                        }
+                        className="w-full h-full object-cover"
+                        fittingType="fill"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/25">
+                        <Play className="w-5 h-5" />
+                      </div>
+                    )}
+
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                      <span className="w-9 h-9 rounded-full bg-mg-green text-black flex items-center justify-center">
+                        {hasResume ? (
+                          <RotateCcw className="w-4 h-4" />
+                        ) : (
+                          <Play className="w-4 h-4 fill-black" />
+                        )}
+                      </span>
+                    </span>
+
+                    <span className="absolute top-1 left-1 rounded bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      E
+                      {
+                        episodeNumber
+                      }
+                    </span>
+
+                    {nearlyWatched && (
+                      <span className="absolute top-1 right-1 rounded-full bg-black/75 p-1 text-mg-green">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+
+                    {ratio >
+                      0 && (
+                      <span className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                        <span
+                          className="block h-full bg-mg-green"
+                          style={{
+                            width:
+                              `${percent}%`,
+                          }}
+                        />
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="w-full sm:flex-1 min-w-0 py-0.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-white text-sm font-medium truncate">
+                          {episodeData.name ||
+                            `Episode ${episodeNumber}`}
+                        </p>
+
+                        <p className="text-white/40 text-xs flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                          {episodeData
+                            .air_date && (
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+
+                              {
+                                episodeData
+                                  .air_date
+                              }
+                            </span>
+                          )}
+
+                          {Number(
+                            episodeData
+                              ?.runtime
+                          ) > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                              {
+                                Number(
+                                  episodeData
+                                    .runtime
+                                )
+                              }
+                              m
+                            </span>
+                          )}
+
+                          {hasResume && (
+                            <span className="text-mg-green font-semibold">
+                              Resume ·{" "}
+                              {
+                                percent
+                              }
+                              %
+                            </span>
+                          )}
+
+                          {nearlyWatched &&
+                            !hasResume && (
+                              <span className="text-mg-green font-semibold">
+                                Watched
+                              </span>
+                            )}
+                        </p>
+                      </div>
+
+                      <div className="flex w-full min-w-0 flex-wrap justify-start gap-2">
+                        <button type="button"
+                          data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:watched`}
+                          disabled={watchSaving || progressLoading || progressFailed || !tmdbId || !airedEpisodes.includes(episodeData)}
+                          onClick={() => markEpisodes([episodeData], !nearlyWatched)}
+                          aria-label={`Mark episode ${episodeNumber} ${nearlyWatched ? "unwatched" : "watched"}`}
+                          className="min-h-11 rounded-md border border-mg-green/30 px-3 text-xs font-semibold text-mg-green disabled:opacity-40 focus:ring-2 focus:ring-mg-green">
+                          Mark {nearlyWatched ? "unwatched" : "watched"}
+                        </button>
+
+                        <button
+                          type="button"
+                          data-mg-episode-download="true"
+                          data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:download`}
+                          aria-expanded={downloadEpisode === episodeNumber}
+                          onClick={() => setDownloadEpisode((current) => current === episodeNumber ? null : episodeNumber)}
+                          className="min-h-10 inline-flex items-center gap-1.5 rounded-md border border-mg-green/30 bg-mg-green/10 px-2.5 text-[11px] font-semibold text-mg-green hover:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Download
+                        </button>
+                        <button
+                          type="button"
+                          data-mg-episode-sources="true"
+                          data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:sources`}
+                          onClick={() => setSourcesEpisode((current) => current === episodeNumber ? null : episodeNumber)}
+                          aria-expanded={sourcesEpisode === episodeNumber}
+                          className="min-h-10 inline-flex items-center gap-1.5 rounded-md border border-mg-green/30 bg-mg-green/10 px-2.5 text-[11px] font-semibold text-mg-green hover:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                        >
+                          <ListVideo className="w-3.5 h-3.5" />
+                          Sources
+                        </button>
+                        <button
+                          type="button"
+                          data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:review`}
+                          onClick={() =>
+                            setReviewEpisode(
+                              (current) =>
+                                current ===
+                                episodeNumber
+                                  ? null
+                                  : episodeNumber
+                            )
+                          }
+                          className="min-h-10 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 text-[11px] font-semibold text-white/70 hover:text-white hover:border-mg-green/30 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                          aria-expanded={
+                            reviewEpisode ===
+                            episodeNumber
+                          }
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          Review
+                        </button>
+
+                        <button
+                          type="button"
+                          data-mg-focus-key={`episode:${tmdbId || showTitle}:${seasonNumber}:${episodeNumber}:action`}
+                          onClick={() =>
+                            playEpisode(
+                              episodeData
+                            )
+                          }
+                          className="min-h-10 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 text-[11px] font-semibold text-white/70 hover:text-white hover:border-mg-green/30 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                        >
+                          {hasResume ? (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
+
+                          {hasResume
+                            ? "Resume"
+                            : "Play"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-white/50 text-xs mt-1 line-clamp-2 leading-relaxed">
+                      {episodeData.overview ||
+                        "No description available."}
+                    </p>
+
+                    {downloadEpisode === episodeNumber && (
+                      <MediaDownloadPicker
+                        key={`episode:${tmdbId}:${seasonNumber}:${episodeNumber}`}
+                        tmdbId={tmdbId}
+                        title={showTitle}
+                        year={item?.year}
+                        mediaType="tv"
+                        season={seasonNumber}
+                        episode={episodeNumber}
+                        onClose={() => setDownloadEpisode(null)}
+                        onFindSources={() => {
+                          setDownloadEpisode(null);
+                          setSourcesEpisode(episodeNumber);
+                        }}
+                      />
+                    )}
+                    {sourcesEpisode === episodeNumber && (
+                      <div data-mg-episode-source-panel="true" className="mt-3 w-full">
+                        <StreamSourcesBox
+                          title={showTitle}
+                          poster={item?.poster_url || item?.poster || ""}
+                          providers={providers}
+                          rdYear={item?.year}
+                          tmdbId={tmdbId}
+                          imdbId={item?.imdb_id || item?.imdbId || ""}
+                          mediaType="tv"
+                          season={seasonNumber}
+                          episode={episodeNumber}
+                          resumeAt={hasResume ? Number(progressRecord?.progress || 0) : 0}
+                        />
+                      </div>
+                    )}
+                    {reviewEpisode ===
+                      episodeNumber && (
+                      <MediaReviews
+                        tmdbId={
+                          tmdbId
+                        }
+                        mediaType="episode"
+                        title={
+                          showTitle
+                        }
+                        season={
+                          seasonNumber
+                        }
+                        episode={
+                          episodeNumber
+                        }
+                        episodeTitle={
+                          episodeData.name ||
+                          `Episode ${episodeNumber}`
+                        }
+                        compact
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            }
+          )}
+
+          {episodes.length ===
+            0 && (
+            <p className="text-white/40 text-xs rounded-lg border border-white/10 bg-mg-card p-4">
+              No episodes found for this season.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,4727 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { base44 } from "@/api/base44Client";
+import { withGuestDebridPayload } from "@/components/mg/guestDebridDevice";
+import { fetchBrowserAddonStreams, mergeAddonStreams } from "@/components/mg/addonBrowserFallback";
+import PlayerPortalRenderer from "@/components/mg/PlayerPortalRenderer";
+import { buildEmbedSuEmbedUrl } from "@/components/mg/webEmbedProviders";
+import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
+import { buildVidCoreEmbedUrl } from "@/components/mg/vidCoreEmbed";
+import { buildTwoEmbedEmbedUrl, buildCineSrcEmbedUrl, buildMultiEmbedEmbedUrl } from "@/components/mg/extraEmbedProviders"; import { buildOnlyFlixEmbedUrl } from "@/components/mg/onlyFlixEmbed";
+import { stopExclusivePlayback } from "@/components/mg/exclusivePlayback";
+import { detectLanguagePreference, getPlaybackDeviceProfile, scoreSourceCompatibility, sourcePlaybackCompatibilityTier } from "@/components/mg/mediaCompatibility";
+import { devicePlaybackReliabilityAdjustment, exactPlaybackSourceLabel } from "@/components/mg/playbackReliability";
+import { readPlaybackPreferences } from "@/components/mg/playbackPreferences";
+import { readTrackPreferences } from "@/components/mg/mediaTrackPreferences";
+import { debridProviderScoreHints } from "@/components/mg/debridProviderReliability";
+import { chooseDebridResolutionStrategy } from "@/components/mg/debridResolutionStrategy";
+import { classifyDebridCacheCheck, mergeDebridCacheCheckState } from "@/components/mg/debridCacheCheck";
+import { sourceHasPendingCacheSignal, sourceIsConfirmedCachedForPlayback } from "@/components/mg/sourceCacheVisibility";
+import { readSourceSortMode, sortSourceEntries } from "@/components/mg/sourceSelectorPreferences";
+import { preservePublishedSourceOrder } from "@/components/mg/sourcePublication";
+import { filterSourcesForRequestedIdentity, sourceMatchesRequestedIdentity } from "@/components/mg/sourceIdentity";
+import { sourceIsAioStreamsCandidate } from "@/components/mg/sourceProviderIdentity";
+import { excludeServerIssuedIpBoundVod } from "@/components/mg/ipBoundVodSafety";
+import { canonicalImdbLookupFields, sourceAddonFailure, sourceLookupFailed } from "@/components/mg/sourceDiscoveryFeedback";
+import { fetchTvEpisodeSources, flixQuestV2Configured } from "@/components/mg/tvEpisodeScraper";
+import { firstAcceptedQualificationBatch } from "./qualificationBatch";
+import { hasUnusableEpisodeAudio, episodeAutoplayCandidates, isEnglishMainTrack } from "./episodeAudio";
+import { episodeSourceMatchesRequest, flixQuestFirstEpisodeSources, hasUsableEpisodeAddonSource } from "./episodeSourcePolicy.js";
+import { episodeAutoplayCanTrustSource } from "./episodeLaunchTrust.js";
+import { episodeAutoprepareCandidates } from "./episodeAutoprepare.js";
+
+const PlayerContext = createContext(null);
+
+const FOREIGN_RE =
+  /(truefrench|vostfr|vost|subfrench|\bvf\b|\bvff\b|\bvfi\b|french|spanish|german|italian|russian|\brus\b|hindi|\bhin\b|polish|turkish|arabic|japanese|korean|chinese|portuguese|\bdubbed\b)/i;
+
+const RES_RE =
+  /(2160|1080|720|480)p/i;
+
+const sourceResolution = (item, label = "") => {
+  const explicit = Number(item?.resolution || item?.height || 0);
+  if (Number.isFinite(explicit) && explicit >= 240) return explicit;
+
+  const text = String(label || item?.label || item?.name || item?.title || "");
+  const match = text.match(RES_RE);
+  if (match) return Number(match[1] || 0);
+  if (/\b(?:4k|uhd)\b/i.test(text)) return 2160;
+  return 0;
+};
+
+const AUDIO_AAC_RE =
+  /\b(aac|aac2\.0|aac5\.1|he-aac)\b/i;
+
+const AUDIO_DOLBY_RE =
+  /\b(eac3|e-ac-3|ddp|dd\+|ac3|dolby[ ._-]?digital)\b/i;
+
+const AUDIO_RISKY_RE =
+  /\b(dts(?:-hd)?|truehd|mlp)\b/i;
+
+const PLAYBACK_RELIABILITY_KEY =
+  "mg:playback-reliability-v2";
+
+const reliabilityLabel = (item) =>
+  String(
+    item?.label ||
+      item?.name ||
+      item?.title ||
+      ""
+  )
+    .replace(/^failed\s*[—-]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const readReliabilityStore = () => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(
+      PLAYBACK_RELIABILITY_KEY
+    );
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const reliabilityAdjustment = (item) => {
+  const label = reliabilityLabel(item);
+  const key = label.toLowerCase().slice(0, 260);
+
+  if (!key) {
+    return 0;
+  }
+
+  const record = readReliabilityStore()[key];
+
+  if (!record || typeof record !== "object") {
+    return 0;
+  }
+
+  const now = Date.now();
+  const fresh = (value, ttl) =>
+    Number(value || 0) > now - ttl;
+
+  let score = 0;
+
+  /*
+   * Reliability history is only a tie-breaker. A temporary backend/502
+   * failure must never poison an otherwise good 4K/1080p torrent for half a
+   * day. Genuine no-audio failures still carry a meaningful (but bounded)
+   * penalty so a proven working 1080p source can beat a broken 4K source.
+   */
+  if (fresh(record.lastNoSound, 6 * 60 * 60 * 1000)) {
+    score -=
+      18000 +
+      Math.min(12000, Number(record.noSound || 0) * 3000);
+  }
+
+  if (fresh(record.lastFailure, 20 * 60 * 1000)) {
+    score -=
+      5000 +
+      Math.min(5000, Number(record.failures || 0) * 1000);
+  }
+
+  if (fresh(record.lastBuffer, 6 * 60 * 60 * 1000)) {
+    score -= Math.min(
+      6000,
+      Number(record.buffers || 0) * 1500
+    );
+  }
+
+  if (fresh(record.lastStartAt, 30 * 24 * 60 * 60 * 1000)) {
+    const average = Number(record.avgStartMs || 0);
+
+    if (average > 0 && average <= 2500) score += 9000;
+    else if (average <= 5000) score += 4500;
+    else if (average >= 15000) score -= 16000;
+    else if (average >= 9000) score -= 8000;
+  }
+
+  if (fresh(record.lastGood, 30 * 24 * 60 * 60 * 1000)) {
+    score += 3500;
+  }
+
+  return score;
+};
+
+const unwrap = (response) =>
+  response?.data ??
+  response ??
+  {};
+
+const getSourceUrl = (item) =>
+  String(
+    item?.src ||
+      item?.url ||
+      item?.magnet ||
+      item?.magnetLink ||
+      ""
+  ).trim();
+
+const sourceMagnetHash = (item) => {
+  const candidates = [
+    item?.infoHash,
+    item?.info_hash,
+    item?.hash,
+    item?.magnet,
+    item?.magnetLink,
+    item?.richMagnet,
+    getSourceUrl(item),
+  ];
+
+  for (const value of candidates) {
+    const raw = String(value || "").trim();
+    if (!raw) continue;
+
+    const match = raw.match(/btih:([a-f0-9]{40}|[a-f0-9]{64})/i);
+    const hash = String(
+      match?.[1] ||
+        (/^[a-f0-9]{40}$|^[a-f0-9]{64}$/i.test(raw) ? raw : "")
+    )
+      .toLowerCase()
+      .trim();
+
+    if (hash) return hash;
+  }
+
+  return "";
+};
+
+const isMagnetSource = (item) => {
+  const value =
+    getSourceUrl(
+      item
+    ).toLowerCase();
+
+  return (
+    item?.type === "rd" ||
+    item?.type === "rd_torrent" ||
+    item?.type === "magnet" ||
+    item?.type === "torrent" ||
+    value.startsWith("magnet:") ||
+    Boolean(sourceMagnetHash(item))
+  );
+};
+
+const DIRECT_MEDIA_TYPES = new Set([
+  "url",
+  "file",
+  "live",
+  "direct",
+  "stream",
+]);
+
+const MEDIA_URL_RE =
+  /\.(?:m3u8|mpd|mp4|m4v|mkv|webm|mov|avi|ts|m2ts|flv|mpg|mpeg)(?:[?#&/]|$)/i;
+
+const MEDIA_HINT_RE =
+  /(?:\bhls\b|mpegurl|mpeg-url|\bdash\b|mpeg[- ]?dash|video\/|audio\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl|dash\+xml))/i;
+
+const stripVodTrailerSources = (
+  sources,
+  isLive = false
+) => {
+  const list = Array.isArray(sources)
+    ? sources
+    : [];
+
+  if (isLive) {
+    return list;
+  }
+
+  return list.filter((item) => {
+    const type = String(item?.type || "").trim().toLowerCase();
+
+    return !["youtube", "provider", "external"].includes(type);
+  });
+};
+
+const isDirectSource = (item) => {
+  const value = getSourceUrl(item);
+  const type = String(item?.type || "").trim().toLowerCase();
+  const hintText = [
+    item?.format,
+    item?.mimeType,
+    item?.mime_type,
+    item?.contentType,
+    item?.content_type,
+    item?.label,
+    item?.name,
+    value,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const explicitMedia =
+    DIRECT_MEDIA_TYPES.has(type) ||
+    Boolean(item?.live) ||
+    MEDIA_URL_RE.test(value) ||
+    MEDIA_HINT_RE.test(hintText);
+
+  return (
+    /^https?:\/\//i.test(value) &&
+    !isMagnetSource(item) &&
+    !["provider", "youtube", "external", "status"].includes(type) &&
+    explicitMedia
+  );
+};
+
+const normaliseSource = (item) => {
+  if (!item) {
+    return null;
+  }
+
+  const url =
+    getSourceUrl(item);
+
+  return {
+    ...item,
+
+    src:
+      item?.src ||
+      url,
+
+    url:
+      item?.url ||
+      url,
+  };
+};
+
+const dedupeSources = (items) =>
+  mergeAddonStreams(items);
+
+const stableDiscoveredSourceKey = (item) => {
+  if (!item) return "";
+
+  const hash = sourceMagnetHash(item);
+  if (hash) {
+    return `torrent:${hash}:${String(item?.fileIdx ?? item?.file_idx ?? "")}`;
+  }
+
+  const url = String(getSourceUrl(item) || "").trim();
+  if (url) return `url:${url}`;
+
+  const id = String(item?.id || "").trim();
+  return id ? `id:${id}` : "";
+};
+
+const DEBRID_CACHE_BATCH_SIZE = 100;
+const DEBRID_CACHE_MAX_PASSES = 3;
+const DEBRID_CACHE_RETRY_DELAY_MS = 180;
+
+const waitForDebridCacheRetry = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, DEBRID_CACHE_RETRY_DELAY_MS);
+  });
+
+const annotateDebridCache = async (items, hasDebrid) => {
+  const sources = Array.isArray(items) ? items : [];
+  if (!hasDebrid) return sources;
+
+  const hashes = sources
+    .filter(isMagnetSource)
+    .map(sourceMagnetHash)
+    .filter(Boolean)
+    .filter((hash, index, list) => list.indexOf(hash) === index);
+
+  if (hashes.length === 0) return sources;
+
+  const best = {};
+  const providerStats = {};
+  const stateByHash = Object.fromEntries(
+    hashes.map((hash) => [
+      hash,
+      {
+        state: "unknown",
+        cachedProviders: [],
+      },
+    ])
+  );
+
+  const checkBatches = async (hashesToCheck) => {
+    const batches = [];
+
+    for (
+      let index = 0;
+      index < hashesToCheck.length;
+      index += DEBRID_CACHE_BATCH_SIZE
+    ) {
+      batches.push(
+        hashesToCheck.slice(index, index + DEBRID_CACHE_BATCH_SIZE)
+      );
+    }
+
+    const settled = await Promise.allSettled(
+      batches.map(async (batch) => {
+        const response = await base44.functions.invoke(
+          "multiDebrid",
+          withGuestDebridPayload({
+            action: "check_cache",
+            hashes: batch,
+            provider_scores: debridProviderScoreHints(),
+          })
+        );
+
+        return {
+          batch,
+          data: unwrap(response) || {},
+        };
+      })
+    );
+
+    settled.forEach((result) => {
+      if (result.status !== "fulfilled") return;
+
+      const { batch, data } = result.value;
+      const classified = classifyDebridCacheCheck(data, batch);
+
+      Object.assign(best, data?.bestProviderByHash || {});
+      Object.assign(providerStats, data?.providerStats || {});
+
+      batch.forEach((hash) => {
+        stateByHash[hash] = mergeDebridCacheCheckState(
+          stateByHash[hash],
+          classified?.[hash]
+        );
+      });
+    });
+  };
+
+  try {
+    let hashesToCheck = hashes;
+
+    /*
+     * Check the complete discovered hash set in small batches, then retry only
+     * unresolved hashes. Positive cache hits are merged into stateByHash and
+     * therefore remain sticky across later partial/provider failures.
+     */
+    for (
+      let pass = 0;
+      pass < DEBRID_CACHE_MAX_PASSES && hashesToCheck.length > 0;
+      pass += 1
+    ) {
+      if (pass > 0) {
+        await waitForDebridCacheRetry();
+      }
+
+      await checkBatches(hashesToCheck);
+
+      hashesToCheck = hashes.filter(
+        (hash) => stateByHash?.[hash]?.state === "unknown"
+      );
+    }
+
+    return sources.map((item) => {
+      const hash = sourceMagnetHash(item);
+      if (!hash) return item;
+
+      const result = stateByHash?.[hash] || {
+        state: "unknown",
+        cachedProviders: [],
+      };
+
+      if (result.state === "unknown") {
+        /*
+         * Never convert an incomplete cache check into a confirmed miss.
+         * Preserve an earlier positive cache signal and leave everything else
+         * unconfirmed so the next source refresh can check it again.
+         */
+        if (
+          item?.debridCached === true ||
+          item?.runtimeReadyCached === true
+        ) {
+          return item;
+        }
+
+        return {
+          ...item,
+          debridCacheChecked: false,
+          debridCached: undefined,
+          cachedProviders: Array.isArray(item?.cachedProviders)
+            ? item.cachedProviders
+            : [],
+          debridCacheCheckState: "unknown",
+          debridProvider: item?.debridProvider || "",
+          debridProviderStats: providerStats,
+        };
+      }
+
+      const debridCached = result.state === "cached";
+      const cachedProviders = debridCached
+        ? result.cachedProviders || []
+        : [];
+
+      /*
+       * Only a complete successful provider response is allowed to record a
+       * confirmed uncached result. Positive cache hits remain authoritative.
+       */
+      const resolutionStrategy = chooseDebridResolutionStrategy(item, {
+        debridCached,
+      });
+
+      return {
+        ...item,
+        debridCacheChecked: true,
+        debridCached,
+        cachedProviders,
+        debridCacheCheckState: result.state,
+        debridProvider: best?.[hash] || item?.debridProvider || "",
+        debridProviderStats: providerStats,
+        resolutionStrategy,
+      };
+    });
+  } catch {
+    return sources;
+  }
+};
+
+const scoreSource = (item) => {
+  const label =
+    String(
+      item?.label ||
+      item?.name ||
+      ""
+    );
+
+  const resolution = sourceResolution(item, label);
+
+  const foreignPenalty =
+    FOREIGN_RE.test(
+      label
+    )
+      ? 10000
+      : 0;
+
+  const rdLibraryBonus =
+    item?.viaRealDebrid
+      ? 20000
+      : 0;
+
+  const directBonus =
+    isDirectSource(item)
+      ? 5000
+      : 0;
+
+  const audioText = String(
+    [
+      item?.label,
+      item?.name,
+      item?.title,
+      item?.description,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  const audioCompatibility =
+    AUDIO_AAC_RE.test(audioText)
+      ? 3200
+      : AUDIO_DOLBY_RE.test(audioText)
+        ? 2200
+        : AUDIO_RISKY_RE.test(audioText)
+          ? -4200
+          : 0;
+
+  const languagePreference = detectLanguagePreference(item, audioText);
+  const preferredAudioLanguage = String(
+    readTrackPreferences()?.audioLanguage || "en"
+  ).toLowerCase();
+  const languagePriority =
+    preferredAudioLanguage === "en"
+      ? languagePreference === "english"
+        ? 220000
+        : languagePreference === "multi"
+          ? 110000
+          : languagePreference === "foreign"
+            ? -220000
+            : 0
+      : 0;
+
+  const deviceProfile = getPlaybackDeviceProfile();
+  const playbackPreferences = readPlaybackPreferences();
+
+  const qualityPreference = String(
+    playbackPreferences.quality || "Auto"
+  ).toLowerCase();
+
+  const preferredResolution =
+    qualityPreference === "4k" || qualityPreference === "2160p"
+      ? 2160
+      : Number.parseInt(qualityPreference, 10) || 0;
+
+  const resolutionPriority = preferredResolution
+    ? resolution === preferredResolution
+      ? 100000
+      : resolution > preferredResolution
+        ? 25000
+        : Math.max(
+            12000,
+            60000 - Math.abs(preferredResolution - resolution) * 20
+          )
+    : resolution >= 2160
+      ? 90000
+      : resolution >= 1080
+        ? 60000
+        : resolution >= 720
+          ? 25000
+          : resolution >= 480
+            ? 8000
+            : 0;
+
+  const compatibilityScore = scoreSourceCompatibility(
+    item,
+    audioText,
+    {
+      deviceProfile,
+      qualityPreference: playbackPreferences.quality,
+    }
+  );
+  const deviceLearning = devicePlaybackReliabilityAdjustment(
+    label,
+    deviceProfile
+  ) + devicePlaybackReliabilityAdjustment(
+    exactPlaybackSourceLabel(item),
+    deviceProfile
+  );
+  const explicitPriority =
+    Math.max(
+      -100,
+      Math.min(
+        100,
+        Number(item?.playbackPriority || 0)
+      )
+    ) * 10000;
+  const debridCacheScore = item?.debridCached
+    ? 32000 + Math.min(6000, Number(item?.cachedProviders?.length || 0) * 1200)
+    : item?.debridCacheChecked && isMagnetSource(item)
+      ? -9000
+      : 0;
+
+  return (
+    explicitPriority +
+    debridCacheScore +
+    rdLibraryBonus +
+    directBonus +
+    languagePriority +
+    audioCompatibility +
+    compatibilityScore +
+    reliabilityAdjustment(item) +
+    deviceLearning +
+    resolutionPriority +
+    resolution -
+    foreignPenalty
+  );
+};
+
+const sortSources = (items) => {
+  const deviceProfile = getPlaybackDeviceProfile();
+
+  return [...items].sort(
+    (a, b) =>
+      sourcePlaybackCompatibilityTier(a, "", { deviceProfile }) -
+        sourcePlaybackCompatibilityTier(b, "", { deviceProfile }) ||
+      scoreSource(b) -
+        scoreSource(a)
+  );
+};
+
+const mergeAlternateTitles = (...values) =>
+  Array.from(
+    new Set(
+      values
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+const mergeAlternateYears = (primaryYear, ...values) => {
+  const primary = String(primaryYear || "").trim();
+
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .map((value) => String(value || "").trim())
+        .filter((value) => /^\d{4}$/.test(value) && value !== primary)
+    )
+  );
+};
+
+/** @param {any} input */
+const resolveImdbInfo = async ({
+  id,
+  tmdbId,
+  tmdb_id,
+  imdbId,
+  imdb_id,
+  mediaType,
+  title,
+  year,
+  alternateYears,
+  rdAlternateYears,
+  alternateTitles,
+  rdAlternateTitles,
+  originalTitle,
+  original_title,
+} = {}) => {
+  const supplied =
+    String(
+      imdbId ||
+      imdb_id ||
+      ""
+    ).trim();
+
+  const suppliedAlternateTitles = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(rdAlternateTitles) ? rdAlternateTitles : []),
+        ...(Array.isArray(alternateTitles) ? alternateTitles : []),
+        originalTitle,
+        original_title,
+      ]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const suppliedAlternateYears = mergeAlternateYears(
+    year,
+    rdAlternateYears,
+    alternateYears
+  );
+
+  const numericTmdbId =
+    tmdbId ??
+    tmdb_id ??
+    (
+      id &&
+      /^\d+$/.test(String(id))
+        ? id
+        : ""
+    );
+
+  const resolveFromTmdbDetails = async () => {
+    if (!numericTmdbId) {
+      return "";
+    }
+
+    try {
+      const fallbackResponse = await base44.functions.invoke(
+        "getTmdbMovies",
+        {
+          movie_id: numericTmdbId,
+          media_type: mediaType === "tv" ? "tv" : "movie",
+        }
+      );
+      const fallbackData = unwrap(fallbackResponse);
+      const fallbackImdbId = String(
+        fallbackData?.details?.imdb_id || ""
+      ).trim();
+
+      return /^tt\d+$/i.test(fallbackImdbId)
+        ? fallbackImdbId
+        : "";
+    } catch {
+      return "";
+    }
+  };
+
+  if (
+    /^tt\d+$/i.test(
+      supplied
+    ) &&
+    !numericTmdbId
+  ) {
+    return {
+      imdbId:
+        supplied,
+
+      alternateTitles:
+        suppliedAlternateTitles,
+
+      alternateYears:
+        suppliedAlternateYears,
+
+      status:
+        "OK",
+
+      method:
+        "supplied",
+
+      error:
+        "",
+    };
+  }
+
+  if (
+    id &&
+    /^tt\d+$/i.test(
+      String(id)
+    ) &&
+    !numericTmdbId
+  ) {
+    return {
+      imdbId:
+        String(id),
+
+      alternateTitles:
+        suppliedAlternateTitles,
+
+      alternateYears:
+        suppliedAlternateYears,
+
+      status:
+        "OK",
+
+      method:
+        "item_id",
+
+      error:
+        "",
+    };
+  }
+
+  try {
+    const response =
+      await base44.functions.invoke(
+        "resolveImdb",
+        {
+          imdb_id:
+            supplied,
+
+          tmdb_id:
+            numericTmdbId ||
+            "",
+
+          title:
+            title ||
+            "",
+
+          year:
+            year ??
+            "",
+
+          media_type:
+            mediaType ===
+            "tv"
+              ? "tv"
+              : "movie",
+        }
+      );
+
+    const data =
+      unwrap(
+        response
+      );
+
+    const resolved =
+      String(
+        data?.imdb_id ||
+        ""
+      ).trim();
+
+    const resolvedAlternateTitles =
+      Array.from(
+        new Set(
+          [
+            ...suppliedAlternateTitles,
+            ...(Array.isArray(data?.alternate_titles)
+              ? data.alternate_titles
+              : []),
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+        )
+      );
+
+    const resolvedAlternateYears = mergeAlternateYears(
+      year,
+      suppliedAlternateYears,
+      data?.alternate_years
+    );
+
+    if (
+      /^tt\d+$/i.test(
+        resolved
+      )
+    ) {
+      return {
+        imdbId:
+          resolved,
+
+        alternateTitles:
+          resolvedAlternateTitles,
+
+        alternateYears:
+          resolvedAlternateYears,
+
+        status:
+          "OK",
+
+        method:
+          data?.source ||
+          "resolveImdb",
+
+        error:
+          "",
+      };
+    }
+
+    if (
+      /^tt\d+$/i.test(
+        supplied
+      )
+    ) {
+      return {
+        imdbId:
+          supplied,
+
+        alternateTitles:
+          resolvedAlternateTitles,
+
+        alternateYears:
+          resolvedAlternateYears,
+
+        status:
+          "OK",
+
+        method:
+          "supplied_fallback",
+
+        error:
+          "",
+      };
+    }
+
+    const detailsFallbackImdb = await resolveFromTmdbDetails();
+    if (detailsFallbackImdb) {
+      return {
+        imdbId: detailsFallbackImdb,
+        alternateTitles: resolvedAlternateTitles,
+        alternateYears: resolvedAlternateYears,
+        status: "OK",
+        method: "tmdb_details_fallback",
+        error: "",
+      };
+    }
+
+    return {
+      imdbId:
+        "",
+
+      alternateTitles:
+        resolvedAlternateTitles,
+
+      alternateYears:
+        resolvedAlternateYears,
+
+      status:
+        "FAILED",
+
+      method:
+        "resolveImdb",
+
+      error:
+        data?.error ||
+        "IMDb id was not returned.",
+    };
+  } catch (error) {
+    if (
+      /^tt\d+$/i.test(
+        supplied
+      )
+    ) {
+      return {
+        imdbId:
+          supplied,
+
+        alternateTitles:
+          suppliedAlternateTitles,
+
+        alternateYears:
+          suppliedAlternateYears,
+
+        status:
+          "OK",
+
+        method:
+          "supplied_fallback",
+
+        error:
+          "",
+      };
+    }
+
+    const detailsFallbackImdb = await resolveFromTmdbDetails();
+    if (detailsFallbackImdb) {
+      return {
+        imdbId: detailsFallbackImdb,
+        alternateTitles: suppliedAlternateTitles,
+        alternateYears: suppliedAlternateYears,
+        status: "OK",
+        method: "tmdb_details_fallback",
+        error: "",
+      };
+    }
+
+    return {
+      imdbId:
+        "",
+
+      alternateTitles:
+        suppliedAlternateTitles,
+
+      alternateYears:
+        suppliedAlternateYears,
+
+      status:
+        "FAILED",
+
+      method:
+        "resolveImdb",
+
+      error:
+        error?.message ||
+        "IMDb lookup call failed.",
+    };
+  }
+};
+
+const fetchServerAddonSources = async ({
+  imdbId,
+  tmdbId,
+  title,
+  year,
+  alternateYears = [],
+  mediaType,
+  season,
+  episode,
+  fastMode = false,
+  excludeAddonNames = [],
+  includeAddonNames = [],
+}) => {
+  if (!imdbId && !tmdbId && !title) {
+    return {
+      streams:
+        [],
+
+      diagnostics:
+        [],
+
+      addonsChecked:
+        0,
+
+      reason:
+        "No usable media identifier or title is available for source lookup.",
+
+      status:
+        "BLOCKED",
+
+      error:
+        "Media identity missing",
+    };
+  }
+
+  if (
+    mediaType === "tv" &&
+    (
+      season == null ||
+      episode == null
+    )
+  ) {
+    return {
+      streams:
+        [],
+
+      diagnostics:
+        [],
+
+      addonsChecked:
+        0,
+
+      reason:
+        "Select a season and episode first.",
+
+      status:
+        "BLOCKED",
+
+      error:
+        "Episode missing",
+    };
+  }
+
+  try {
+    const response =
+      await base44.functions.invoke(
+        "fetchAddonStreams",
+        {
+          imdb_id:
+            imdbId,
+
+          tmdb_id:
+            tmdbId ??
+            "",
+
+          title:
+            title ||
+            "",
+
+          year:
+            year ??
+            "",
+
+          alternate_years:
+            Array.isArray(alternateYears)
+              ? alternateYears
+              : [],
+
+          media_type:
+            mediaType ===
+            "tv"
+              ? "tv"
+              : "movie",
+
+          fast_mode:
+            Boolean(fastMode),
+
+          exclude_addons:
+            Array.isArray(
+              excludeAddonNames
+            )
+              ? excludeAddonNames
+              : [],
+          include_addons:
+            Array.isArray(includeAddonNames)
+              ? includeAddonNames
+              : [],
+
+          ...(season != null
+            ? {
+                season,
+              }
+            : {}),
+
+          ...(episode != null
+            ? {
+                episode,
+              }
+            : {}),
+        }
+      );
+
+    const data =
+      unwrap(
+        response
+      );
+
+    return {
+      streams:
+        excludeServerIssuedIpBoundVod(data?.streams),
+
+      diagnostics:
+        Array.isArray(
+          data?.diagnostics
+        )
+          ? data.diagnostics
+          : [],
+
+      addonsChecked:
+        Number(
+          data?.addons_checked ||
+          0
+        ),
+
+      addonsAvailable:
+        Number(
+          data?.addons_available ??
+          data?.addons_checked ??
+          0
+        ),
+
+      reason:
+        data?.reason ||
+        data?.error ||
+        (sourceLookupFailed(data) && sourceAddonFailure(data?.diagnostics)
+          ? "A source addon refused or could not complete the search."
+          : ""),
+
+      status:
+        sourceLookupFailed(data)
+          ? "FAILED"
+          : "OK",
+
+      error:
+        data?.error ||
+        "",
+    };
+  } catch (error) {
+    return {
+      streams:
+        [],
+
+      diagnostics:
+        [],
+
+      addonsChecked:
+        0,
+
+      reason:
+        error?.message ||
+        "Configured source lookup failed.",
+
+      status:
+        "FAILED",
+
+      error:
+        error?.message ||
+        "fetchAddonStreams call failed.",
+    };
+  }
+};
+
+const fetchAddonSources = async (
+  args
+) => {
+  const server =
+    await fetchServerAddonSources(
+      args
+    );
+
+  const identityRequest = {
+    title: args?.title || "",
+    year: args?.year ?? "",
+    alternateYears: Array.isArray(args?.alternateYears)
+      ? args.alternateYears
+      : [],
+    alternateTitles: Array.isArray(args?.alternateTitles)
+      ? args.alternateTitles
+      : [],
+    mediaType: args?.mediaType || "movie",
+  };
+
+  const safeServer = {
+    ...server,
+    streams: filterSourcesForRequestedIdentity(
+      server?.streams,
+      identityRequest
+    ),
+  };
+
+  /*
+   * Fast mode is deliberately server-only so the first paint stays quick.
+   *
+   * The full discovery pass must ALWAYS run the browser-side addon lookup and
+   * merge it with the server result. A single surviving server row (typically
+   * AIOStreams) used to suppress browser recovery completely, which meant
+   * working Comet/Torrentio rows disappeared from the user's source list.
+   *
+   * Browser lookup is therefore a supplement in the full pass, not merely a
+   * fallback when the server returns zero streams.
+   */
+  if (args?.fastMode) {
+    return {
+      ...safeServer,
+
+      browserAttempted:
+        false,
+
+      browserRecovered:
+        0,
+
+      browserDiagnostics:
+        [],
+    };
+  }
+
+  const browser =
+    await fetchBrowserAddonStreams({
+      imdbId:
+        args.imdbId,
+
+      tmdbId:
+        args.tmdbId,
+
+      title:
+        args.title,
+
+      year:
+        args.year,
+
+      alternateYears:
+        args.alternateYears,
+
+      alternateTitles:
+        args.alternateTitles,
+
+      excludeAddonNames:
+        args.excludeAddonNames,
+
+      includeAddonNames:
+        args.includeAddonNames,
+
+      mediaType:
+        args.mediaType,
+
+      season:
+        args.season,
+
+      episode:
+        args.episode,
+    });
+
+  const safeBrowserStreams =
+    filterSourcesForRequestedIdentity(
+      browser?.streams,
+      identityRequest
+    );
+
+  const streams =
+    filterSourcesForRequestedIdentity(
+      mergeAddonStreams(
+        safeServer.streams,
+        safeBrowserStreams
+      ),
+      identityRequest
+    );
+
+  return {
+    ...safeServer,
+
+    streams,
+
+    diagnostics: [
+      ...(
+        safeServer.diagnostics ||
+        []
+      ),
+
+      ...(
+        browser.diagnostics ||
+        []
+      ),
+    ],
+
+    addonsChecked:
+      Math.max(
+        Number(
+          safeServer.addonsChecked ||
+          0
+        ),
+
+        Number(
+          browser.addonsChecked ||
+          0
+        )
+      ),
+
+    status:
+      streams.length > 0
+        ? "OK"
+        : safeServer.status,
+
+    reason:
+      browser.streams
+        ?.length > 0
+        ? `Browser fallback recovered ${browser.streams.length} playable source${
+            browser.streams.length ===
+            1
+              ? ""
+              : "s"
+          }.`
+        : safeServer.reason ||
+          browser.error ||
+          "",
+
+    browserAttempted:
+      Boolean(
+        browser.attempted
+      ),
+
+    browserRecovered:
+      Array.isArray(
+        safeBrowserStreams
+      )
+        ? safeBrowserStreams.length
+        : 0,
+
+    browserDiagnostics:
+      browser.diagnostics ||
+      [],
+  };
+};
+
+const SAFE_RD_LAUNCH_AUDIO_STATES = new Set([
+  "original_compatible",
+  "transcoded",
+  "not_needed_video_compatibility",
+]);
+
+const normaliseLaunchLanguage = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+
+const launchTrackIsEnglish = (track) => {
+  if (track?.english === true) return true;
+
+  const language = normaliseLaunchLanguage(
+    track?.language_iso ||
+      track?.language ||
+      track?.lang_iso ||
+      track?.lang ||
+      ""
+  );
+
+  if (
+    language === "en" ||
+    language === "eng" ||
+    language === "english" ||
+    language.startsWith("en-")
+  ) {
+    return true;
+  }
+
+  /*
+   * Real-Debrid mediaInfos is not consistent about filling language_iso.
+   * Some perfectly good tracks only expose "English" / "ENG" in the track
+   * title or label. Treat those explicit labels as real language evidence
+   * instead of rejecting the whole cached release and leaving Shown 0.
+   */
+  const labelText = [
+    track?.title,
+    track?.name,
+    track?.label,
+    track?.description,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return /(?:^|[^a-z0-9])(?:eng|en|english)(?=$|[^a-z0-9])/i.test(
+    labelText
+  );
+};
+
+const launchTrackLooksCommentaryOrDescriptive = (track) =>
+  /\b(?:commentary|audio[ ._-]*description|descriptive|visually[ ._-]*impaired|director(?:'s)?[ ._-]*commentary|cast[ ._-]*commentary)\b/i.test(
+    [
+      track?.title,
+      track?.name,
+      track?.label,
+      track?.description,
+      track?.language,
+      track?.lang,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+const launchTrackIsEnglishMain = (track) =>
+  isEnglishMainTrack(track) &&
+  !launchTrackLooksCommentaryOrDescriptive(track);
+
+/**
+ * @param {{ data?: any, [key: string]: any }} input
+ */
+const strictRdLaunchQualification = ({
+  data,
+}) => {
+  const filename = String(
+    data?.filename ||
+      data?.media_info?.filename ||
+      ""
+  ).trim();
+  const mediaInfo =
+    data?.media_info &&
+    typeof data.media_info === "object"
+      ? data.media_info
+      : null;
+  const audioTracks = Array.isArray(mediaInfo?.audio_tracks)
+    ? mediaInfo.audio_tracks
+    : [];
+  const videoTracks = Array.isArray(mediaInfo?.video_tracks)
+    ? mediaInfo.video_tracks
+    : [];
+  const audioState = String(
+    data?.audio_rescue?.state || ""
+  ).trim();
+
+  if (!data?.stream_url) {
+    return { ok: false, reason: "missing_stream_url", score: -Infinity };
+  }
+
+  if (!mediaInfo) {
+    return { ok: false, reason: "media_inspection_unavailable", score: -Infinity };
+  }
+
+  if (audioTracks.length < 1) {
+    return { ok: false, reason: "no_audio_tracks", score: -Infinity };
+  }
+
+  if (videoTracks.length < 1) {
+    return { ok: false, reason: "no_video_tracks", score: -Infinity };
+  }
+
+  /*
+   * Do not turn Real-Debrid's rendition/transcode state into a launch gate.
+   * The mature-player model is: prove the media identity + real English main
+   * track, resolve a playable URL, then let the native player choose/repair the
+   * audio decoder. DTS/TrueHD or a missing RD transcode must rank lower, not
+   * make a verified English file disappear from autoplay.
+   */
+  const preferredAudio = String(
+    readTrackPreferences()?.audioLanguage || "en"
+  )
+    .trim()
+    .toLowerCase();
+  const hasEnglish = audioTracks.some(launchTrackIsEnglish);
+  const hasEnglishMain = audioTracks.some(launchTrackIsEnglishMain);
+
+  /*
+   * Automatic playback must prove the requested language. Unknown/unlabelled
+   * audio is still available to diagnostics/manual workflows, but it is not a
+   * safe default when the viewer asked for English. This also prevents an
+   * English commentary/descriptive track from satisfying the main-audio gate.
+   */
+  if (
+    preferredAudio === "en" &&
+    !hasEnglishMain
+  ) {
+    return {
+      ok: false,
+      reason:
+        hasEnglish
+          ? "english_main_audio_not_proven"
+          : "english_audio_not_proven",
+      score: -Infinity,
+    };
+  }
+
+  /*
+   * Release identity has already been checked with sourceMatchesRequestedIdentity
+   * before this function is called. That check rejects an explicitly conflicting
+   * year or sequel number, while allowing correct releases whose filename simply
+   * omits the year. Requiring the year twice caused valid cached movies to be
+   * discarded even after the addon identity was already proven.
+   */
+
+  const primaryAudio =
+    audioTracks.find(launchTrackIsEnglishMain) ||
+    audioTracks.find(launchTrackIsEnglish) ||
+    audioTracks[0] ||
+    {};
+  const primaryVideo =
+    [...videoTracks].sort(
+      (a, b) =>
+        Number(b?.height || 0) - Number(a?.height || 0)
+    )[0] ||
+    {};
+  const qualifiedShape = {
+    label: filename,
+    filename,
+    type: "url",
+    src: data.stream_url,
+    url: data.stream_url,
+    viaRealDebrid: true,
+    audioCodec: primaryAudio?.codec || "",
+    videoCodec: primaryVideo?.codec || "",
+    resolution: Number(primaryVideo?.height || 0) || undefined,
+  };
+  const deviceProfile = getPlaybackDeviceProfile();
+  const playbackPreferences = readPlaybackPreferences();
+  const audioStateBonus =
+    audioState === "original_compatible"
+      ? 50000
+      : audioState === "transcoded"
+        ? 48000
+        : SAFE_RD_LAUNCH_AUDIO_STATES.has(audioState)
+          ? 46000
+          : 24000;
+  const englishBonus = hasEnglish ? 20000 : 5000;
+  const compatibilityScore = scoreSourceCompatibility(
+    qualifiedShape,
+    filename,
+    {
+      deviceProfile,
+      qualityPreference: playbackPreferences?.quality || "Auto",
+    }
+  );
+
+  return {
+    ok: true,
+    reason: "verified",
+    audioState,
+    score:
+      audioStateBonus +
+      englishBonus +
+      compatibilityScore,
+  };
+};
+
+
+const findRdLibrarySource = async ({
+  title,
+  year,
+  alternateYears = [],
+  alternateTitles = [],
+  season,
+  episode,
+}) => {
+  if (!title) {
+    return {
+      source:
+        null,
+
+      status:
+        "SKIPPED",
+
+      detail:
+        "No title",
+    };
+  }
+
+  try {
+    const response =
+      await base44.functions.invoke(
+        "realDebrid",
+        withGuestDebridPayload({
+          action:
+            "find_cached",
+
+          title,
+
+          ...(year != null
+            ? {
+                year,
+              }
+            : {}),
+
+          alternate_years:
+            Array.isArray(alternateYears)
+              ? alternateYears
+              : [],
+
+          alternate_titles:
+            Array.isArray(alternateTitles)
+              ? alternateTitles
+              : [],
+
+          ...(season != null
+            ? {
+                season,
+              }
+            : {}),
+
+          ...(episode != null
+            ? {
+                episode,
+              }
+            : {}),
+        })
+      );
+
+    const data =
+      unwrap(
+        response
+      );
+
+    if (
+      data?.status ===
+        "ready" &&
+      data?.stream_url
+    ) {
+      const rdCandidate = {
+        label:
+          data?.filename ||
+          "Real-Debrid Library",
+        filename:
+          data?.filename ||
+          "",
+      };
+
+      if (
+        !sourceMatchesRequestedIdentity(
+          rdCandidate,
+          {
+            title,
+            year,
+            alternateYears,
+            alternateTitles,
+            mediaType:
+              season != null || episode != null
+                ? "tv"
+                : "movie",
+          }
+        )
+      ) {
+        return {
+          source: null,
+          status: "CONNECTED",
+          detail: "Real-Debrid library match rejected because it belongs to a different release.",
+        };
+      }
+
+      const libraryQualification =
+        strictRdLaunchQualification({
+          data,
+          title,
+          year,
+          mediaType:
+            season != null || episode != null
+              ? "tv"
+              : "movie",
+        });
+
+      if (!libraryQualification.ok) {
+        return {
+          source: null,
+          status: "CONNECTED",
+          detail:
+            `Real-Debrid library match was not safe for autoplay: ${libraryQualification.reason}.`,
+        };
+      }
+
+      return {
+        source: {
+          label:
+            data?.filename ||
+            "Real-Debrid Library",
+
+          type:
+            "url",
+
+          src:
+            data.stream_url,
+
+          url:
+            data.stream_url,
+
+          addon:
+            "Real-Debrid Library",
+
+          viaRealDebrid:
+            true,
+
+          rdTorrentId:
+            data?.torrent_id ||
+            "",
+
+          audioRescue:
+            data?.audio_rescue ||
+            null,
+
+          fallbackSrc:
+            data?.fallback_stream_url ||
+            "",
+
+          videoRescue:
+            data?.video_rescue ||
+            null,
+
+          mediaInfo:
+            data?.media_info ||
+            null,
+
+          launchQualified:
+            true,
+
+          launchQualification:
+            "rd-library-strict-media-inspected",
+
+          launchCompatibilityScore:
+            libraryQualification.score,
+
+          launchVerifiedAudioState:
+            libraryQualification.audioState || "",
+        },
+
+        status:
+          "FOUND",
+
+        detail:
+          "Library match ready",
+      };
+    }
+
+    if (data?.error) {
+      return {
+        source:
+          null,
+
+        status:
+          "FAILED",
+
+        detail:
+          data.error,
+      };
+    }
+
+    return {
+      source:
+        null,
+
+      status:
+        "CONNECTED",
+
+      detail:
+        data?.status ||
+        "No library match",
+    };
+  } catch (error) {
+    return {
+      source:
+        null,
+
+      status:
+        "FAILED",
+
+      detail:
+        error?.message ||
+        "Real-Debrid lookup failed.",
+    };
+  }
+};
+
+const sourceLanguageRank = (item) => {
+  const preferredAudioLanguage = String(
+    readTrackPreferences()?.audioLanguage || "en"
+  ).toLowerCase();
+
+  if (preferredAudioLanguage !== "en") {
+    return 0;
+  }
+
+  const language = detectLanguagePreference(item);
+
+  if (language === "english") return 0;
+  if (language === "multi") return 1;
+  if (language === "unknown") return 2;
+  if (language === "foreign") return 3;
+  return 2;
+};
+
+const prioritisePreferredAudioSources = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => ({ item, index, languageRank: sourceLanguageRank(item) }))
+    .sort(
+      (a, b) =>
+        a.languageRank - b.languageRank ||
+        a.index - b.index
+    )
+    .map(({ item }) => item);
+
+/*
+ * GLOBAL VOD AUTOPLAY POLICY
+ *
+ * AIOStreams stays visible and available to automatic recovery, but it ranks
+ * behind non-AIO candidates. It must remain in the pool as a genuine last
+ * resort so an uncached or broken preferred torrent cannot leave playback with
+ * zero candidates. Keep this rule here in the central provider as well as in
+ * VideoPlayer so every launch surface (Home, Search, Watchlist, Continue
+ * Watching, Recently Watched, New Episodes and auto-next) follows the same
+ * behaviour before the native/web player sees the source list.
+ */
+const automaticVodCandidatePool = (
+  items,
+  _completePool = items
+) => {
+  const list = Array.isArray(items) ? items : [];
+
+  /*
+   * AIOStreams is fallback-only, not forbidden. Keep every automatic candidate
+   * but push AIO rows behind the non-AIO rows. Removing AIO completely when any
+   * other torrent merely existed caused a real regression: an uncached or
+   * broken non-AIO row could suppress the only source capable of starting the
+   * episode, leaving the player with zero launch candidates.
+   */
+  const nonAio = list.filter(
+    (item) => !sourceIsAioStreamsCandidate(item)
+  );
+
+  const aio = list.filter(
+    (item) => sourceIsAioStreamsCandidate(item)
+  );
+
+  if (aio.length === 0 || nonAio.length === 0) {
+    return list;
+  }
+
+  return [
+    ...nonAio,
+    ...aio,
+  ];
+};
+
+const orderSources = ({
+  sources,
+  hasDebrid,
+  preferRd,
+}) => {
+  const usable =
+    hasDebrid
+      ? sources
+      : sources.filter(
+          (item) =>
+            !isMagnetSource(
+              item
+            )
+        );
+
+  const rdLibrary =
+    usable.filter(
+      (item) =>
+        item?.viaRealDebrid &&
+        isDirectSource(
+          item
+        )
+    );
+
+  const direct =
+    usable.filter(
+      (item) =>
+        !item?.viaRealDebrid &&
+        isDirectSource(
+          item
+        )
+    );
+
+  const rdMagnets =
+    hasDebrid
+      ? usable.filter(
+          isMagnetSource
+        )
+      : [];
+
+  const live =
+    usable.filter(
+      (item) =>
+        item?.type ===
+          "live" ||
+        item?.live
+    );
+
+  const youtube =
+    usable.filter(
+      (item) =>
+        item?.type ===
+        "youtube"
+    );
+
+  const providers =
+    usable.filter(
+      (item) =>
+        item?.type ===
+        "provider"
+    );
+
+  const other =
+    usable.filter(
+      (item) =>
+        !rdLibrary.includes(
+          item
+        ) &&
+        !direct.includes(
+          item
+        ) &&
+        !rdMagnets.includes(
+          item
+        ) &&
+        !live.includes(
+          item
+        ) &&
+        !youtube.includes(
+          item
+        ) &&
+        !providers.includes(
+          item
+        )
+    );
+
+  const ordered = preferRd
+    ? [
+        ...sortSources(rdLibrary),
+        ...sortSources(rdMagnets),
+        ...sortSources(direct),
+        ...live,
+        ...other,
+        ...youtube,
+        ...providers,
+      ]
+    : [
+        ...sortSources(rdLibrary),
+        ...sortSources(direct),
+        ...sortSources(rdMagnets),
+        ...live,
+        ...other,
+        ...youtube,
+        ...providers,
+      ];
+
+  /*
+   * Language is a playback requirement, not a cosmetic tie-breaker. Keep the
+   * existing RD/direct/cached ordering within each language bucket, but when
+   * English is preferred never let a foreign or unknown source sit ahead of a
+   * confirmed English source merely because it was discovered first.
+   */
+  const languageOrdered = prioritisePreferredAudioSources(ordered);
+  const sortMode = readSourceSortMode();
+  const onlyLiveSources =
+    usable.length > 0 &&
+    live.length === usable.length;
+
+  return sortSourceEntries(
+    languageOrdered,
+    sortMode,
+    { mediaType: onlyLiveSources ? "live" : "vod" }
+  ).map((entry) => entry.item);
+};
+
+const compactAddonDiagnostics = (
+  diagnostics
+) => {
+  const browserRecovered =
+    (
+      diagnostics ||
+      []
+    ).filter(
+      (item) =>
+        item?.status ===
+        "browser_ok"
+    );
+
+  if (
+    browserRecovered.length >
+    0
+  ) {
+    return browserRecovered
+      .slice(
+        0,
+        4
+      )
+      .map(
+        (item) =>
+          `${String(
+            item?.name ||
+            "Addon"
+          ).trim()}: ${Number(
+            item?.playable_count ||
+            0
+          )} browser usable`
+      )
+      .join(
+        " · "
+      );
+  }
+
+  return (
+    diagnostics ||
+    []
+  )
+    .filter(
+      (item) =>
+        !item?.browser
+    )
+    .slice(
+      0,
+      4
+    )
+    .map(
+      (item) => {
+        const name =
+          String(
+            item?.name ||
+            "Addon"
+          ).trim();
+
+        const status =
+          String(
+            item?.status ||
+            "unknown"
+          ).trim();
+
+        const playable =
+          Number(
+            item?.playable_count ||
+            0
+          );
+
+        if (
+          status === "ok"
+        ) {
+          return `${name}: ${playable} usable`;
+        }
+
+        if (status === "http_404") {
+          return `${name}: not indexed for this title`;
+        }
+
+        return `${name}: ${status}`;
+      }
+    )
+    .join(
+      " · "
+    );
+};
+
+
+const sourceResolveMagnet = (item) => {
+  const directMagnet = [
+    item?.richMagnet,
+    item?.magnet,
+    item?.magnetLink,
+    getSourceUrl(item),
+  ]
+    .map((value) => String(value || "").trim())
+    .find((value) => /^magnet:/i.test(value));
+
+  if (directMagnet) return directMagnet;
+
+  const hash = sourceMagnetHash(item);
+  return hash
+    ? `magnet:?xt=urn:btih:${hash}`
+    : "";
+};
+
+const sourceTargetsRealDebrid = (item) => {
+  const provider = String(item?.debridProvider || "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+
+  const cachedProviders = Array.isArray(item?.cachedProviders)
+    ? item.cachedProviders
+        .map((value) =>
+          String(value || "")
+            .toLowerCase()
+            .replace(/[^a-z]/g, "")
+        )
+    : [];
+
+  return (
+    item?.viaRealDebrid === true ||
+    provider === "realdebrid" ||
+    cachedProviders.includes("realdebrid")
+  );
+};
+
+/*
+ * PLAYBACK QUALIFICATION
+ *
+ * Discovery is not permission to launch. A fast addon row becomes the startup
+ * source only after Real-Debrid has resolved the exact torrent/file and run the
+ * same media/audio inspection used by normal RD playback. This keeps the speed
+ * of the fast addon pass without handing an unverified magnet to VideoPlayer.
+ */
+const qualifyCachedRealDebridLaunchSource = async ({
+  item,
+  title,
+  year,
+  alternateYears = [],
+  alternateTitles = [],
+  mediaType = "movie",
+  season = null,
+  episode = null,
+}) => {
+  if (
+    !item ||
+    !sourceIsConfirmedCachedForPlayback(item) ||
+    !sourceTargetsRealDebrid(item)
+  ) {
+    return null;
+  }
+
+  const magnet = sourceResolveMagnet(item);
+  if (!magnet) return null;
+
+  try {
+    const profile = getPlaybackDeviceProfile();
+    const response = await base44.functions.invoke(
+      "realDebrid",
+      withGuestDebridPayload({
+        action: "resolve_best",
+        magnet,
+        title: title || "",
+        ...(year != null && String(year).trim()
+          ? { year }
+          : {}),
+        alternate_years:
+          Array.isArray(alternateYears)
+            ? alternateYears
+            : [],
+        alternate_titles:
+          Array.isArray(alternateTitles)
+            ? alternateTitles
+            : [],
+        ...(season != null
+          ? { season }
+          : {}),
+        ...(episode != null
+          ? { episode }
+          : {}),
+        ...(item?.fileIdx != null && Number.isFinite(Number(item.fileIdx))
+          ? { file_idx: Number(item.fileIdx) }
+          : item?.file_idx != null && Number.isFinite(Number(item.file_idx))
+            ? { file_idx: Number(item.file_idx) }
+            : {}),
+        prefer_browser_transcode:
+          profile?.nativePlayerAvailable !== true &&
+          profile?.mobileApp === true,
+      })
+    );
+
+    const data = unwrap(response);
+
+    if (
+      data?.status !== "ready" ||
+      !data?.stream_url
+    ) {
+      return null;
+    }
+
+    const resolvedIdentity = {
+      ...item,
+      label:
+        data?.filename ||
+        item?.label ||
+        item?.name ||
+        "Real-Debrid Stream",
+      filename:
+        data?.filename ||
+        item?.filename ||
+        "",
+    };
+
+    if (
+      !sourceMatchesRequestedIdentity(
+        resolvedIdentity,
+        {
+          title,
+          year,
+          alternateYears,
+          alternateTitles,
+          mediaType,
+        }
+      )
+    ) {
+      return null;
+    }
+
+    const qualification =
+      strictRdLaunchQualification({
+        data,
+        title,
+        year,
+        mediaType,
+      });
+
+    if (!qualification.ok) {
+      return null;
+    }
+
+    return {
+      ...item,
+      label:
+        data?.filename ||
+        item?.label ||
+        item?.name ||
+        "Real-Debrid Stream",
+      filename:
+        data?.filename ||
+        item?.filename ||
+        "",
+      type: "url",
+      src: data.stream_url,
+      url: data.stream_url,
+      viaRealDebrid: true,
+      debridProvider: "realdebrid",
+      debridCached: true,
+      runtimeReadyCached: true,
+      debridCacheChecked: true,
+      debridCacheCheckState: "cached",
+      cacheRequired: false,
+      cometUncached: false,
+      rdTorrentId:
+        data?.torrent_id ||
+        item?.rdTorrentId ||
+        "",
+      audioRescue:
+        data?.audio_rescue ||
+        null,
+      fallbackSrc:
+        data?.fallback_stream_url ||
+        "",
+      videoRescue:
+        data?.video_rescue ||
+        null,
+      mediaInfo:
+        data?.media_info ||
+        null,
+      resolvedFiles:
+        Array.isArray(data?.files)
+          ? data.files
+          : [],
+      launchQualified: true,
+      launchQualification: "rd-strict-media-inspected",
+      launchCompatibilityScore:
+        qualification.score,
+      launchVerifiedAudioState:
+        qualification.audioState || "",
+    };
+  } catch {
+    return null;
+  }
+};
+
+const autoplayLanguageHintRank = (item) => {
+  const language = detectLanguagePreference(item);
+
+  if (language === "english") return 0;
+  if (language === "multi") return 1;
+  if (language === "unknown") return 2;
+  return 3;
+};
+
+const prioritiseEnglishAutoplayCandidates = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => ({
+      item,
+      index,
+      languageRank: autoplayLanguageHintRank(item),
+    }))
+    .sort(
+      (left, right) =>
+        left.languageRank - right.languageRank ||
+        left.index - right.index
+    )
+    .map(({ item }) => item);
+
+const qualifyCachedRealDebridLaunchPool = async ({
+  items = [],
+  existing = [],
+  title = "",
+  year = "",
+  alternateYears = [],
+  alternateTitles = [],
+  mediaType = "movie",
+  season = null,
+  episode = null,
+  targetCount = 3,
+  scanLimit = 10,
+  timeBudgetMs = 6500,
+}) => {
+  const output = [];
+  const seen = new Set();
+  const PROBE_BATCH_SIZE = 6;
+  const PER_SOURCE_PROBE_MS = 2400;
+  const deadlineAt =
+    Date.now() +
+    Math.max(1200, Number(timeBudgetMs || 6500));
+
+  const withDeadline = (promise, remainingMs) =>
+    new Promise((resolve) => {
+      let settled = false;
+
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(value);
+      };
+
+      const timer = window.setTimeout(
+        () => finish(null),
+        Math.max(150, Number(remainingMs || 0))
+      );
+
+      Promise.resolve(promise)
+        .then(finish)
+        .catch(() => finish(null));
+    });
+
+  const add = (item) => {
+    if (!item?.launchQualified) return;
+    const key = stableDiscoveredSourceKey(item);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    output.push(item);
+  };
+
+  (Array.isArray(existing) ? existing : []).forEach(add);
+
+  const candidates = prioritiseEnglishAutoplayCandidates(items)
+    .filter((item) =>
+      item &&
+      sourceIsConfirmedCachedForPlayback(item) &&
+      sourceTargetsRealDebrid(item)
+    )
+    .slice(0, Math.max(1, Number(scanLimit || 10)));
+
+  for (
+    let offset = 0;
+    offset < candidates.length && output.length < targetCount;
+    offset += PROBE_BATCH_SIZE
+  ) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) break;
+
+    const batch = candidates
+      .slice(offset, offset + PROBE_BATCH_SIZE)
+      .filter((item) => {
+        const key = stableDiscoveredSourceKey(item);
+        return key && !seen.has(key);
+      });
+
+    const probes = batch.map((item) =>
+        withDeadline(
+          qualifyCachedRealDebridLaunchSource({
+            item,
+            title,
+            year,
+            alternateYears,
+            alternateTitles,
+            mediaType,
+            season,
+            episode,
+          }),
+          Math.min(
+            remainingMs,
+            PER_SOURCE_PROBE_MS
+          )
+        )
+      );
+    const results = targetCount === 1
+      ? await firstAcceptedQualificationBatch(probes, item => {
+          const key = item?.launchQualified ? stableDiscoveredSourceKey(item) : "";
+          return Boolean(key && !seen.has(key));
+        })
+      : await Promise.all(probes);
+
+    results.forEach(add);
+  }
+
+  return output
+    .sort(
+      (a, b) =>
+        Number(b?.launchCompatibilityScore || 0) -
+        Number(a?.launchCompatibilityScore || 0)
+    )
+    .slice(0, Math.max(1, Number(targetCount || 3)));
+};
+
+
+const restoreQualifiedLaunchRows = (
+  published,
+  incoming
+) => {
+  const qualifiedByKey = new Map(
+    /** @type {any} */ (
+    (Array.isArray(published) ? published : [])
+      .filter((item) => item?.launchQualified === true)
+      .map((item) => [
+        stableDiscoveredSourceKey(item),
+        item,
+      ])
+      .filter(([key]) => Boolean(key))
+    )
+  );
+
+  return (Array.isArray(incoming) ? incoming : []).map((item) => {
+    const qualified = qualifiedByKey.get(
+      stableDiscoveredSourceKey(item)
+    );
+
+    if (!qualified) return item;
+
+    return {
+      ...item,
+      label:
+        qualified?.label ||
+        item?.label,
+      filename:
+        qualified?.filename ||
+        item?.filename,
+      type:
+        qualified?.type ||
+        item?.type,
+      src:
+        qualified?.src ||
+        item?.src,
+      url:
+        qualified?.url ||
+        item?.url,
+      viaRealDebrid: true,
+      debridProvider: "realdebrid",
+      debridCached: true,
+      runtimeReadyCached: true,
+      debridCacheChecked: true,
+      debridCacheCheckState: "cached",
+      cacheRequired: false,
+      cometUncached: false,
+      rdTorrentId:
+        qualified?.rdTorrentId ||
+        item?.rdTorrentId ||
+        "",
+      audioRescue:
+        qualified?.audioRescue ||
+        item?.audioRescue ||
+        null,
+      fallbackSrc:
+        qualified?.fallbackSrc ||
+        item?.fallbackSrc ||
+        "",
+      videoRescue:
+        qualified?.videoRescue ||
+        item?.videoRescue ||
+        null,
+      mediaInfo:
+        qualified?.mediaInfo ||
+        item?.mediaInfo ||
+        null,
+      resolvedFiles:
+        qualified?.resolvedFiles ||
+        item?.resolvedFiles ||
+        [],
+      launchQualified: true,
+      launchQualification:
+        qualified?.launchQualification ||
+        "rd-media-inspected",
+    };
+  });
+};
+
+const buildDiagnosticLabel = ({
+  imdbInfo,
+  addonLookup,
+  rdLookup,
+  hasRd,
+}) => {
+  const parts = [];
+
+  parts.push(
+    imdbInfo?.imdbId
+      ? `IMDb ${imdbInfo.imdbId} ✓`
+      : "IMDb FAILED"
+  );
+
+  parts.push(
+    addonLookup?.status ===
+    "OK"
+      ? "Source search ✓"
+      : addonLookup?.status ===
+          "BLOCKED"
+        ? "Source search BLOCKED"
+        : "Source search FAILED"
+  );
+
+  parts.push(
+    `Addons ${Number(
+      addonLookup?.addonsChecked ||
+      0
+    )}`
+  );
+
+  parts.push(
+    `Returned ${
+      Array.isArray(
+        addonLookup?.streams
+      )
+        ? addonLookup
+            .streams
+            .length
+        : 0
+    }`
+  );
+
+  if (
+    addonLookup
+      ?.browserAttempted
+  ) {
+    parts.push(
+      `Browser ${Number(
+        addonLookup
+          ?.browserRecovered ||
+        0
+      )}`
+    );
+  }
+
+  parts.push(
+    hasRd
+      ? `RD ${
+          rdLookup?.status ||
+          "CONNECTED"
+        }`
+      : "RD NOT CONNECTED"
+  );
+
+  const addonDetails =
+    compactAddonDiagnostics(
+      addonLookup?.diagnostics
+    );
+
+  if (addonDetails) {
+    parts.push(
+      addonDetails
+    );
+  }
+
+  const reason =
+    addonLookup?.reason ||
+    imdbInfo?.error ||
+    rdLookup?.detail ||
+    "No playable source was returned.";
+
+  if (reason) {
+    parts.push(
+      reason
+    );
+  }
+
+  return parts.join(
+    " | "
+  );
+};
+
+export function PlayerProvider({
+  children,
+}) {
+  const [source, setSource] = useState(null);
+  const [vidSrcEmbed, setVidSrcEmbed] = useState(null);
+  const [magnetPlayer, setMagnetPlayer] = useState(null);
+  const [hasRd, setHasRd] = useState(false);
+  const [hasDebrid, setHasDebrid] = useState(false);
+
+  const playSequenceRef = useRef(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const syncDebridConnections = async () => {
+      let user = null;
+
+      try {
+        user =
+          await base44.auth.me();
+      } catch {
+        user = null;
+      }
+
+      let realDebridConnected =
+        Boolean(user?.rd_token);
+
+      try {
+        const response =
+          await base44.functions.invoke(
+            "realDebridAuth",
+            withGuestDebridPayload({
+              action: "status",
+            })
+          );
+
+        realDebridConnected =
+          Boolean(
+            response?.data?.connected ||
+              response?.data?.valid
+          );
+      } catch {
+        // Keep the signed-in token result above when the status probe fails.
+      }
+
+      if (!mounted) return;
+
+      const configuredByKey = {
+        realdebrid: realDebridConnected,
+        alldebrid: Boolean(user?.alldebrid_token),
+        torbox: Boolean(user?.torbox_token),
+        premiumize: Boolean(user?.premiumize_token),
+        debridlink: Boolean(user?.debridlink_token),
+      };
+
+      const anyDebridConnected =
+        Object.values(configuredByKey).some(Boolean);
+
+      setHasRd(realDebridConnected);
+      setHasDebrid(anyDebridConnected);
+    };
+
+    syncDebridConnections();
+    window.addEventListener(
+      "mg:debrid-providers-changed",
+      syncDebridConnections
+    );
+
+    return () => {
+      mounted = false;
+      window.removeEventListener(
+        "mg:debrid-providers-changed",
+        syncDebridConnections
+      );
+    };
+  }, []);
+
+  const prepare =
+    useCallback(
+      async (
+        request = {}
+      ) => {
+        const suppliedSources =
+          Array.isArray(request?.sources)
+            ? request.sources.map(normaliseSource).filter(Boolean)
+            : [];
+
+        const isLive =
+          request?.type === "live" ||
+          request?.mediaType === "live" ||
+          suppliedSources.some(
+            (item) => item?.live || item?.type === "live"
+          );
+
+        const originalSources =
+          stripVodTrailerSources(
+            suppliedSources,
+            isLive
+          );
+
+        const mediaType =
+          request?.mediaType === "tv" ||
+          request?.type === "series" ||
+          request?.season != null ||
+          request?.episode != null ||
+          request?.rdSeason != null ||
+          request?.rdEpisode != null
+            ? "tv"
+            : "movie";
+
+        const season = request?.season ?? request?.rdSeason ?? null;
+        const episode = request?.episode ?? request?.rdEpisode ?? null;
+        const tmdbId =
+          request?.tmdbId ?? request?.tmdb_id ?? request?.id ?? "";
+
+        if (isLive) {
+          const ordered = orderSources({
+            sources: dedupeSources(originalSources),
+            hasDebrid,
+            preferRd: false,
+          });
+
+          return {
+            sources: ordered,
+            completeSources: ordered,
+            imdbId: String(request?.imdbId || request?.imdb_id || "").trim(),
+            preparedAt: Date.now(),
+          };
+        }
+
+        const imdbInfo = await resolveImdbInfo({
+          ...request,
+          ...canonicalImdbLookupFields(request),
+          tmdbId,
+          mediaType,
+        });
+        const imdbId = imdbInfo?.imdbId || "";
+        const identityAlternateTitles = mergeAlternateTitles(
+          request?.rdAlternateTitles,
+          request?.alternateTitles,
+          request?.originalTitle,
+          request?.original_title,
+          imdbInfo?.alternateTitles
+        );
+        const identityAlternateYears = mergeAlternateYears(
+          request?.rdYear ?? request?.year ?? "",
+          request?.rdAlternateYears,
+          request?.alternateYears,
+          imdbInfo?.alternateYears
+        );
+
+        const addonPromise =
+          request?.skipAddonLookup
+            ? Promise.resolve({ streams: [] })
+            : fetchAddonSources({
+                imdbId,
+                tmdbId,
+                title: request?.rdTitle || request?.title || "",
+                year: request?.rdYear ?? request?.year ?? "",
+                alternateYears:
+                  identityAlternateYears,
+                alternateTitles:
+                  identityAlternateTitles,
+                mediaType,
+                season,
+                episode,
+                fastMode: false,
+                includeAddonNames: Array.isArray(request?.includeAddonNames)
+                  ? request.includeAddonNames
+                  : [],
+              });
+
+        const rdPromise =
+          hasRd && !request?.noRd && !request?.skipRdLookup
+            ? findRdLibrarySource({
+                title: request?.rdTitle || request?.title || "",
+                year: request?.rdYear ?? request?.year ?? null,
+                alternateYears:
+                  identityAlternateYears,
+                alternateTitles:
+                  identityAlternateTitles,
+                season,
+                episode,
+              })
+            : Promise.resolve({ source: null });
+
+        const [addonLookup, rdLookup] = await Promise.all([
+          addonPromise,
+          rdPromise,
+        ]);
+
+        const combined = dedupeSources(
+          stripVodTrailerSources(
+            [
+              ...(rdLookup?.source ? [rdLookup.source] : []),
+              ...(addonLookup?.streams || []),
+              ...originalSources,
+            ],
+            isLive
+          )
+        );
+
+        const cacheAnnotated = await annotateDebridCache(
+          combined,
+          hasDebrid
+        );
+
+        const ordered = orderSources({
+          sources: cacheAnnotated,
+          hasDebrid,
+          preferRd: Boolean(request?.preferRd),
+        }).filter(
+          (item) =>
+            isDirectSource(item) ||
+            isMagnetSource(item) ||
+            item?.type === "live" ||
+            item?.live
+        );
+
+        const qualificationMode =
+          hasRd &&
+          !request?.noRd &&
+          request?.verifiedPlaybackPolicy !== "manual";
+
+        let verifiedSources = ordered;
+
+        if (qualificationMode) {
+          const automaticCandidates =
+            automaticVodCandidatePool(
+              ordered,
+              ordered
+            );
+          const existingQualified =
+            automaticVodCandidatePool(
+              [
+                ...(rdLookup?.source ? [rdLookup.source] : []),
+                ...ordered,
+              ].filter((item) => item?.launchQualified === true),
+              ordered
+            );
+
+          verifiedSources =
+            await qualifyCachedRealDebridLaunchPool({
+              items: automaticCandidates,
+              existing: existingQualified,
+              title: request?.rdTitle || request?.title || "",
+              year: request?.rdYear ?? request?.year ?? "",
+              alternateYears:
+                identityAlternateYears,
+              alternateTitles:
+                identityAlternateTitles,
+              mediaType,
+              season,
+              episode,
+              targetCount: 5,
+              scanLimit: 20,
+              timeBudgetMs: 6500,
+            });
+        }
+
+        return {
+          sources:
+            qualificationMode
+              ? verifiedSources
+              : ordered,
+          // Qualification selects the automatic lead, not the manual/failover pool.
+          completeSources: mediaType === "tv"
+            ? dedupeSources([...verifiedSources, ...ordered])
+            : qualificationMode ? verifiedSources : ordered,
+          discoveredSources: ordered,
+          verifiedPrepared:
+            qualificationMode
+              ? verifiedSources.length > 0
+              : true,
+          verifiedPlaybackPolicy:
+            qualificationMode
+              ? "strict"
+              : request?.verifiedPlaybackPolicy || "runtime",
+          imdbId,
+          alternateYears:
+            identityAlternateYears,
+          rdAlternateYears:
+            identityAlternateYears,
+          alternateTitles:
+            identityAlternateTitles,
+          rdAlternateTitles:
+            identityAlternateTitles,
+          preparedAt: Date.now(),
+        };
+      },
+      [hasRd, hasDebrid]
+    );
+
+  const play =
+    useCallback(
+      async (
+        request = {}
+      ) => {
+        const playId = ++playSequenceRef.current;
+        setVidSrcEmbed(null);
+        setMagnetPlayer(null);
+        stopExclusivePlayback();
+
+        const isCurrentPlay = () =>
+          playSequenceRef.current === playId;
+
+        const suppliedSources =
+          Array.isArray(
+            request?.sources
+          )
+            ? request.sources
+                .map(
+                  normaliseSource
+                )
+                .filter(
+                  Boolean
+                )
+            : [];
+
+        const isLive =
+          request?.type ===
+            "live" ||
+          suppliedSources.some(
+            (item) =>
+              item?.live ||
+              item?.type ===
+                "live"
+          );
+
+        const originalSources =
+          stripVodTrailerSources(
+            suppliedSources,
+            isLive
+          );
+
+        const suppliedCompleteSources =
+          stripVodTrailerSources(
+            Array.isArray(request?.completeSources)
+              ? request.completeSources
+                  .map(normaliseSource)
+                  .filter(Boolean)
+              : [],
+            isLive
+          );
+
+        const mediaType =
+          request?.mediaType ===
+            "tv" ||
+          request?.type ===
+            "series" ||
+          request?.season !=
+            null ||
+          request?.episode !=
+            null ||
+          request?.rdSeason !=
+            null ||
+          request?.rdEpisode !=
+            null
+            ? "tv"
+            : "movie";
+
+        const season =
+          request?.season ??
+          request?.rdSeason ??
+          null;
+
+        const episode =
+          request?.episode ??
+          request?.rdEpisode ??
+          null;
+
+        const tmdbId =
+          request?.tmdbId ??
+          request?.tmdb_id ??
+          request?.id ??
+          "";
+
+        /*
+         * NORMAL VOD OWNERSHIP CONTRACT
+         *
+         * With Real-Debrid connected, catalogue playback must resolve and
+         * qualify a cached torrent into a real HTTP media URL before Android
+         * Media3 takes ownership. Publishing the first raw addon magnet here
+         * makes VideoPlayer perform a second RD add/select/unrestrict cycle and
+         * can lock playback onto an uncached torrent even when verified cached
+         * releases are already available.
+         *
+         * Explicit RD-library/manual requests remain the deliberate exception.
+         * Live TV is outside this VOD qualification path.
+         */
+        const qualificationMode =
+          !isLive &&
+          hasRd &&
+          !request?.noRd &&
+          request?.verifiedPlaybackPolicy !== "manual";
+
+        // Default Play must not submit an uncached torrent merely because
+        // discovery failed to find a ready episode: doing so repeatedly can
+        // exhaust the playback gateway's rate limit (HTTP 429).
+        // Intentional source caching is still available from the chooser.
+        const allowAutomaticUncachedEpisodePreparation =
+          request?.allowUncachedEpisodePreparation === true;
+
+        const initialOrderedSources =
+          orderSources({
+            sources: dedupeSources(originalSources),
+            hasDebrid,
+            preferRd: Boolean(request?.preferRd),
+          });
+
+        const initialAudioCandidates = !isLive && mediaType === "tv"
+          ? flixQuestFirstEpisodeSources(episodeAutoplayCandidates(initialOrderedSources.filter(item =>
+              episodeSourceMatchesRequest(item, { season, episode })
+            )).filter(episodeAutoplayCanTrustSource))
+          : initialOrderedSources;
+        const initialPlayableSources =
+          initialAudioCandidates.filter(
+            (item) =>
+              (
+                isDirectSource(item) ||
+                isMagnetSource(item) ||
+                item?.type === "live" ||
+                item?.live
+              ) &&
+              (
+                !qualificationMode ||
+                item?.launchQualified === true
+              )
+          );
+
+        const initialSources =
+          initialPlayableSources.length > 0
+            ? initialPlayableSources
+            : [
+                {
+                  label:
+                    qualificationMode
+                      ? "Finding a verified compatible source…"
+                      : "Finding the fastest source…",
+                  type: "status",
+                  src: "",
+                  url: "",
+                  diagnostic: true,
+                },
+              ];
+
+        const initialPrimary = initialSources[0] || {};
+        let publishedSourceSnapshot = initialSources.filter(
+          (item) => item && !item?.diagnostic
+        );
+        let fastStartPrimaryUrl = getSourceUrl(initialPrimary);
+        const preparedEpisodeHandoff =
+          request?.preparedEpisodeHandoff === true &&
+          initialPlayableSources.length > 0 &&
+          (
+            !qualificationMode ||
+            initialPlayableSources[0]?.launchQualified === true
+          );
+        const suppliedImdbId = String(request?.imdbId || request?.imdb_id || "").trim();
+
+        /*
+         * FAST START: open the player immediately. Source discovery continues
+         * in the background and replaces this loading row as soon as either
+         * Real-Debrid or an addon returns something playable.
+         */
+        setSource({
+          ...request,
+          playRequestId: playId,
+          id: request?.id,
+          tmdbId,
+          imdbId: suppliedImdbId,
+          title: request?.title || "Video",
+          poster: request?.poster || request?.poster_url || "",
+          year: request?.year,
+          mediaType,
+          season,
+          episode,
+          rdTitle: request?.rdTitle || request?.title || "",
+          rdYear: request?.rdYear ?? request?.year ?? null,
+          rdSeason: request?.rdSeason ?? season,
+          rdEpisode: request?.rdEpisode ?? episode,
+          sources: initialSources,
+          completeSources:
+            suppliedCompleteSources.length > 0
+              ? suppliedCompleteSources
+              : initialOrderedSources,
+          discoveredSources:
+            suppliedCompleteSources.length > 0
+              ? suppliedCompleteSources
+              : initialOrderedSources,
+          qualifiedLaunchOnly:
+            qualificationMode,
+          src: getSourceUrl(initialPrimary),
+          url: getSourceUrl(initialPrimary),
+          hasRd,
+          hasDebrid,
+          sourceDiagnostics: {
+            phase: preparedEpisodeHandoff
+              ? "prepared-handoff"
+              : "searching",
+            tmdbId,
+            mediaType,
+            season,
+            episode,
+            rdConnected: hasRd,
+            debridConnected: hasDebrid,
+          },
+        });
+
+        /*
+         * A prepared episode already has the fully ranked, cache-annotated
+         * source list. Publish it in one render and let VideoPlayer resolve the
+         * selected torrent/direct stream immediately instead of repeating the
+         * whole discovery pass during the handoff.
+         */
+        if (preparedEpisodeHandoff) {
+          return true;
+        }
+
+        const publishEarlySources = (
+          incomingSources,
+          diagnosticsPatch = {}
+        ) => {
+          if (!isCurrentPlay()) {
+            return;
+          }
+
+          const incoming = stripVodTrailerSources(
+            Array.isArray(incomingSources)
+              ? incomingSources.filter(item => item && (mediaType !== "tv" || !hasUnusableEpisodeAudio(item)))
+              : [],
+            isLive
+          );
+
+          if (incoming.length === 0) {
+            return;
+          }
+
+          setSource((current) => {
+            if (
+              !current ||
+              current.playRequestId !== playId ||
+              !isCurrentPlay()
+            ) {
+              return current;
+            }
+
+            const existing = Array.isArray(current.sources)
+              ? current.sources.filter((item) => !item?.diagnostic)
+              : [];
+
+            const ordered = orderSources({
+              sources: dedupeSources([
+                ...incoming,
+                ...existing,
+                ...originalSources,
+              ]).filter(item => mediaType !== "tv" || episodeSourceMatchesRequest(item, { season, episode })),
+              hasDebrid,
+              preferRd: Boolean(request?.preferRd),
+            });
+
+            const audioCandidates = !isLive && mediaType === "tv"
+              ? flixQuestFirstEpisodeSources(episodeAutoplayCandidates(ordered)
+                  .filter(episodeAutoplayCanTrustSource))
+              : ordered;
+            const playable = audioCandidates.filter(
+              (item) =>
+                isDirectSource(item) ||
+                isMagnetSource(item) ||
+                item?.type === "live" ||
+                item?.live
+            );
+
+            if (playable.length === 0) {
+              return {
+                ...current,
+                sourceDiagnostics: {
+                  ...(current.sourceDiagnostics || {}),
+                  ...diagnosticsPatch,
+                },
+              };
+            }
+
+            let publishedSources = request?.allowNonPlaybackFallback
+              ? ordered
+              : playable;
+
+            /*
+             * Search is allowed to enrich source metadata and append new choices,
+             * but never to renumber sources that have already been published to
+             * VideoPlayer. This makes the active index and failed-source indexes
+             * stable for the lifetime of this playback request.
+             */
+            publishedSources = preservePublishedSourceOrder(
+              existing,
+              publishedSources,
+              stableDiscoveredSourceKey,
+              {
+                retainSurplusPublished: true,
+              }
+            );
+            publishedSourceSnapshot = publishedSources;
+
+            if (fastStartPrimaryUrl) {
+              const lockedIndex = publishedSources.findIndex(
+                (item) => getSourceUrl(item) === fastStartPrimaryUrl
+              );
+
+              if (lockedIndex > 0) {
+                const [locked] = publishedSources.splice(lockedIndex, 1);
+                publishedSources.unshift(locked);
+              }
+            }
+
+            const primary = publishedSources[0] || {};
+
+            if (!fastStartPrimaryUrl) {
+              fastStartPrimaryUrl = getSourceUrl(primary);
+            }
+
+            return {
+              ...current,
+              sources: publishedSources,
+              src: getSourceUrl(primary),
+              url: getSourceUrl(primary),
+              sourceDiagnostics: {
+                ...(current.sourceDiagnostics || {}),
+                phase: "fast-start",
+                ...diagnosticsPatch,
+              },
+            };
+          });
+        };
+
+        const rdPromise =
+          !isLive &&
+          hasRd &&
+          !request?.noRd &&
+          !request?.skipRdLookup
+            ? findRdLibrarySource({
+                title: request?.rdTitle || request?.title || "",
+                year: request?.rdYear ?? request?.year ?? null,
+                alternateYears:
+                  Array.isArray(
+                    request?.rdAlternateYears ||
+                    request?.alternateYears
+                  )
+                    ? (
+                        request?.rdAlternateYears ||
+                        request?.alternateYears
+                      )
+                    : [],
+                season,
+                episode,
+              })
+            : Promise.resolve({
+                source: null,
+                status: hasRd ? "SKIPPED" : "NOT CONNECTED",
+                detail: hasRd ? "RD lookup skipped" : "No RD token",
+              });
+
+        /*
+         * Primary TV discovery is the configured Stremio-compatible addon
+         * pipeline. Do not make a speculative FlixQuest network call on every
+         * play (and never use the retired anonymous v1 route in production).
+         * A configured v2 instance is an on-demand backup after addon miss.
+         */
+        const flixQuestBackupEnabled =
+          !isLive &&
+          mediaType === "tv" &&
+          season != null &&
+          episode != null &&
+          !request?.skipEpisodeResolver &&
+          flixQuestV2Configured();
+        let episodeResolverPromise = null;
+        const launchFlixQuestBackup = () => {
+          if (!flixQuestBackupEnabled || !isCurrentPlay()) {
+            return Promise.resolve([]);
+          }
+          if (episodeResolverPromise) return episodeResolverPromise;
+          episodeResolverPromise = fetchTvEpisodeSources({
+            tmdbId,
+            season,
+            episode,
+            title: request?.rdTitle || request?.title || "",
+          }).then(episodeSources => {
+            if (Array.isArray(episodeSources) && episodeSources.length > 0) {
+              publishEarlySources(episodeSources.map(item => ({
+                ...item,
+                launchQualified: false,
+                runtimeNativeDirect: true,
+                runtimeNativeEnglishValidation: true,
+                runtimeQualificationFallback: true,
+                episodeResolver: "flixquest",
+              })), {
+                episodeResolver: "flixquest-backup",
+                episodeResolverCount: episodeSources.length,
+              });
+            }
+            return episodeSources;
+          }).catch(() => []);
+          return episodeResolverPromise;
+        };
+
+        // A ready RD library item is still a useful fallback. Do not delay it
+        // to wait for an API that may not be configured or reachable.
+        rdPromise.then(rdLookup => {
+          if (rdLookup?.source && isCurrentPlay()) {
+            publishEarlySources([rdLookup.source], {
+              rdLookupStatus: rdLookup?.status || "READY",
+              rdLookupDetail: rdLookup?.detail || "",
+            });
+          }
+        });
+
+        const imdbInfo =
+          isLive
+            ? {
+                imdbId:
+                  request?.imdbId ||
+                  request?.imdb_id ||
+                  "",
+
+                status:
+                  "SKIPPED",
+
+                method:
+                  "live",
+
+                error:
+                  "",
+              }
+            : await resolveImdbInfo(
+                {
+                  ...request,
+
+                  ...canonicalImdbLookupFields(request),
+
+                  tmdbId,
+
+                  mediaType,
+                }
+              );
+
+        const imdbId =
+          imdbInfo.imdbId;
+
+        const identityAlternateTitles = mergeAlternateTitles(
+          request?.rdAlternateTitles,
+          request?.alternateTitles,
+          request?.originalTitle,
+          request?.original_title,
+          imdbInfo?.alternateTitles
+        );
+        const identityAlternateYears = mergeAlternateYears(
+          request?.rdYear ?? request?.year ?? "",
+          request?.rdAlternateYears,
+          request?.alternateYears,
+          imdbInfo?.alternateYears
+        );
+
+        const resolvedRdPromise =
+          !isLive &&
+          hasRd &&
+          !request?.noRd &&
+          !request?.skipRdLookup &&
+          identityAlternateTitles.length > 0
+            ? rdPromise.then(async (initialRdLookup) => {
+                if (initialRdLookup?.source) {
+                  return initialRdLookup;
+                }
+
+                return findRdLibrarySource({
+                  title: request?.rdTitle || request?.title || "",
+                  year: request?.rdYear ?? request?.year ?? null,
+                  alternateYears:
+                    identityAlternateYears,
+                  alternateTitles:
+                    identityAlternateTitles,
+                  season,
+                  episode,
+                });
+              })
+            : rdPromise;
+
+        resolvedRdPromise.then((rdLookup) => {
+          if (rdLookup?.source) {
+            publishEarlySources([rdLookup.source], {
+              rdLookupStatus: rdLookup?.status || "READY",
+              rdLookupDetail: rdLookup?.detail || "",
+            });
+          }
+        });
+
+        if (
+          !isLive &&
+          identityAlternateTitles.length > 0
+        ) {
+          setSource((current) => {
+            if (
+              !current ||
+              current.playRequestId !== playId ||
+              !isCurrentPlay()
+            ) {
+              return current;
+            }
+
+            return {
+              ...current,
+              alternateYears:
+                identityAlternateYears,
+              rdAlternateYears:
+                identityAlternateYears,
+              alternateTitles:
+                identityAlternateTitles,
+              rdAlternateTitles:
+                identityAlternateTitles,
+            };
+          });
+        }
+
+        const addonArgs = {
+          imdbId,
+          tmdbId,
+          title:
+            request?.rdTitle ||
+            request?.title ||
+            "",
+          year:
+            request?.rdYear ??
+            request?.year ??
+            "",
+          alternateYears:
+            identityAlternateYears,
+          alternateTitles:
+            identityAlternateTitles,
+          mediaType,
+          season,
+          episode,
+        };
+
+        const skippedAddonLookup = {
+          streams: [],
+          diagnostics: [],
+          addonsChecked: 0,
+          reason: "Source lookup skipped.",
+          status: "SKIPPED",
+          error: "",
+          browserAttempted: false,
+          browserRecovered: 0,
+          browserDiagnostics: [],
+        };
+
+        const fastAddonPromise =
+          !isLive &&
+          !request?.skipAddonLookup
+            ? fetchAddonSources({
+                ...addonArgs,
+                fastMode: true,
+              })
+            : Promise.resolve(skippedAddonLookup);
+
+        // Call the FlixQuest backup only after the fast addon pass misses.
+        fastAddonPromise.then(addonLookup => {
+          if (isCurrentPlay() && mediaType === "tv" &&
+              !request?.skipAddonLookup &&
+              !hasUsableEpisodeAddonSource(
+                (addonLookup?.streams || []).filter(episodeAutoplayCanTrustSource),
+                { season, episode }
+              )) {
+            void launchFlixQuestBackup();
+          }
+        }).catch(() => {
+          if (isCurrentPlay() && mediaType === "tv") void launchFlixQuestBackup();
+        });
+
+        fastAddonPromise.then(async (addonLookup) => {
+          if (
+            !isCurrentPlay() ||
+            !Array.isArray(addonLookup?.streams) ||
+            addonLookup.streams.length === 0
+          ) {
+            return;
+          }
+
+          /*
+           * Do not publish an unverified addon row as index 0. Qualify up to
+           * three already-cached Real-Debrid candidates in ranked order and
+           * publish only the first one that resolves to an inspected playable
+           * rendition. The rest of discovery continues in the background and
+           * will still populate the complete manual source list.
+           */
+          const rankedFastCandidates = orderSources({
+            sources: addonLookup.streams,
+            hasDebrid,
+            preferRd: Boolean(request?.preferRd),
+          });
+          const automaticFastCandidates =
+            automaticVodCandidatePool(
+              rankedFastCandidates,
+              rankedFastCandidates
+            );
+
+          /*
+           * Normal VOD playback is source-first. As soon as fast addon
+           * discovery returns real torrent/direct rows, publish them into the
+           * player immediately instead of leaving the browser on the loading
+           * status row while the old strict launch-qualification pass runs.
+           *
+           * publishEarlySources applies the VOD source filter, so Where-to-
+           * Watch/provider/external/YouTube pages still cannot enter playback.
+           * The comprehensive pass below continues in the background and
+           * enriches cache state plus the complete manual source list.
+           */
+          if (!qualificationMode) {
+            publishEarlySources(automaticFastCandidates, {
+              imdbId,
+              imdbStatus: imdbInfo?.status || "UNKNOWN",
+              addonLookupStatus: "FAST SOURCE-FIRST",
+              addonsChecked: Number(addonLookup?.addonsChecked || 0),
+              discoveredCount: addonLookup.streams.length,
+            });
+            return;
+          }
+
+          const qualifiedFastSources =
+            hasRd
+              ? await qualifyCachedRealDebridLaunchPool({
+                  items: automaticFastCandidates,
+                  title: addonArgs.title,
+                  year: addonArgs.year,
+                  alternateYears: addonArgs.alternateYears,
+                  alternateTitles: addonArgs.alternateTitles,
+                  mediaType,
+                  season,
+                  episode,
+                  targetCount: 1,
+                  scanLimit: 12,
+                  // TV must not sit on a five-second cached-only gate
+                  // before trying the actual episode. Movies are unchanged.
+                  timeBudgetMs: mediaType === "tv" ? 2400 : 5000,
+                })
+              : [];
+
+          const qualifiedPrimary =
+            qualifiedFastSources[0] || null;
+
+          if (
+            qualifiedPrimary &&
+            isCurrentPlay()
+          ) {
+            publishEarlySources([qualifiedPrimary], {
+              imdbId,
+              imdbStatus: imdbInfo?.status || "UNKNOWN",
+              addonLookupStatus: "QUALIFIED FAST READY",
+              addonsChecked: Number(addonLookup?.addonsChecked || 0),
+              discoveredCount: addonLookup.streams.length,
+              launchQualified: true,
+              launchQualification:
+                qualifiedPrimary.launchQualification ||
+                "rd-fast-media-inspected",
+            });
+            return;
+          }
+
+          /*
+           * TV ONE-CLICK FALLBACK
+           * A zero-result cached-only qualification is not a reason to leave
+           * 100+ exact-episode torrents behind the Sources button. Start
+           * preparing the top actual torrent identity through Media God's
+           * foreground RD cache engine. FlixQuest still publishes in parallel,
+           * and a healthy playing source is never automatically replaced.
+           * Other torrents remain visible for manual override.
+           */
+          if (mediaType === "tv" && hasRd &&
+              allowAutomaticUncachedEpisodePreparation &&
+              !request?.skipEpisodeAutoPrepare) {
+            const fallback = episodeAutoprepareCandidates(
+              automaticFastCandidates,
+              { season, episode }
+            );
+            if (fallback.length) {
+              publishEarlySources(fallback.slice(0, 1), {
+                addonLookupStatus: "PREPARING EPISODE AUTOMATICALLY",
+                episodeAutoprepare: true,
+                discoveredCount: addonLookup.streams.length,
+              });
+              return;
+            }
+          }
+
+          /* No qualifying or preparable episode source yet; await full search. */
+          setSource((current) => {
+            if (
+              !current ||
+              current.playRequestId !== playId ||
+              !isCurrentPlay()
+            ) {
+              return current;
+            }
+
+            return {
+              ...current,
+              sourceDiagnostics: {
+                ...(current.sourceDiagnostics || {}),
+                imdbId,
+                imdbStatus: imdbInfo?.status || "UNKNOWN",
+                addonLookupStatus: "FAST DISCOVERED · QUALIFYING",
+                addonsChecked: Number(addonLookup?.addonsChecked || 0),
+                discoveredCount: addonLookup.streams.length,
+              },
+            };
+          });
+        });
+
+        /*
+         * Do not fire the full addon pass at the same instant as the fast
+         * pass. With only a handful of active addons that used to hit the
+         * same public providers twice in parallel, which could trigger
+         * transient 403/429 rate limits. Let the fast pass finish, publish
+         * anything it found, then do the complete/fallback pass.
+         */
+        const addonPromise =
+          !isLive &&
+          !request?.skipAddonLookup
+            ? fastAddonPromise.then(
+                async (fastLookup) => {
+                  const fastSuccessDiagnostics =
+                    (
+                      fastLookup?.diagnostics ||
+                      []
+                    ).filter(
+                      (item) =>
+                        String(
+                          item?.status ||
+                          ""
+                        ).toLowerCase() ===
+                          "ok" &&
+                        Number(
+                          item?.playable_count ||
+                          0
+                        ) > 0
+                    );
+
+                  const addonsAvailable =
+                    Number(
+                      fastLookup?.addonsAvailable ||
+                      0
+                    );
+
+                  /*
+                   * Fast mode exists only to get something onto the player quickly.
+                   * It uses shorter timeouts and fewer alternate identifiers, so a
+                   * provider returning one early row is NOT proof that we have its
+                   * complete source set. Always run the comprehensive pass after
+                   * fast start and merge it back in. This is especially important
+                   * for cache discovery: every extra torrent hash is another chance
+                   * to find an already-cached Real-Debrid/debrid release.
+                   *
+                   * The two passes are sequential (never parallel), so we still
+                   * avoid the old burst of duplicate provider requests.
+                   */
+                  const fullLookup =
+                    await fetchAddonSources({
+                      ...addonArgs,
+                      fastMode: false,
+                      excludeAddonNames: [],
+                    });
+
+                  const streams =
+                    mergeAddonStreams(
+                      fastLookup?.streams,
+                      fullLookup?.streams
+                    );
+
+                  return {
+                    ...fullLookup,
+                    streams,
+                    diagnostics: [
+                      ...fastSuccessDiagnostics,
+                      ...(
+                        fullLookup?.diagnostics ||
+                        []
+                      ),
+                    ],
+                    addonsChecked:
+                      addonsAvailable > 0
+                        ? addonsAvailable
+                        : Math.max(
+                            Number(
+                              fastLookup?.addonsChecked ||
+                              0
+                            ),
+                            Number(
+                              fullLookup?.addonsChecked ||
+                              0
+                            )
+                          ),
+                    addonsAvailable:
+                      addonsAvailable ||
+                      Number(
+                        fullLookup?.addonsAvailable ||
+                        0
+                      ),
+                    status:
+                      streams.length > 0
+                        ? "OK"
+                        : fullLookup?.status ||
+                          fastLookup?.status ||
+                          "FAILED",
+                    reason:
+                      fullLookup?.reason ||
+                      fastLookup?.reason ||
+                      "",
+                  };
+                }
+              )
+            : Promise.resolve(skippedAddonLookup);
+
+        // Fast discovery may return a placeholder; retry the backup decision
+        // after the complete Stremio-compatible addon search as well.
+        addonPromise.then(addonLookup => {
+          if (isCurrentPlay() && mediaType === "tv" &&
+              !request?.skipAddonLookup &&
+              !hasUsableEpisodeAddonSource(
+                (addonLookup?.streams || []).filter(episodeAutoplayCanTrustSource),
+                { season, episode }
+              )) {
+            void launchFlixQuestBackup();
+          }
+        }).catch(() => {
+          if (isCurrentPlay() && mediaType === "tv") void launchFlixQuestBackup();
+        });
+
+        addonPromise.then((addonLookup) => {
+          if (
+            !isCurrentPlay() ||
+            !Array.isArray(addonLookup?.streams) ||
+            addonLookup.streams.length === 0
+          ) {
+            return;
+          }
+
+          /*
+           * The full pass enriches the eventual chooser only. Raw discovery is
+           * never promoted into active playback here; final autoplay selection
+           * happens after cache annotation + strict RD media/audio qualification.
+           */
+          setSource((current) => {
+            if (
+              !current ||
+              current.playRequestId !== playId ||
+              !isCurrentPlay()
+            ) {
+              return current;
+            }
+
+            return {
+              ...current,
+              sourceDiagnostics: {
+                ...(current.sourceDiagnostics || {}),
+                imdbId,
+                imdbStatus: imdbInfo?.status || "UNKNOWN",
+                addonLookupStatus:
+                  `${addonLookup?.status || "READY"} · VERIFYING`,
+                addonsChecked: Number(addonLookup?.addonsChecked || 0),
+                discoveredCount: addonLookup.streams.length,
+              },
+            };
+          });
+        });
+
+        const [
+          addonLookup,
+          rdLookup,
+        ] =
+          await Promise.all(
+            [
+              addonPromise,
+
+              resolvedRdPromise,
+            ]
+          );
+
+        // Retain the details chooser's entire pool even when selecting one
+        // source intentionally skips a new addon/library lookup. Preserve
+        // occurrences so shared URLs/hashes do not collapse distinct rows.
+        const combined = preservePublishedSourceOrder(
+          suppliedCompleteSources,
+          dedupeSources(
+            stripVodTrailerSources(
+              [
+                ...(rdLookup?.source ? [rdLookup.source] : []),
+                ...(addonLookup?.streams || []),
+                ...originalSources,
+                ...suppliedCompleteSources,
+              ],
+              isLive
+            )
+          ),
+          stableDiscoveredSourceKey,
+          { retainSurplusPublished: true }
+        ).filter(item => mediaType !== "tv" || episodeSourceMatchesRequest(item, { season, episode }));
+
+        const cacheAnnotatedCombined =
+          await annotateDebridCache(
+            combined,
+            hasDebrid
+          );
+
+        if (!isCurrentPlay()) {
+          return;
+        }
+
+        let qualifiedLaunchSources = [];
+
+        if (qualificationMode) {
+          const rankedQualificationCandidates = orderSources({
+            sources: cacheAnnotatedCombined,
+            hasDebrid,
+            preferRd: Boolean(request?.preferRd),
+          });
+          const automaticQualificationCandidates =
+            automaticVodCandidatePool(
+              rankedQualificationCandidates,
+              rankedQualificationCandidates
+            );
+          const existingQualified =
+            automaticVodCandidatePool(
+              [
+                ...publishedSourceSnapshot,
+                ...(rdLookup?.source ? [rdLookup.source] : []),
+              ].filter((item) => item?.launchQualified === true),
+              rankedQualificationCandidates
+            );
+
+          qualifiedLaunchSources =
+            await qualifyCachedRealDebridLaunchPool({
+              items: automaticQualificationCandidates,
+              existing: existingQualified,
+              title: addonArgs.title,
+              year: addonArgs.year,
+              alternateYears: addonArgs.alternateYears,
+              alternateTitles: addonArgs.alternateTitles,
+              mediaType,
+              season,
+              episode,
+              targetCount: 1,
+              scanLimit: 40,
+              timeBudgetMs: 10000,
+            });
+
+          if (!isCurrentPlay()) {
+            return;
+          }
+        }
+
+        let orderedSources =
+          orderSources({
+            sources:
+              cacheAnnotatedCombined,
+
+            hasDebrid,
+
+            preferRd:
+              Boolean(
+                request
+                  ?.preferRd
+              ),
+          });
+
+        /*
+         * SOURCE SELECTOR COMPLETENESS
+         *
+         * Build the final player pool directly from the fully cache-annotated
+         * discovery result. Do not route it back through a smaller fast-start
+         * or pre-cache playback subset: that is how a large cached result set
+         * can collapse back to five/six visible sources.
+         *
+         * Manual source visibility has no readiness/cache eligibility gate.
+         * Every discovered source row is retained; only status/diagnostic
+         * placeholders stay out of the source chooser.
+         */
+        const confirmedCachedPlaybackSources =
+          cacheAnnotatedCombined.filter(
+            (item) =>
+              sourceIsConfirmedCachedForPlayback(item) &&
+              !item?.diagnostic &&
+              item?.type !== "status"
+          );
+
+        const completePlaybackSourcePool =
+          cacheAnnotatedCombined.filter(
+            (item) =>
+              item &&
+              !item?.diagnostic &&
+              item?.type !== "status"
+          );
+
+        const completePlaybackSources = orderSources({
+          sources: completePlaybackSourcePool,
+          hasDebrid,
+          preferRd: Boolean(request?.preferRd),
+        });
+
+        /*
+         * Keep a second canonical pool that is independent of the fast-start
+         * player array. If a late discovery callback replaces source.sources,
+         * VideoPlayer can rebuild the chooser from this full annotated pool.
+         * The completeness merge is deliberately lossless, including when
+         * several addon rows share the same torrent/file key.
+         */
+        const canonicalCompletePlaybackSources =
+          preservePublishedSourceOrder(
+            completePlaybackSources,
+            completePlaybackSourcePool,
+            stableDiscoveredSourceKey
+          );
+
+        /*
+         * Strict media inspection is still the first choice. If it cannot prove
+         * a launch within the short budget, do not leave the viewer on an
+         * infinite loading card. Use the best already-cached Real-Debrid rows
+         * that still match the requested title/year identity and let the native
+         * player perform its real track selection + LibVLC Audio Rescue.
+         *
+         * This is deliberately cached-only: uncached/pending rows remain visible
+         * in the chooser/background cache but are never guessed as autoplay.
+         */
+        const preferredAutoplayAudio = String(
+          readTrackPreferences()?.audioLanguage || "en"
+        )
+          .trim()
+          .toLowerCase();
+        const requireExplicitEnglishRuntimeFallback =
+          preferredAutoplayAudio === "en" ||
+          preferredAutoplayAudio === "eng" ||
+          preferredAutoplayAudio === "english";
+
+        const runtimeFallbackProfile =
+          getPlaybackDeviceProfile();
+        const nativeRuntimeAudioValidationAvailable =
+          runtimeFallbackProfile?.nativePlayerAvailable === true;
+        const androidMobileRequiresQualifiedRdHandoff =
+          runtimeFallbackProfile?.nativeAndroidMobile === true;
+
+        const runtimeFallbackSources =
+          qualificationMode &&
+          qualifiedLaunchSources.length === 0 &&
+          nativeRuntimeAudioValidationAvailable &&
+          !androidMobileRequiresQualifiedRdHandoff
+            ? orderSources({
+                sources: automaticVodCandidatePool(
+                  confirmedCachedPlaybackSources,
+                  cacheAnnotatedCombined
+                ).filter(
+                  (item) =>
+                    sourceTargetsRealDebrid(item) &&
+                    sourceMatchesRequestedIdentity(
+                      item,
+                      {
+                        title: addonArgs.title,
+                        year: addonArgs.year,
+                        alternateYears: addonArgs.alternateYears,
+                        alternateTitles: addonArgs.alternateTitles,
+                        mediaType,
+                      }
+                    ) &&
+                    (
+                      !requireExplicitEnglishRuntimeFallback ||
+                      ["english", "multi"].includes(
+                        detectLanguagePreference(item)
+                      )
+                    )
+                ),
+                hasDebrid,
+                preferRd: Boolean(request?.preferRd),
+              })
+                .map((item) => {
+                  const readyProviderUrl =
+                    String(item?.providerPlaybackUrl || "").trim();
+                  const useReadyProviderUrl =
+                    /^https?:\/\//i.test(readyProviderUrl);
+
+                  return {
+                    ...item,
+                    ...(useReadyProviderUrl
+                      ? {
+                          type: "url",
+                          src: readyProviderUrl,
+                          url: readyProviderUrl,
+                          runtimeNativeDirect: true,
+                        }
+                      : {}),
+                    runtimeQualificationFallback: true,
+                    runtimeNativeEnglishValidation: true,
+                    launchQualification:
+                      requireExplicitEnglishRuntimeFallback
+                        ? "native-runtime-english-track-validation"
+                        : "native-runtime-audio-rescue",
+                  };
+                })
+            : [];
+
+        const diagnosticLabel =
+          buildDiagnosticLabel(
+            {
+              imdbInfo,
+
+              addonLookup,
+
+              rdLookup,
+
+              hasRd,
+            }
+          );
+
+        if (!request?.allowNonPlaybackFallback) {
+          /*
+           * Keep the full discovered source pool attached to normal playback so
+           * the manual chooser never loses uncached/pending/provider rows. The
+           * player still decides how each selected row is resolved or played;
+           * visibility itself is no longer an eligibility decision.
+           */
+          orderedSources =
+            canonicalCompletePlaybackSources.length > 0
+              ? canonicalCompletePlaybackSources
+              : [
+                  {
+                    label: diagnosticLabel,
+                    type: "status",
+                    src: "",
+                    url: "",
+                    diagnostic: true,
+                  },
+                ];
+        }
+
+        if (
+          orderedSources.length ===
+          0
+        ) {
+          orderedSources = [
+            {
+              label:
+                diagnosticLabel,
+
+              type:
+                "status",
+
+              src:
+                "",
+
+              url:
+                "",
+
+              diagnostic:
+                true,
+            },
+          ];
+        }
+
+        /*
+         * Apply the same stable-order contract to the final cache-annotated pass.
+         * Existing rows keep their positions; richer cache/provider metadata replaces
+         * them in place and genuinely new hashes are appended in ranked order.
+         */
+        orderedSources = preservePublishedSourceOrder(
+          publishedSourceSnapshot,
+          orderedSources,
+          stableDiscoveredSourceKey
+        );
+
+        /*
+         * Stable ordering must never be allowed to reduce the canonical pool.
+         * Rehydrate matching rows with final cache metadata and append every
+         * missing source after the already-published choices.
+         */
+        orderedSources = preservePublishedSourceOrder(
+          orderedSources,
+          canonicalCompletePlaybackSources,
+          stableDiscoveredSourceKey
+        );
+
+        orderedSources = restoreQualifiedLaunchRows(
+          publishedSourceSnapshot,
+          orderedSources
+        );
+
+        publishedSourceSnapshot = orderedSources;
+
+        if (fastStartPrimaryUrl) {
+          const lockedIndex = orderedSources.findIndex(
+            (item) => getSourceUrl(item) === fastStartPrimaryUrl
+          );
+          /*
+           * Once fast-start has published a real source, discovery is allowed to
+           * enrich the chooser but must not silently replace index 0 underneath an
+           * already-open player. Changing the source array's first row here can
+           * make Fire TV/native playback relaunch the same title from the beginning.
+           * Keep the published source stable; VideoPlayer owns deliberate failover
+           * (including moving from an uncached torrent to a ready cached source).
+           */
+          if (lockedIndex > 0) {
+            const [locked] = orderedSources.splice(lockedIndex, 1);
+            orderedSources.unshift(locked);
+          }
+        }
+
+        const cacheCandidateCount = new Set(
+          cacheAnnotatedCombined
+            .map((item) => sourceMagnetHash(item))
+            .filter(Boolean)
+        ).size;
+        const cachedSourceCount = confirmedCachedPlaybackSources.length;
+        const pendingSourceCount = cacheAnnotatedCombined.filter(
+          (item) => sourceHasPendingCacheSignal(item)
+        ).length;
+        const combinedSourceCount = cacheAnnotatedCombined.length;
+        const publishedSourceCount = orderedSources.filter(
+          (item) => item && !item?.diagnostic
+        ).length;
+        const publishedCachedSourceCount = orderedSources.filter(
+          (item) =>
+            item &&
+            !item?.diagnostic &&
+            item?.type !== "status" &&
+            sourceIsConfirmedCachedForPlayback(item)
+        ).length;
+
+        const waitingForVerifiedSource = {
+          label:
+            "Finding a verified compatible source…",
+          type:
+            "status",
+          src:
+            "",
+          url:
+            "",
+          diagnostic:
+            true,
+        };
+
+        /*
+         * Qualification decides which source may autoplay first; it must never
+         * decide how many sources the user can see. Keep the verified/runtime
+         * lead rows first, then append the complete discovered pool losslessly.
+         */
+        // Direct episode resolver rows retain their runtime language check.
+        // Do not replace an already published usable episode with a waiting
+        // RD status merely because the independent RD inspection found none.
+        const runtimeEpisodeSources = !isLive && mediaType === "tv"
+          ? episodeAutoplayCandidates(orderedSources.filter(item =>
+              item?.episodeResolver === "flixquest" &&
+              item?.runtimeQualificationFallback === true && isDirectSource(item)))
+          : [];
+        /*
+         * Strict RD inspection remains first choice. If it finds zero cached
+         * matches, start the best exact-episode torrent instead of publishing
+         * only a waiting row and forcing the viewer to hunt in Sources.
+         */
+        const episodePreparationLeads = qualificationMode &&
+          mediaType === "tv" &&
+          hasRd && allowAutomaticUncachedEpisodePreparation &&
+          !request?.skipEpisodeAutoPrepare
+            ? episodeAutoprepareCandidates(orderedSources, { season, episode })
+            : [];
+        const playbackLeadSources =
+          qualificationMode
+            ? runtimeEpisodeSources.length > 0
+              ? runtimeEpisodeSources
+              : qualifiedLaunchSources.length > 0
+                ? qualifiedLaunchSources
+                : runtimeFallbackSources.length > 0
+                  ? runtimeFallbackSources
+                  : episodePreparationLeads
+            : [];
+
+        const onlyEpisodeFallbacksRemain =
+          mediaType === "tv" &&
+          runtimeEpisodeSources.length === 0 &&
+          season != null &&
+          episode != null &&
+          canonicalCompletePlaybackSources.length > 0 &&
+          canonicalCompletePlaybackSources.every(
+            (item) => item?.episodeFallbackOnly === true
+          );
+
+        const episodeSourceMissingStatus = {
+          label:
+            "No playable episode stream found yet.",
+          type:
+            "status",
+          src:
+            "",
+          url:
+            "",
+          diagnostic:
+            true,
+        };
+
+        const eligibleEpisodeLeads = !isLive && mediaType === "tv"
+          ? flixQuestFirstEpisodeSources(episodeAutoplayCandidates(
+              qualificationMode ? playbackLeadSources : orderedSources.filter(item => isDirectSource(item) || isMagnetSource(item))
+            ).filter(episodeAutoplayCanTrustSource))
+          : null;
+        const automaticLeads = eligibleEpisodeLeads || playbackLeadSources;
+        const noReadyEpisodeFile =
+          qualificationMode && mediaType === "tv" && hasRd &&
+          cacheCandidateCount > 0 && cachedSourceCount === 0 &&
+          automaticLeads.length === 0 &&
+          !rdLookup?.source;
+        const episodeAudioMissingStatus = {
+          label: orderedSources.some(item => !hasUnusableEpisodeAudio(item))
+            ? "No verified episode stream is ready yet. Try Sources to choose another."
+            : "No English episode audio found yet. Choose another source.",
+          type: "status", src: "", url: "", diagnostic: true,
+        };
+        const playerSources =
+          onlyEpisodeFallbacksRemain
+            ? [
+                episodeSourceMissingStatus,
+              ]
+            : noReadyEpisodeFile
+              ? [{ ...episodeSourceMissingStatus,
+                   label: "No instant-play episode file found. These torrents require caching." },
+                 ...orderedSources]
+            : !qualificationMode
+              ? eligibleEpisodeLeads
+                ? eligibleEpisodeLeads.length > 0
+                  ? preservePublishedSourceOrder(eligibleEpisodeLeads, orderedSources, stableDiscoveredSourceKey)
+                  : [episodeAudioMissingStatus, ...orderedSources]
+                : orderedSources
+              : automaticLeads.length > 0
+                ? preservePublishedSourceOrder(
+                    automaticLeads,
+                    orderedSources,
+                    stableDiscoveredSourceKey
+                  )
+                : [
+                    waitingForVerifiedSource,
+                    ...orderedSources,
+                  ];
+
+        /*
+         * Source-order preservation enriches a published torrent with cache
+         * metadata and may replace its object with the original addon row.
+         * Restore the verified *auto-preparation decision* onto the first
+         * launch candidate, or the RD cache engine could stop running and the
+         * viewer would be back to manually hunting for sources.
+         */
+        if (episodePreparationLeads.length > 0 &&
+            runtimeEpisodeSources.length === 0 &&
+            qualifiedLaunchSources.length === 0 &&
+            runtimeFallbackSources.length === 0 &&
+            playerSources[0] &&
+            stableDiscoveredSourceKey(playerSources[0]) ===
+              stableDiscoveredSourceKey(episodePreparationLeads[0])) {
+          playerSources[0] = {
+            ...playerSources[0],
+            ...episodePreparationLeads[0],
+          };
+        }
+        const primary = playerSources[0] || {};
+        const activeUrl = getSourceUrl(primary);
+        if (!isCurrentPlay()) return false;
+
+        setSource({
+          ...request,
+
+          playRequestId:
+            playId,
+
+          id:
+            request?.id,
+
+          tmdbId,
+
+          imdbId,
+
+          title:
+            request?.title ||
+            "Video",
+
+          poster:
+            request?.poster ||
+            request?.poster_url ||
+            "",
+
+          year:
+            request?.year,
+
+          mediaType,
+
+          season,
+
+          episode,
+
+          rdTitle:
+            request?.rdTitle ||
+            request?.title ||
+            "",
+
+          rdYear:
+            request?.rdYear ??
+            request?.year ??
+            null,
+
+          rdSeason:
+            request?.rdSeason ??
+            season,
+
+          rdEpisode:
+            request?.rdEpisode ??
+            episode,
+
+          sources:
+            playerSources,
+
+          completeSources:
+            canonicalCompletePlaybackSources,
+
+          discoveredSources:
+            canonicalCompletePlaybackSources,
+
+          qualifiedLaunchOnly:
+            qualificationMode,
+
+          src:
+            activeUrl,
+
+          url:
+            activeUrl,
+
+          hasRd,
+
+          hasDebrid,
+
+          sourceDiagnostics: {
+            phase: noReadyEpisodeFile ? "no-ready-episode" : "complete",
+            noReadyEpisodeFile,
+
+            imdbId,
+
+            tmdbId,
+
+            mediaType,
+
+            season,
+
+            episode,
+
+            imdbStatus:
+              imdbInfo?.status ||
+              "UNKNOWN",
+
+            imdbMethod:
+              imdbInfo?.method ||
+              "",
+
+            imdbError:
+              imdbInfo?.error ||
+              "",
+
+            addonLookupStatus:
+              addonLookup?.status ||
+              "UNKNOWN",
+
+            addonsChecked:
+              Number(
+                addonLookup
+                  ?.addonsChecked ||
+                0
+              ),
+
+            diagnostics:
+              addonLookup
+                ?.diagnostics ||
+              [],
+
+            reason:
+              addonLookup
+                ?.reason ||
+              "",
+
+            discoveredCount:
+              Array.isArray(
+                addonLookup
+                  ?.streams
+              )
+                ? addonLookup
+                    .streams
+                    .length
+                : 0,
+
+            combinedSourceCount,
+
+            cacheCandidateCount,
+
+            cachedSourceCount,
+
+            pendingSourceCount,
+
+            publishedSourceCount,
+
+            publishedCachedSourceCount,
+
+            qualifiedLaunchCount:
+              qualifiedLaunchSources.length,
+
+            runtimeFallbackCount:
+              runtimeFallbackSources.length,
+
+            canonicalSourceCount:
+              canonicalCompletePlaybackSources.length,
+
+            browserAttempted:
+              Boolean(
+                addonLookup
+                  ?.browserAttempted
+              ),
+
+            browserRecovered:
+              Number(
+                addonLookup
+                  ?.browserRecovered ||
+                0
+              ),
+
+            browserDiagnostics:
+              addonLookup
+                ?.browserDiagnostics ||
+              [],
+
+            rdConnected:
+              hasRd,
+
+            rdLookupStatus:
+              rdLookup?.status ||
+              (
+                hasRd
+                  ? "UNKNOWN"
+                  : "NOT CONNECTED"
+              ),
+
+            rdLookupDetail:
+              rdLookup?.detail ||
+              "",
+
+            diagnosticLabel,
+          },
+        });
+
+        console.info(
+          "[Media God] Playback diagnostics",
+          {
+            title:
+              request?.title,
+
+            tmdbId,
+
+            imdbId,
+
+            mediaType,
+
+            season,
+
+            episode,
+
+            imdbStatus:
+              imdbInfo?.status,
+
+            addonLookupStatus:
+              addonLookup
+                ?.status,
+
+            addonsChecked:
+              addonLookup
+                ?.addonsChecked,
+
+            discoveredCount:
+              Array.isArray(
+                addonLookup
+                  ?.streams
+              )
+                ? addonLookup
+                    .streams
+                    .length
+                : 0,
+
+            browserAttempted:
+              addonLookup
+                ?.browserAttempted,
+
+            browserRecovered:
+              addonLookup
+                ?.browserRecovered,
+
+            addonDiagnostics:
+              addonLookup
+                ?.diagnostics ||
+              [],
+
+            rdConnected:
+              hasRd,
+
+            rdLookupStatus:
+              rdLookup
+                ?.status,
+
+            rdLookupDetail:
+              rdLookup
+                ?.detail,
+          }
+        );
+
+        return true;
+      },
+      [
+        hasRd,
+        hasDebrid,
+      ]
+    );
+
+  const startEmbed = useCallback((url, media, provider) => {
+    stopExclusivePlayback();
+    setMagnetPlayer(null);
+    setSource({
+      ...media,
+      playRequestId: ++playSequenceRef.current,
+      title: String(media.title || "Video"),
+      sources: [],
+      completeSources: [],
+    });
+    setVidSrcEmbed({
+      provider, url,
+      media: {
+        mediaType: media.mediaType,
+        tmdbId: media.tmdbId ?? media.id,
+        imdbId: media.imdbId,
+        season: media.season ?? media.rdSeason,
+        episode: media.episode ?? media.rdEpisode,
+      },
+      title: String(media.title || "Video"),
+      fromDetails: true,
+    });
+    return true;
+  }, []);
+
+  const playVidSrc = useCallback((media) => {
+    const url = buildVidSrcEmbedUrl(media);
+    return url ? startEmbed(url, media) : false;
+  }, [startEmbed]);
+  const playEmbedSu = useCallback((media) => {
+    const url = buildEmbedSuEmbedUrl(media);
+    return url ? startEmbed(url, media, "embedsu") : false;
+  }, [startEmbed]);
+  const playVidCore = useCallback((media) => {
+    const url = buildVidCoreEmbedUrl(media);
+    return url ? startEmbed(url, media, "vidcore") : false;
+  }, [startEmbed]);
+  const playExtraEmbed = useCallback((key, media) => {
+    const builder = {
+      twoembed: buildTwoEmbedEmbedUrl,
+      cinesrc: buildCineSrcEmbedUrl,
+      multiembed: buildMultiEmbedEmbedUrl,
+    }[key];
+    const url = builder?.(media);
+    return url ? startEmbed(url, media, key) : false;
+  }, [startEmbed]);
+  const playSavedEmbed = useCallback((media, bookmark) => {
+    try {
+      const url = new URL(bookmark?.url);
+      if (url.protocol !== "https:") return false;
+      return startEmbed(url.href, media, bookmark.provider || "vidsrc");
+    } catch { return false; }
+  }, [startEmbed]);
+
+  const playOnlyFlix = useCallback((media) => {
+    const url = buildOnlyFlixEmbedUrl(media);
+    return url ? startEmbed(url, media, "onlyflix") : false;
+  }, [startEmbed]);
+
+  const startMagnetPlayer = useCallback((media, type) => {
+    if (!media?.magnet) return false;
+    stopExclusivePlayback();
+    setVidSrcEmbed(null);
+    setSource({
+      ...media,
+      playRequestId: ++playSequenceRef.current,
+      title: String(media.title || "Video"),
+      sources: [], completeSources: [],
+    });
+    setMagnetPlayer({ type, magnet: media.magnet, title: String(media.title || "Video"), fromDetails: true });
+    return true;
+  }, []);
+  const playWebtor = useCallback((media) => startMagnetPlayer(media, "webtor"), [startMagnetPlayer]);
+  const playWebTorrent = useCallback((media) => startMagnetPlayer(media, "webtorrent"), [startMagnetPlayer]);
+
+  const close =
+    useCallback(
+      () => {
+        playSequenceRef.current += 1;
+        stopExclusivePlayback();
+
+        setVidSrcEmbed(null);
+        setMagnetPlayer(null);
+        setSource(null);
+
+        /*
+         * VideoPlayer is rendered by this core provider, so its Exit/Back
+         * button calls this close routine directly. Always clear the shared
+         * player signals here as well as in the enhanced wrapper; otherwise
+         * Fire TV can keep thinking playback is open after the portal has
+         * disappeared, which leaves the navigation hidden and can poison the
+         * next playback attempt.
+         */
+        if (typeof window !== "undefined") {
+          window.__MG_PLAYER_CONTEXT__ = null;
+
+          if (typeof document !== "undefined") {
+            document.documentElement.classList.remove(
+              "mg-fire-tv-player-open"
+            );
+            document.body?.classList.remove(
+              "mg-fire-tv-player-open"
+            );
+
+            const focused = document.activeElement;
+            if (focused instanceof HTMLElement) {
+              focused.blur?.();
+            }
+          }
+
+          window.dispatchEvent(
+            new CustomEvent("mg:player-context", {
+              detail: {},
+            })
+          );
+
+          window.dispatchEvent(
+            new CustomEvent("mg:player-visibility", {
+              detail: { open: false },
+            })
+          );
+
+          window.dispatchEvent(
+            new CustomEvent("mg:core-player-closed")
+          );
+        }
+      },
+      []
+    );
+
+  const value = useMemo(() => ({
+    play, playVidSrc, playEmbedSu, playVidCore, playExtraEmbed, playOnlyFlix, playSavedEmbed, playWebtor, playWebTorrent, prepare, close, hasRd, hasDebrid, isOpen: Boolean(source),
+  }), [play, playVidSrc, playEmbedSu, playVidCore, playExtraEmbed, playOnlyFlix, playSavedEmbed, playWebtor, playWebTorrent, prepare, close, hasRd, hasDebrid, source]);
+
+  return (
+    <PlayerContext.Provider value={value}>
+      {children}
+      <PlayerPortalRenderer
+        source={source}
+        vidSrcEmbed={vidSrcEmbed}
+        magnetPlayer={magnetPlayer}
+        close={close}
+        setVidSrcEmbed={setVidSrcEmbed}
+        setMagnetPlayer={setMagnetPlayer}
+        onOpenSources={() => {
+          // Switch from an iframe to Media God's player and rediscover sources.
+          // Never open a second player behind an active embed.
+          void play({
+            ...source,
+            sources: [],
+            completeSources: [],
+            discoveredSources: [],
+            src: "",
+            url: "",
+            video_url: "",
+            skipRdLookup: false,
+            skipAddonLookup: false,
+            noRd: false,
+            preferRd: true,
+            resumeFromHistory: true,
+            verifiedPlaybackPolicy: "strict",
+          });
+        }}
+      />
+    </PlayerContext.Provider>
+  );
+}
+
+export function usePlayer() {
+  const context =
+    useContext(
+      PlayerContext
+    );
+
+  if (!context) {
+    throw new Error(
+      "usePlayer must be used within a PlayerProvider"
+    );
+  }
+
+  return context;
+}
+
+usePlayer.displayName =
+  "usePlayer";
+
+export const DEMO_VIDEO =
+  "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+
+/**
+ * Build explicit media sources supplied by catalogue/detail surfaces.
+ *
+ * Watch-provider links (Netflix, Prime Video, Disney+, etc.) are discovery
+ * metadata, not Media God playback sources. They already have their own
+ * "Where to Watch" UI and must never enter the player pool, because a normal
+ * HTTPS provider page can otherwise look "ready" to the browser while torrent
+ * sources are still being prepared. Trailers are likewise kept outside the
+ * film/episode playback pool and are launched only by explicit trailer UI.
+ *
+ * @param {{ trailerUrl?: any, providers?: any[], [key: string]: any }} input
+ */
+export function buildMediaSources({
+  providers: _providers,
+} = {}) {
+  return [];
+}

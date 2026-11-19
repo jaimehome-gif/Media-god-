@@ -1,0 +1,1461 @@
+import { useEffect, useRef } from "react";
+import {
+  isAndroidMobileRuntime,
+  isFireTvRuntime,
+} from "@/components/mg/runtimePlatform";
+import { tapOnlyFlixForRemote } from "@/components/mg/onlyFlixRemoteActions";
+import { createFireTvFocusRefreshScheduler } from "./fireTvFocusWork";
+
+const FOCUSABLE = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[role="button"]:not([aria-disabled="true"])',
+  '[role="menuitem"]:not([aria-disabled="true"])',
+  '[role="option"]:not([aria-disabled="true"])',
+  '[role="tab"]:not([aria-disabled="true"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+const isFireTv = () =>
+  !isAndroidMobileRuntime() && isFireTvRuntime();
+
+const keyCode = (event) =>
+  Number(event?.keyCode || event?.which || 0);
+
+const keyName = (event) =>
+  String(event?.key || event?.code || "");
+
+const directionFromEvent = (event) => {
+  const key = keyName(event);
+  const code = keyCode(event);
+
+  if (key === "ArrowUp" || code === 19 || code === 38) {
+    return "up";
+  }
+
+  if (key === "ArrowDown" || code === 20 || code === 40) {
+    return "down";
+  }
+
+  if (key === "ArrowLeft" || code === 21 || code === 37) {
+    return "left";
+  }
+
+  if (key === "ArrowRight" || code === 22 || code === 39) {
+    return "right";
+  }
+
+  return null;
+};
+
+const isSelectKey = (event) => {
+  const key = keyName(event);
+  const code = keyCode(event);
+
+  return (
+    key === "Enter" ||
+    key === "NumpadEnter" ||
+    key === "Select" ||
+    key === "Accept" ||
+    code === 23 ||
+    code === 66 ||
+    code === 13
+  );
+};
+
+const mediaActionFromEvent = (event) => {
+  const key = keyName(event);
+  const code = keyCode(event);
+
+  if (key === "MediaPlayPause" || code === 85 || code === 179) {
+    return "playpause";
+  }
+
+  if (key === "MediaPlay" || code === 126) {
+    return "play";
+  }
+
+  if (key === "MediaPause" || code === 127) {
+    return "pause";
+  }
+
+  if (key === "MediaRewind" || code === 89 || code === 227) {
+    return "rewind";
+  }
+
+  if (key === "MediaFastForward" || code === 90 || code === 228) {
+    return "fastforward";
+  }
+
+  return null;
+};
+
+const visible = (element) => {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (
+    element.hidden ||
+    element.hasAttribute("disabled") ||
+    element.getAttribute("aria-disabled") === "true" ||
+    element.getAttribute("aria-hidden") === "true"
+  ) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (rect.width < 2 || rect.height < 2) {
+    return false;
+  }
+
+  /*
+   * A child can report opacity:1 even when a parent control layer is
+   * opacity:0. Fire TV was therefore moving focus onto buttons that were
+   * visually hidden. Walk the ancestor chain so only genuinely visible
+   * controls participate in D-pad navigation.
+   */
+  let node = element;
+
+  while (node instanceof HTMLElement) {
+    if (
+      node.hidden ||
+      node.getAttribute("aria-hidden") === "true"
+    ) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(node);
+
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      Number(style.opacity || 1) <= 0.03
+    ) {
+      return false;
+    }
+
+    node = node.parentElement;
+  }
+
+  return window.getComputedStyle(element).pointerEvents !== "none";
+};
+
+const topOverlay = () => {
+  const player = Array.from(
+    document.querySelectorAll(".fixed.inset-0")
+  )
+    .filter(
+      (element) =>
+        visible(element) &&
+        (
+          element.classList.contains("bg-black/95") ||
+          element.querySelector(
+            'button[aria-label="Back to main menu"]'
+          )
+        )
+    )
+    .pop();
+
+  if (player instanceof HTMLElement) {
+    return player;
+  }
+
+  const overlays = Array.from(
+    document.querySelectorAll(
+      '[role="dialog"], [aria-modal="true"], .fixed.inset-0'
+    )
+  ).filter(visible);
+
+  if (!overlays.length) {
+    return null;
+  }
+
+  return overlays
+    .map((element, index) => {
+      const z = Number(window.getComputedStyle(element).zIndex);
+
+      return {
+        element,
+        index,
+        z: Number.isFinite(z) ? z : 0,
+      };
+    })
+    .sort((a, b) =>
+      a.z === b.z
+        ? a.index - b.index
+        : a.z - b.z
+    )
+    .pop()?.element || null;
+};
+
+const focusables = (scope) =>
+  Array.from(scope?.querySelectorAll?.(FOCUSABLE) || [])
+    .filter(visible);
+
+const focusElement = (element) => {
+  if (!(element instanceof HTMLElement) || !visible(element)) {
+    return false;
+  }
+
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
+
+  try {
+    element.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "auto",
+    });
+  } catch {
+    // Focus still succeeded.
+  }
+
+  return true;
+};
+
+const centre = (element) => {
+  const rect = element.getBoundingClientRect();
+
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+};
+
+const directionalTarget = (current, candidates, direction) => {
+  if (!(current instanceof HTMLElement)) {
+    return candidates[0] || null;
+  }
+
+  const from = centre(current);
+  let best = null;
+  let bestScore = Infinity;
+
+  for (const candidate of candidates) {
+    if (candidate === current) {
+      continue;
+    }
+
+    const to = centre(candidate);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+
+    if (direction === "left" && dx >= -2) continue;
+    if (direction === "right" && dx <= 2) continue;
+    if (direction === "up" && dy >= -2) continue;
+    if (direction === "down" && dy <= 2) continue;
+
+    const primary =
+      direction === "left" || direction === "right"
+        ? Math.abs(dx)
+        : Math.abs(dy);
+
+    const secondary =
+      direction === "left" || direction === "right"
+        ? Math.abs(dy)
+        : Math.abs(dx);
+
+    const score = primary + secondary * 2.25;
+
+    if (score < bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+
+  return best;
+};
+
+const nearestByX = (source, candidates) => {
+  if (!(source instanceof HTMLElement) || !candidates.length) {
+    return candidates[0] || null;
+  }
+
+  const sourceX = centre(source).x;
+
+  return [...candidates].sort(
+    (a, b) =>
+      Math.abs(centre(a).x - sourceX) -
+      Math.abs(centre(b).x - sourceX)
+  )[0] || null;
+};
+
+const activeSidebarTarget = () => {
+  const buttons = Array.from(
+    document.querySelectorAll(
+      '.mg-fire-tv-nav button:not([disabled])'
+    )
+  ).filter(visible);
+
+  return (
+    buttons.find((button) =>
+      String(button.className || "").includes("text-mg-green")
+    ) ||
+    buttons[0] ||
+    null
+  );
+};
+
+const rowAwareTarget = (current, candidates, direction) => {
+  if (!(current instanceof HTMLElement)) {
+    return candidates[0] || null;
+  }
+
+  const usable = candidates.filter(
+    (candidate) => candidate !== current && visible(candidate)
+  );
+
+  if (!usable.length) {
+    return null;
+  }
+
+  const currentRect = current.getBoundingClientRect();
+  const from = centre(current);
+  const horizontalBand = Math.max(
+    22,
+    Math.min(64, currentRect.height * 0.7 + 12)
+  );
+
+  if (direction === "left" || direction === "right") {
+    const horizontal = usable
+      .map((candidate) => {
+        const to = centre(candidate);
+        const dx = to.x - from.x;
+        const dy = Math.abs(to.y - from.y);
+
+        if (direction === "left" && dx >= -2) return null;
+        if (direction === "right" && dx <= 2) return null;
+        if (dy > horizontalBand) return null;
+
+        return {
+          candidate,
+          score: Math.abs(dx) + dy * 4,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.score - b.score);
+
+    return horizontal[0]?.candidate || null;
+  }
+
+  const verticalThreshold = Math.max(
+    10,
+    Math.min(30, currentRect.height * 0.35)
+  );
+  const vertical = usable
+    .map((candidate) => {
+      const to = centre(candidate);
+      const dx = Math.abs(to.x - from.x);
+      const dy = to.y - from.y;
+
+      if (direction === "up" && dy >= -verticalThreshold) return null;
+      if (direction === "down" && dy <= verticalThreshold) return null;
+
+      return {
+        candidate,
+        primary: Math.abs(dy),
+        x: dx,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.primary - b.primary || a.x - b.x);
+
+  if (!vertical.length) {
+    return null;
+  }
+
+  /*
+   * Move to the nearest visual row first, then choose the control in that
+   * row whose horizontal position most closely matches the current control.
+   * This prevents D-pad Down from skipping an entire row just because a
+   * diagonally placed control happened to have a slightly better raw distance.
+   */
+  const nearestRowDistance = vertical[0].primary;
+  const rowTolerance = Math.max(26, currentRect.height * 0.8);
+  const nearestRow = vertical.filter(
+    (entry) => entry.primary <= nearestRowDistance + rowTolerance
+  );
+
+  nearestRow.sort((a, b) => a.x - b.x || a.primary - b.primary);
+
+  return nearestRow[0]?.candidate || vertical[0]?.candidate || null;
+};
+
+const tvShowsRemoteTarget = (current, direction) => {
+  const view = document.querySelector(
+    '[data-mg-tv-shows-view="true"]'
+  );
+
+  if (
+    !(view instanceof HTMLElement) ||
+    !visible(view) ||
+    !(current instanceof HTMLElement) ||
+    !view.contains(current)
+  ) {
+    return null;
+  }
+
+  const categoryRow = view.querySelector(
+    '[data-mg-tv-category-row="true"]'
+  );
+  const categories = categoryRow instanceof HTMLElement
+    ? focusables(categoryRow).filter(
+        (item) => String(item.tagName || "").toLowerCase() === "button"
+      )
+    : [];
+  const search = view.querySelector(
+    '[data-mg-tv-search="true"] input'
+  );
+  const filterRow = view.querySelector(
+    '[data-mg-tv-filter-row="true"]'
+  );
+  const filters = filterRow instanceof HTMLElement
+    ? Array.from(filterRow.querySelectorAll("select")).filter(visible)
+    : [];
+  const cards = Array.from(
+    view.querySelectorAll(
+      '[data-mg-tv-show-card="true"] button[aria-label^="Open "]'
+    )
+  ).filter(visible);
+
+  const categoryIndex = categories.indexOf(current);
+
+  if (categoryIndex >= 0) {
+    if (direction === "left") {
+      return categories[categoryIndex - 1] || null;
+    }
+
+    if (direction === "right") {
+      return categories[categoryIndex + 1] || current;
+    }
+
+    if (direction === "down") {
+      return search instanceof HTMLElement && visible(search)
+        ? search
+        : filters[0] || cards[0] || current;
+    }
+
+    if (direction === "up") {
+      return current;
+    }
+  }
+
+  if (search instanceof HTMLElement && current === search) {
+    if (direction === "up") {
+      return (
+        categories.find(
+          (item) => item.getAttribute("aria-pressed") === "true"
+        ) ||
+        categories[0] ||
+        current
+      );
+    }
+
+    if (direction === "down") {
+      return filters[0] || cards[0] || current;
+    }
+
+    return null;
+  }
+
+  const filterIndex =
+    current instanceof HTMLSelectElement
+      ? filters.indexOf(current)
+      : -1;
+
+  if (filterIndex >= 0) {
+    if (direction === "left") {
+      return filters[filterIndex - 1] || null;
+    }
+
+    if (direction === "right") {
+      return filters[filterIndex + 1] || current;
+    }
+
+    if (direction === "up") {
+      return search instanceof HTMLElement && visible(search)
+        ? search
+        : categories[0] || current;
+    }
+
+    if (direction === "down") {
+      const firstRowTop = cards[0]?.getBoundingClientRect?.().top;
+      const firstRow = Number.isFinite(firstRowTop)
+        ? cards.filter(
+            (card) =>
+              Math.abs(card.getBoundingClientRect().top - firstRowTop) < 24
+          )
+        : cards;
+
+      return nearestByX(current, firstRow) || current;
+    }
+  }
+
+  if (cards.includes(current)) {
+    const cardTarget = directionalTarget(current, cards, direction);
+
+    if (cardTarget) {
+      return cardTarget;
+    }
+
+    if (direction === "up") {
+      return nearestByX(current, filters) ||
+        (search instanceof HTMLElement && visible(search) ? search : current);
+    }
+
+    if (direction === "left") {
+      return null;
+    }
+
+    return current;
+  }
+
+  return null;
+};
+
+const liveTvRemoteTarget = (current, direction) => {
+  const view = document.querySelector(
+    '[data-mg-live-tv-view="true"]'
+  );
+
+  if (
+    !(view instanceof HTMLElement) ||
+    !visible(view) ||
+    !(current instanceof HTMLElement) ||
+    !view.contains(current)
+  ) {
+    return null;
+  }
+
+  const categoryRow = view.querySelector(
+    '[data-mg-live-tv-category-row="true"]'
+  );
+  const categories = categoryRow instanceof HTMLElement
+    ? focusables(categoryRow).filter(
+        (item) => String(item.tagName || "").toLowerCase() === "button"
+      )
+    : [];
+  const search = view.querySelector(
+    '[data-mg-live-tv-search="true"] input'
+  );
+  const controlsRoot = view.querySelector(
+    '[data-mg-live-tv-controls="true"]'
+  );
+  const controls = controlsRoot instanceof HTMLElement
+    ? focusables(controlsRoot).filter((item) => item !== search)
+    : [];
+  const cards = Array.from(
+    view.querySelectorAll(
+      '[data-mg-live-tv-card="true"] > button[data-mg-live-tv-key], [data-mg-live-tv-guide="true"] button[data-mg-live-tv-key]'
+    )
+  ).filter(visible);
+
+  const categoryIndex = categories.indexOf(current);
+
+  if (categoryIndex >= 0) {
+    const columns = 4;
+    const rowStart = Math.floor(categoryIndex / columns) * columns;
+    const rowEnd = Math.min(categories.length - 1, rowStart + columns - 1);
+
+    if (direction === "left") {
+      return categoryIndex > rowStart ? categories[categoryIndex - 1] : null;
+    }
+
+    if (direction === "right") {
+      return categoryIndex < rowEnd ? categories[categoryIndex + 1] : current;
+    }
+
+    if (direction === "up") {
+      return categories[categoryIndex - columns] || current;
+    }
+
+    if (direction === "down") {
+      return (
+        categories[categoryIndex + columns] ||
+        (search instanceof HTMLElement && visible(search) ? search : null) ||
+        controls[0] ||
+        cards[0] ||
+        current
+      );
+    }
+  }
+
+  if (search instanceof HTMLElement && current === search) {
+    if (direction === "up") {
+      const activeCategory = categories.find(
+        (item) => item.getAttribute("aria-pressed") === "true"
+      );
+      return activeCategory || categories[0] || current;
+    }
+
+    if (direction === "down") {
+      return nearestByX(search, controls) || controls[0] || cards[0] || current;
+    }
+
+    return null;
+  }
+
+  const controlIndex = controls.indexOf(current);
+
+  if (controlIndex >= 0) {
+    if (direction === "left") {
+      return controls[controlIndex - 1] || null;
+    }
+
+    if (direction === "right") {
+      return controls[controlIndex + 1] || current;
+    }
+
+    if (direction === "up") {
+      return search instanceof HTMLElement && visible(search)
+        ? search
+        : categories[0] || current;
+    }
+
+    if (direction === "down") {
+      return nearestByX(current, cards) || cards[0] || current;
+    }
+  }
+
+  if (cards.includes(current)) {
+    const cardTarget = directionalTarget(current, cards, direction);
+
+    if (cardTarget) {
+      return cardTarget;
+    }
+
+    if (direction === "up") {
+      return nearestByX(current, controls) ||
+        (search instanceof HTMLElement && visible(search) ? search : current);
+    }
+
+    if (direction === "left") {
+      return null;
+    }
+
+    return current;
+  }
+
+  return null;
+};
+
+const playerOpen = () => {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const player = document.querySelector(
+    '[data-mg-player-root="true"]'
+  );
+
+  return player instanceof HTMLElement && visible(player);
+};
+
+const activeVideo = () => {
+  const player = document.querySelector('[data-mg-player-root="true"]');
+  const scope =
+    player instanceof HTMLElement && visible(player)
+      ? player
+      : topOverlay();
+
+  if (scope instanceof HTMLElement) {
+    const media = Array.from(
+      scope.querySelectorAll("video")
+    ).filter(visible);
+
+    if (media.length) {
+      return media[media.length - 1];
+    }
+  }
+
+  return null;
+};
+
+const runMediaAction = (action) => {
+  const video = activeVideo();
+
+  if (!(video instanceof HTMLMediaElement)) {
+    return false;
+  }
+
+  if (action === "playpause") {
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+
+    return true;
+  }
+
+  if (action === "play") {
+    video.play().catch(() => {});
+    return true;
+  }
+
+  if (action === "pause") {
+    video.pause();
+    return true;
+  }
+
+  if (action === "rewind") {
+    try {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+    } catch {
+      // Ignore non-seekable streams.
+    }
+
+    return true;
+  }
+
+  if (action === "fastforward") {
+    try {
+      video.currentTime = Math.min(
+        Number.isFinite(video.duration)
+          ? video.duration
+          : video.currentTime + 10,
+        video.currentTime + 10
+      );
+    } catch {
+      // Ignore non-seekable streams.
+    }
+
+    return true;
+  }
+
+  return false;
+};
+
+export default function FireTvRemote() {
+  const lastScopeRef = useRef(null);
+  const initialHomeFocusedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    /*
+     * IMPORTANT:
+     * This component deliberately does NOT alter the viewport and does NOT
+     * handle the physical Back button. Stable home navigation lives in
+     * fireTvStableMode.js and Back is owned centrally by main.jsx.
+     *
+     * Its only job now is D-pad/select/media handling inside overlays such as
+     * details, episode selectors and the video player.
+     */
+    const activateTvMode = () => {
+      if (!isFireTv()) return;
+      document.documentElement.classList.add("mg-fire-tv-mode");
+      document.body?.classList.add("mg-fire-tv-mode");
+    };
+
+    activateTvMode();
+
+    const focusOverlay = () => {
+      if (!isFireTv()) {
+        return;
+      }
+
+      const updatePrompt = document.querySelector('[data-mg-fire-tv-update="true"]');
+      if (updatePrompt instanceof HTMLElement && visible(updatePrompt)) {
+        if (lastScopeRef.current === updatePrompt) return;
+        lastScopeRef.current = updatePrompt;
+        window.setTimeout(() => {
+          const primary = updatePrompt.querySelector('[data-mg-update-primary="true"]:not([disabled])');
+          focusElement(primary || focusables(updatePrompt)[0]);
+        }, 30);
+        return;
+      }
+
+      if (playerOpen()) {
+        const scope = document.querySelector('[data-mg-player-root="true"]');
+
+        if (!(scope instanceof HTMLElement)) {
+          lastScopeRef.current = null;
+          return;
+        }
+
+        /*
+         * Embed players start focused on their stage. The native OnlyFlix
+         * adapter routes physical keys to this document even after the child
+         * frame takes focus. D-pad moves the pointer and Select taps its exact
+         * position; physical Back remains owned by the app's exit handler.
+         */
+        const embedIframe = scope.querySelector(
+          '[data-mg-embed-iframe="true"]'
+        );
+
+        if (embedIframe instanceof HTMLElement && visible(embedIframe)) {
+          if (lastScopeRef.current === scope) {
+            return;
+          }
+
+          lastScopeRef.current = scope;
+
+          window.setTimeout(() => {
+            focusElement(embedIframe);
+          }, 40);
+
+          return;
+        }
+
+        const mediaControls = scope.querySelector(
+          '[data-mg-player-controls="true"]'
+        );
+        const active = document.activeElement;
+
+        /*
+         * VideoPlayer can mount its transport controls a moment after the
+         * outer Exit/source chrome. If Exit received focus first, move focus
+         * to the real Play/Pause control as soon as the transport layer is
+         * available so the TV remote starts from the media controls instead
+         * of pinning the top box on screen.
+         */
+        if (lastScopeRef.current === scope) {
+          /*
+           * Do not steal focus back to Play/Pause when the viewer deliberately
+           * moved to Source, Torrent file, subtitles, audio or another player
+           * control. Only recover focus when it has genuinely escaped the
+           * player or the previously focused control is no longer visible.
+           */
+          if (
+            mediaControls instanceof HTMLElement &&
+            (!(active instanceof HTMLElement) ||
+              !scope.contains(active) ||
+              !visible(active))
+          ) {
+            const transport =
+              mediaControls.querySelector(
+                'button[aria-label="Pause"], button[aria-label="Play"]'
+              ) ||
+              focusables(mediaControls)[0] ||
+              null;
+
+            window.setTimeout(() => {
+              focusElement(transport);
+            }, 30);
+          }
+
+          return;
+        }
+
+        lastScopeRef.current = scope;
+
+        const preferred =
+          scope.querySelector(
+            '[data-mg-player-controls="true"] button[aria-label="Pause"], [data-mg-player-controls="true"] button[aria-label="Play"], select[aria-label="Choose playback source"], select[aria-label="Choose file"], button[data-mg-player-exit="true"], button[aria-label="Exit player"]'
+          ) ||
+          focusables(scope)[0] ||
+          null;
+
+        window.setTimeout(() => {
+          focusElement(preferred);
+        }, 40);
+
+        return;
+      }
+
+      const scope = topOverlay();
+
+      if (!(scope instanceof HTMLElement)) {
+        lastScopeRef.current = null;
+        if (!initialHomeFocusedRef.current) {
+          const home = document.querySelector('[data-mg-focus-key="nav:home"]');
+          if (focusElement(home)) initialHomeFocusedRef.current = true;
+        }
+        return;
+      }
+
+      if (lastScopeRef.current === scope) {
+        return;
+      }
+
+      // A selector list uses DOM order, not the order of the selectors.
+      // Wait for TV episode loading before choosing the primary action.
+      const detailPrimary = scope.querySelector('button[data-mg-detail-primary="true"]');
+      if (detailPrimary?.disabled) return;
+
+      lastScopeRef.current = scope;
+
+      const preferred =
+        (detailPrimary && visible(detailPrimary) ? detailPrimary : null) ||
+        scope.querySelector(
+          '[data-mg-update-primary="true"]:not([disabled]), [data-mg-search-dialog="true"] input[aria-label="Search"], button[data-mg-player-exit="true"], button[aria-label="Exit player"], button[aria-label="Back to main menu"], button[data-mg-detail-primary="true"], button[aria-label="Back"], button[aria-label="Close details"], button[aria-label="Close search"]'
+        ) ||
+        focusables(scope)[0] ||
+        null;
+
+      window.setTimeout(() => {
+        focusElement(preferred);
+      }, 30);
+    };
+
+    const keepFocusedControlVisible = (event) => {
+      if (!isFireTv()) {
+        return;
+      }
+
+      const target = event?.target;
+      if (!(target instanceof HTMLElement) || !visible(target)) {
+        return;
+      }
+
+      const rect = target.getBoundingClientRect();
+      const margin = 18;
+      const offscreen =
+        rect.top < margin ||
+        rect.left < margin ||
+        rect.bottom > window.innerHeight - margin ||
+        rect.right > window.innerWidth - margin;
+
+      if (!offscreen) {
+        return;
+      }
+
+      try {
+        target.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "auto",
+        });
+      } catch {
+        // Fire TV WebView will still keep the focused element selected.
+      }
+    };
+
+    const onKeyDown = (event) => {
+      if (!isFireTv()) {
+        return;
+      }
+
+      const direction = directionFromEvent(event);
+      const selectKey = isSelectKey(event);
+      const currentFocus = document.activeElement;
+      const menuKey = keyName(event) === "ContextMenu" ||
+        keyName(event) === "Menu" || keyCode(event) === 82;
+      const consume = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      };
+
+      /*
+       * Fire TV's Menu key opens the complete movie/episode provider strip.
+       * The embedded player normally owns D-pad input as a mouse pointer;
+       * keyboard focus on the strip must take precedence until Down returns
+       * to the iframe. Never change which player/source is selected unless
+       * the viewer explicitly presses Select on a provider.
+       */
+      const updateDialog = document.querySelector('[data-mg-fire-tv-update="true"]');
+      const updateIsOpen = updateDialog instanceof HTMLElement && visible(updateDialog);
+      const embedded = updateIsOpen ? null : document.querySelector(
+        '[data-mg-embedded-remote-player="true"]'
+      );
+      const providerBar = embedded?.querySelector(
+        '[data-mg-movie-player-backups="true"], [data-mg-episode-player-backups="true"]'
+      );
+      const providerButtons = providerBar instanceof HTMLElement
+        ? Array.from(providerBar.querySelectorAll("button:not([disabled])")).filter(visible)
+        : [];
+      const fullscreenToggle = embedded?.querySelector(
+        '[data-mg-safe-fullscreen-toggle="true"]'
+      );
+      const headerFullscreen = embedded?.querySelector(
+        '[data-mg-embedded-top-fullscreen="true"]'
+      );
+      const iframe = embedded?.querySelector('[data-mg-embed-iframe="true"]');
+      const sourcesButton = embedded?.querySelector(
+        '[data-mg-embedded-open-sources="true"]'
+      );
+      const headerButtons = embedded instanceof HTMLElement
+        ? Array.from(embedded.querySelectorAll('[data-mg-player-topbar="true"] button:not([disabled])')).filter(visible)
+        : [];
+      const embedIsFullscreen = !!embedded?.querySelector('[data-mg-safe-embed-fullscreen="true"]');
+      const fullScreenFocused = fullscreenToggle instanceof HTMLElement &&
+        currentFocus === fullscreenToggle;
+      // Fire TV remote cannot naturally Tab from a cross-origin iframe to the
+      // overlay's Fullscreen control. Menu and Down offer an explicit path.
+      if (fullScreenFocused && (direction || selectKey)) {
+        consume();
+        if (selectKey && !event.repeat) currentFocus.click();
+        else if (direction === "down") focusElement(iframe);
+        else if (embedIsFullscreen) return;
+        else if (direction === "up" || direction === "left")
+          focusElement(providerButtons[0] || sourcesButton || iframe);
+        else if (direction === "right") focusElement(sourcesButton || iframe);
+        return;
+      }
+      if (embedded instanceof HTMLElement && visible(embedded) && menuKey &&
+          (providerButtons.length || headerFullscreen instanceof HTMLElement || fullscreenToggle instanceof HTMLElement)) {
+        consume();
+        if (embedIsFullscreen) {
+          focusElement(fullscreenToggle);
+          return;
+        }
+        const focusedProvider = providerBar instanceof HTMLElement &&
+          providerBar.contains(currentFocus);
+        if (focusedProvider) {
+          // Second Menu reaches Sources, not the third-party iframe.
+          focusElement(sourcesButton || headerButtons[0] || iframe);
+        } else if (headerButtons.includes(currentFocus)) {
+          focusElement(headerFullscreen || iframe || providerButtons[0]);
+        } else {
+          const activeProvider = providerButtons.find(button => button.getAttribute("aria-pressed") === "true");
+          focusElement(activeProvider || providerButtons[0] || headerFullscreen || iframe);
+        }
+        return;
+      }
+      if (providerButtons.length && providerBar.contains(currentFocus) &&
+          (direction || selectKey)) {
+        consume();
+        const index = Math.max(0, providerButtons.indexOf(currentFocus));
+        if (direction === "left" || direction === "right") {
+          const step = direction === "left" ? -1 : 1;
+          focusElement(providerButtons[(index + step + providerButtons.length) % providerButtons.length]);
+        } else if (direction === "down") {
+          focusElement(embedIsFullscreen ? fullscreenToggle : iframe);
+        } else if (direction === "up") {
+          focusElement(sourcesButton || providerButtons[index]);
+        } else if (selectKey && !event.repeat) {
+          currentFocus.click();
+        }
+        return;
+      }
+
+      // Header actions must run before the iframe pointer consumes Select.
+      // This includes Sources, Try next and Back for both movies and episodes.
+      if (headerButtons.includes(currentFocus) && (direction || selectKey)) {
+        consume();
+        const index = headerButtons.indexOf(currentFocus);
+        if (selectKey && !event.repeat) currentFocus.click();
+        else if (direction === "left" || direction === "right") {
+          const step = direction === "left" ? -1 : 1;
+          focusElement(headerButtons[(index + step + headerButtons.length) % headerButtons.length]);
+        } else if (direction === "down") {
+          focusElement(providerButtons[0] || iframe);
+        }
+        return;
+      }
+
+      if (updateIsOpen &&
+          (direction || selectKey || menuKey) && !updateDialog.contains(currentFocus)) {
+        const primary = updateDialog.querySelector('[data-mg-update-primary="true"]:not([disabled])');
+        if (focusElement(primary || updateDialog.querySelector('button:not([disabled])'))) {
+          consume();
+          return;
+        }
+      }
+
+      // D-pad Up at the *top edge* of the embedded picture enters the
+      // episode/movie provider strip. This makes the buttons reachable even
+      // on remotes with no Menu key; normal Up movement inside the iframe
+      // still works until the visible crosshair reaches that edge.
+      if (embedded instanceof HTMLElement && providerButtons.length &&
+          direction === "up" && currentFocus === iframe &&
+          iframe instanceof HTMLElement) {
+        const pointer = embedded.querySelector('[data-mg-embed-pointer="true"]');
+        const frameRect = iframe.getBoundingClientRect();
+        const pointerRect = pointer?.getBoundingClientRect?.();
+        if (pointerRect && frameRect.height > 0 &&
+            pointerRect.top <= frameRect.top + Math.max(28, frameRect.height * 0.1)) {
+          consume();
+          focusElement(providerButtons.find(button => button.getAttribute("aria-pressed") === "true") || providerButtons[0]);
+          return;
+        }
+      }
+
+      // Back from the dedicated fullscreen button and Source chrome stays
+      // accessible; otherwise the iframe cursor still owns playback keys.
+      const mediaAction = mediaActionFromEvent(event);
+
+      if (!updateIsOpen &&
+          tapOnlyFlixForRemote({ mediaAction, selectKey, direction, repeat: event.repeat })) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      if (mediaAction && runMediaAction(mediaAction)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        window.dispatchEvent(
+          new CustomEvent("mg:player-reveal-controls")
+        );
+
+        return;
+      }
+
+      // A visible update modal owns remote focus even when a WebView player
+      // remains mounted underneath it. No background Play/Source interaction.
+      const player = updateIsOpen
+        ? null
+        : document.querySelector('[data-mg-player-root="true"]');
+      const overlay = topOverlay();
+      const appMain = document.querySelector("#root main");
+      const scope =
+        updateIsOpen
+          ? updateDialog
+          : player instanceof HTMLElement && visible(player)
+          ? player
+          : overlay instanceof HTMLElement
+            ? overlay
+            : appMain instanceof HTMLElement
+              ? document.querySelector("#root")
+              : null;
+
+      if (!(scope instanceof HTMLElement)) {
+        return;
+      }
+
+      /*
+       * main.jsx owns Back before this handler sees it. When no overlay is
+       * open, this provides generic spatial navigation for Settings, Addons,
+       * Downloads and every other authenticated main-app control that the
+       * deterministic row navigator deliberately does not own.
+       */
+      /*
+       * When playback chrome has auto-hidden, the first D-pad/OK press should
+       * wake it rather than seek, change volume or jump to an invisible
+       * control. MediaPlayerControls listens for this event and re-renders the
+       * controls; then focus lands on Play/Pause in the same interaction.
+       */
+      if (
+        player instanceof HTMLElement &&
+        player.dataset.mgControlsVisible === "false" &&
+        (direction || selectKey)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        window.dispatchEvent(
+          new CustomEvent("mg:player-reveal-controls")
+        );
+
+        window.setTimeout(() => {
+          const currentPlayer = document.querySelector(
+            '[data-mg-player-root="true"]'
+          );
+          const preferred = currentPlayer?.querySelector(
+            '[data-mg-player-controls="true"] button[aria-label="Pause"], [data-mg-player-controls="true"] button[aria-label="Play"]'
+          );
+          focusElement(preferred);
+        }, 55);
+
+        return;
+      }
+
+      const current =
+        document.activeElement instanceof HTMLElement &&
+        scope.contains(document.activeElement) &&
+        visible(document.activeElement)
+          ? document.activeElement
+          : null;
+      const currentTag = String(current?.tagName || "").toLowerCase();
+
+      /*
+       * OK opens native select choosers. Arrow keys stay available to Media
+       * God's spatial navigator so a source/torrent selector never traps the
+       * Fire Stick remote. For sliders, Left/Right still adjust the value
+       * natively while Up/Down move to the next row of controls.
+       */
+      if (currentTag === "select" && selectKey) {
+        return;
+      }
+
+      const currentType =
+        current instanceof HTMLInputElement
+          ? String(current.type || "").toLowerCase()
+          : "";
+      const textEditable =
+        (currentTag === "input" &&
+          !["range", "button", "submit", "reset", "checkbox", "radio"].includes(
+            currentType
+          )) ||
+        currentTag === "textarea" ||
+        Boolean(current?.isContentEditable);
+
+      /* Text entry must keep Left/Right for moving the caret on every page. */
+      if (
+        textEditable &&
+        (direction === "left" || direction === "right")
+      ) {
+        return;
+      }
+
+      if (currentTag === "input" && currentType === "range") {
+        if (selectKey || direction === "left" || direction === "right") {
+          return;
+        }
+      }
+
+      if (direction) {
+        /*
+         * Sidebar D-pad Up/Down tracks the focused entry (not the currently
+         * open page); Right opens that entry and takes focus into its page.
+         * Left from the page is already handled by the existing sidebar
+         * return logic below.
+         */
+        const sidebar = current?.closest(".mg-fire-tv-nav");
+        if (sidebar instanceof HTMLElement && !document.querySelector('[aria-modal="true"]')) {
+          const navButtons = Array.from(sidebar.querySelectorAll("button:not([disabled])")).filter(visible);
+          const index = navButtons.indexOf(current);
+          if (index >= 0 && (direction === "up" || direction === "down")) {
+            const step = direction === "up" ? -1 : 1;
+            const next = navButtons[Math.max(0, Math.min(navButtons.length - 1, index + step))];
+            if (next && focusElement(next)) {
+              consume();
+              return;
+            }
+          }
+          if (index >= 0 && direction === "right") {
+            consume();
+            if (!event.repeat) current.click();
+            window.setTimeout(() => {
+              const main = document.querySelector("#root main");
+              if (!(main instanceof HTMLElement)) return;
+              const preferred = focusables(main)[0];
+              focusElement(preferred);
+            }, 100);
+            return;
+          }
+        }
+
+        const tvShowsView = document.querySelector(
+          '[data-mg-tv-shows-view="true"]'
+        );
+        const currentInsideTvShows =
+          tvShowsView instanceof HTMLElement &&
+          current instanceof HTMLElement &&
+          tvShowsView.contains(current);
+
+        /*
+         * TV Shows has a deliberate television focus path:
+         * categories -> search -> country/genre/year/language -> poster grid.
+         * Left/Right inside the search field remain native so the caret can be
+         * moved when the Fire TV keyboard/search box is in use.
+         */
+        if (
+          currentInsideTvShows &&
+          currentTag === "input" &&
+          (direction === "left" || direction === "right")
+        ) {
+          return;
+        }
+
+        if (currentInsideTvShows) {
+          const tvTarget = tvShowsRemoteTarget(current, direction);
+
+          if (tvTarget && focusElement(tvTarget)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+        }
+
+        const liveTvView = document.querySelector(
+          '[data-mg-live-tv-view="true"]'
+        );
+        const currentInsideLiveTv =
+          liveTvView instanceof HTMLElement &&
+          current instanceof HTMLElement &&
+          liveTvView.contains(current);
+
+        if (currentInsideLiveTv) {
+          const liveTvTarget = liveTvRemoteTarget(current, direction);
+
+          if (liveTvTarget && focusElement(liveTvTarget)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+        }
+
+        if (
+          player instanceof HTMLElement &&
+          (!(current instanceof HTMLElement) || !visible(current))
+        ) {
+          const preferred = player.querySelector(
+            '[data-mg-player-controls="true"] button[aria-label="Pause"], [data-mg-player-controls="true"] button[aria-label="Play"]'
+          );
+
+          if (focusElement(preferred)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+        }
+
+        if (!(player instanceof HTMLElement)) {
+          const structuredScope =
+            overlay instanceof HTMLElement && visible(overlay)
+              ? overlay
+              : appMain instanceof HTMLElement &&
+                  current instanceof HTMLElement &&
+                  appMain.contains(current)
+                ? appMain
+                : scope;
+          const structuredCandidates = focusables(structuredScope);
+          const structuredTarget = rowAwareTarget(
+            current,
+            structuredCandidates,
+            direction
+          );
+
+          if (structuredTarget && focusElement(structuredTarget)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+
+          /*
+           * At the left edge of a normal page, always return to the currently
+           * selected sidebar item instead of allowing browser/WebView focus to
+           * jump to an arbitrary off-row element. Dialogs stay self-contained.
+           */
+          if (
+            direction === "left" &&
+            !(overlay instanceof HTMLElement) &&
+            appMain instanceof HTMLElement &&
+            current instanceof HTMLElement &&
+            appMain.contains(current)
+          ) {
+            const sidebar = activeSidebarTarget();
+
+            if (sidebar && focusElement(sidebar)) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              return;
+            }
+          }
+
+          /* Stay on the current edge control instead of letting Fire OS scroll
+           * the whole page or pick an unpredictable native focus target. */
+          if (current instanceof HTMLElement) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+          }
+
+          return;
+        }
+
+        const mediaControls = player.querySelector(
+          '[data-mg-player-controls="true"]'
+        );
+        const mediaCandidates =
+          mediaControls instanceof HTMLElement
+            ? focusables(mediaControls)
+            : [];
+        const allCandidates = focusables(scope);
+        const candidates = [
+          ...mediaCandidates,
+          ...allCandidates.filter(
+            (candidate) => !mediaCandidates.includes(candidate)
+          ),
+        ];
+
+        const target = directionalTarget(
+          current,
+          candidates,
+          direction
+        );
+
+        if (target && focusElement(target)) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        }
+
+        return;
+      }
+
+      if (isSelectKey(event)) {
+        const selected = document.activeElement;
+
+        if (
+          player instanceof HTMLElement &&
+          (!(selected instanceof HTMLElement) ||
+            !player.contains(selected) ||
+            !visible(selected))
+        ) {
+          const preferred = player.querySelector(
+            '[data-mg-player-controls="true"] button[aria-label="Pause"], [data-mg-player-controls="true"] button[aria-label="Play"]'
+          );
+
+          if (focusElement(preferred)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+          }
+
+          return;
+        }
+
+        if (
+          selected instanceof HTMLElement &&
+          scope.contains(selected) &&
+          visible(selected)
+        ) {
+          if (String(selected.tagName || "").toLowerCase() === "select") {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          selected.click();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("focusin", keepFocusedControlVisible, true);
+    window.addEventListener("mg:tv-remote-detected", activateTvMode);
+
+    // Movie posters and catalogue rows can create hundreds of mutations in
+    // one frame. Running a full overlay/focus scan for every mutation blocks
+    // Fire Stick key handling. Schedule ONLY the passive scan; D-pad/Select
+    // events remain synchronous and retain their original behaviour.
+    const scheduleFocusOverlay = createFireTvFocusRefreshScheduler(focusOverlay);
+    const observer = new MutationObserver(scheduleFocusOverlay);
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["disabled"],
+    });
+
+    focusOverlay();
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("focusin", keepFocusedControlVisible, true);
+      window.removeEventListener("mg:tv-remote-detected", activateTvMode);
+      observer.disconnect();
+      scheduleFocusOverlay.cancel();
+      document.documentElement.classList.remove("mg-fire-tv-mode");
+      document.body?.classList.remove("mg-fire-tv-mode");
+    };
+  }, []);
+
+  return null;
+}

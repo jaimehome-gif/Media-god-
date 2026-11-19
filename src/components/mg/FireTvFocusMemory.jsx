@@ -1,0 +1,1128 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { isFireTvRuntime } from "./runtimePlatform.js";
+
+const FOCUSABLE = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[role="button"]:not([aria-disabled="true"])',
+  '[role="menuitem"]:not([aria-disabled="true"])',
+  '[role="option"]:not([aria-disabled="true"])',
+  '[role="tab"]:not([aria-disabled="true"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+// Use the exact same Android TV / Fire TV device classification as the
+// main remote navigator. Previously this focus-memory component used its own
+// Fire-only user-agent check and skipped recovery on Google TV / Android boxes.
+const isFireTv = () => isFireTvRuntime();
+
+const visible = (
+  element,
+  stopAt = null
+) => {
+  if (
+    !(
+      element instanceof
+      HTMLElement
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    element.hasAttribute(
+      "disabled"
+    ) ||
+    element.getAttribute(
+      "aria-disabled"
+    ) === "true" ||
+    element.getAttribute(
+      "aria-hidden"
+    ) === "true"
+  ) {
+    return false;
+  }
+
+  const rect =
+    element.getBoundingClientRect();
+
+  if (
+    rect.width < 2 ||
+    rect.height < 2
+  ) {
+    return false;
+  }
+
+  let node =
+    element;
+
+  while (
+    node &&
+    node instanceof
+      HTMLElement
+  ) {
+    if (
+      node.hidden ||
+      node.hasAttribute(
+        "inert"
+      ) ||
+      node.getAttribute(
+        "aria-hidden"
+      ) === "true"
+    ) {
+      return false;
+    }
+
+    const style =
+      window.getComputedStyle(
+        node
+      );
+
+    if (
+      style.display ===
+        "none" ||
+      style.visibility ===
+        "hidden" ||
+      Number(
+        style.opacity ||
+          1
+      ) < 0.03 ||
+      style.pointerEvents ===
+        "none"
+    ) {
+      return false;
+    }
+
+    if (
+      node === stopAt ||
+      node ===
+        document.body
+    ) {
+      break;
+    }
+
+    node =
+      node.parentElement;
+  }
+
+  return true;
+};
+
+const topByStacking = (
+  elements
+) => {
+  if (!elements.length) {
+    return null;
+  }
+
+  const sorted =
+    elements
+      .map(
+        (
+          element,
+          index
+        ) => {
+          const z =
+            Number(
+              window.getComputedStyle(
+                element
+              ).zIndex
+            );
+
+          return {
+            element,
+            index,
+            z:
+              Number.isFinite(
+                z
+              )
+                ? z
+                : 0,
+          };
+        }
+      )
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          a.z ===
+          b.z
+            ? a.index -
+              b.index
+            : a.z -
+              b.z
+      );
+
+  return sorted[
+    sorted.length -
+      1
+  ]?.element || null;
+};
+
+const seasonPickerScope =
+  () => {
+    const close =
+      Array.from(
+        document.querySelectorAll(
+          'button[aria-label="Close season and episode picker"]'
+        )
+      ).find(
+        (
+          item
+        ) =>
+          visible(
+            item
+          )
+      );
+
+    if (!close) {
+      return null;
+    }
+
+    return (
+      close.closest(
+        ".absolute.inset-0"
+      ) ||
+      close.closest(
+        ".fixed.inset-0"
+      ) ||
+      close.closest(
+        '[role="dialog"]'
+      ) ||
+      close.parentElement
+    );
+  };
+
+const fullscreenScope =
+  () => {
+    const element =
+      document.querySelector(
+        '[data-mg-fullscreen="true"]'
+      );
+
+    return (
+      element instanceof
+        HTMLElement &&
+      visible(
+        element
+      )
+    )
+      ? element
+      : null;
+  };
+
+const popupScope =
+  () => {
+    const candidates =
+      Array.from(
+        document.querySelectorAll(
+          [
+            '[role="menu"]',
+            '[role="listbox"]',
+            '[data-radix-menu-content]',
+            '[data-radix-select-content]',
+            '[data-state="open"][role="menu"]',
+            '[data-state="open"][role="listbox"]',
+          ].join(",")
+        )
+      ).filter(
+        (
+          item
+        ) =>
+          visible(
+            item
+          )
+      );
+
+    return topByStacking(
+      candidates
+    );
+  };
+
+const modalScope =
+  () => {
+    const picker =
+      seasonPickerScope();
+
+    if (
+      picker &&
+      visible(
+        picker
+      )
+    ) {
+      return picker;
+    }
+
+    const fullscreen =
+      fullscreenScope();
+
+    if (fullscreen) {
+      return fullscreen;
+    }
+
+    const overlays =
+      Array.from(
+        document.querySelectorAll(
+          '[role="dialog"], [aria-modal="true"], .fixed.inset-0'
+        )
+      ).filter(
+        (
+          item
+        ) =>
+          visible(
+            item
+          ) &&
+          !item.hasAttribute(
+            "data-mg-global-back"
+          )
+      );
+
+    return topByStacking(
+      overlays
+    );
+  };
+
+const navigationScope =
+  () =>
+    modalScope() ||
+    popupScope() ||
+    document.body;
+
+const scopeForElement =
+  (
+    element
+  ) => {
+    if (
+      !(
+        element instanceof
+        HTMLElement
+      )
+    ) {
+      return document.body;
+    }
+
+    const scope =
+      navigationScope();
+
+    if (
+      scope instanceof
+        HTMLElement &&
+      scope.contains(
+        element
+      )
+    ) {
+      return scope;
+    }
+
+    return document.body;
+  };
+
+const focusables = (
+  scope
+) => {
+  if (
+    !(
+      scope instanceof
+      HTMLElement
+    )
+  ) {
+    return [];
+  }
+
+  return Array.from(
+    scope.querySelectorAll(
+      FOCUSABLE
+    )
+  ).filter(
+    (
+      item
+    ) =>
+      visible(
+        item,
+        scope
+      )
+  );
+};
+
+const normaliseText =
+  (
+    value
+  ) =>
+    String(
+      value ||
+        ""
+    )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim()
+      .slice(
+        0,
+        180
+      );
+
+const captureScroll =
+  (
+    element
+  ) => {
+    const ancestors =
+      [];
+
+    let node =
+      element?.parentElement ||
+      null;
+
+    while (
+      node &&
+      node instanceof
+        HTMLElement &&
+      node !==
+        document.body
+    ) {
+      if (
+        node.scrollWidth >
+          node.clientWidth +
+            2 ||
+        node.scrollHeight >
+          node.clientHeight +
+            2
+      ) {
+        ancestors.push({
+          element:
+            node,
+
+          left:
+            node.scrollLeft,
+
+          top:
+            node.scrollTop,
+        });
+      }
+
+      node =
+        node.parentElement;
+    }
+
+    return {
+      ancestors,
+
+      windowX:
+        window.scrollX ||
+        0,
+
+      windowY:
+        window.scrollY ||
+        0,
+    };
+  };
+
+const rowContextFor = (element) => {
+  if (!(element instanceof HTMLElement)) {
+    return {
+      rowLabel: "",
+      rowCardIndex: -1,
+    };
+  }
+
+  const row = element.closest('[data-mg-tv-row="true"]');
+
+  if (!(row instanceof HTMLElement)) {
+    return {
+      rowLabel: "",
+      rowCardIndex: -1,
+    };
+  }
+
+  const card = element.closest(
+    ".mg-fire-tv-card, .mg-fire-tv-resume-card"
+  );
+  const cards = Array.from(
+    row.querySelectorAll(".mg-fire-tv-card, .mg-fire-tv-resume-card")
+  ).filter((item) => visible(item, row));
+
+  return {
+    rowLabel: normaliseText(row.getAttribute("aria-label")),
+    rowCardIndex:
+      card instanceof HTMLElement
+        ? cards.indexOf(card)
+        : -1,
+  };
+};
+
+const rowFallbackTarget = (snapshot, scope) => {
+  if (!snapshot?.rowLabel || !(scope instanceof HTMLElement)) {
+    return null;
+  }
+
+  const row = Array.from(
+    scope.querySelectorAll('[data-mg-tv-row="true"]')
+  ).find(
+    (item) =>
+      item instanceof HTMLElement &&
+      visible(item, scope) &&
+      normaliseText(item.getAttribute("aria-label")) === snapshot.rowLabel
+  );
+
+  if (!(row instanceof HTMLElement)) {
+    return null;
+  }
+
+  const cards = Array.from(
+    row.querySelectorAll(".mg-fire-tv-card, .mg-fire-tv-resume-card")
+  ).filter((item) => visible(item, row));
+
+  if (cards.length > 0) {
+    const requested = Number(snapshot.rowCardIndex);
+    const index = Number.isInteger(requested) && requested >= 0
+      ? Math.min(requested, cards.length - 1)
+      : 0;
+    const card = cards[index];
+    const primary =
+      card.matches?.('[data-mg-card-primary="true"]') && visible(card, row)
+        ? card
+        : Array.from(
+            card.querySelectorAll('[data-mg-card-primary="true"]')
+          ).find((item) => visible(item, row));
+
+    if (primary) {
+      return primary;
+    }
+
+    const fallback = focusables(card)[0];
+    if (fallback) {
+      return fallback;
+    }
+  }
+
+  return focusables(row)[0] || null;
+};
+
+const snapshotFocus =
+  (
+    element,
+    scope
+  ) => {
+    if (
+      !(
+        element instanceof
+        HTMLElement
+      ) ||
+      !(
+        scope instanceof
+        HTMLElement
+      )
+    ) {
+      return null;
+    }
+
+    const focusKey = normaliseText(
+      element.getAttribute("data-mg-focus-key") ||
+      element.getAttribute("data-mg-live-tv-key")
+    );
+
+    // A stable focus key lets us relocate a control without scanning every
+    // catalogue button. Previously each focusin ran focusables(scope), which
+    // measured all posters/controls and their ancestor styles, and then
+    // rowContextFor() measured the whole row a second time. On a Fire Stick
+    // this blocked the next D-pad press even though the focused key is known.
+    // Preserve the full fallback search for unkeyed legacy controls.
+    const rowContext = focusKey
+      ? { rowLabel: "", rowCardIndex: -1 }
+      : rowContextFor(element);
+    // A full-body focusables() scan measures every poster/row on each
+    // unkeyed focus change and can block the Fire Stick remote for seconds.
+    // A live element reference, label, title, text and row fallback already
+    // restore main-page focus; keep positional fallback only inside small
+    // modal scopes, where it is reliable and inexpensive.
+    const fallbackIndex = focusKey || scope === document.body
+      ? -1 : focusables(scope).indexOf(element);
+
+    return {
+      element,
+
+      focusKey,
+
+      ariaLabel:
+        normaliseText(
+          element.getAttribute(
+            "aria-label"
+          )
+        ),
+
+      title:
+        normaliseText(
+          element.getAttribute(
+            "title"
+          )
+        ),
+
+      text:
+        normaliseText(
+          element.textContent
+        ),
+
+      tag:
+        String(
+          element.tagName ||
+            ""
+        ).toLowerCase(),
+
+      index: fallbackIndex,
+
+      rowLabel:
+        rowContext.rowLabel,
+
+      rowCardIndex:
+        rowContext.rowCardIndex,
+
+      scroll:
+        captureScroll(
+          element
+        ),
+    };
+  };
+
+const resolveSnapshot =
+  (
+    snapshot,
+    scope
+  ) => {
+    if (
+      !snapshot ||
+      !(
+        scope instanceof
+        HTMLElement
+      )
+    ) {
+      return null;
+    }
+
+    if (
+      snapshot.element instanceof
+        HTMLElement &&
+      snapshot.element.isConnected &&
+      scope.contains(
+        snapshot.element
+      ) &&
+      visible(
+        snapshot.element,
+        scope
+      )
+    ) {
+      return snapshot.element;
+    }
+
+    const items =
+      focusables(
+        scope
+      );
+
+    if (snapshot.focusKey) {
+      const byFocusKey =
+        items.find(
+          (item) =>
+            normaliseText(
+              item.getAttribute("data-mg-focus-key") ||
+                item.getAttribute("data-mg-live-tv-key")
+            ) === snapshot.focusKey
+        );
+
+      if (byFocusKey) {
+        return byFocusKey;
+      }
+    }
+
+    if (
+      snapshot.ariaLabel
+    ) {
+      const byLabel =
+        items.find(
+          (
+            item
+          ) =>
+            normaliseText(
+              item.getAttribute(
+                "aria-label"
+              )
+            ) ===
+            snapshot.ariaLabel
+        );
+
+      if (byLabel) {
+        return byLabel;
+      }
+    }
+
+    if (
+      snapshot.title
+    ) {
+      const byTitle =
+        items.find(
+          (
+            item
+          ) =>
+            normaliseText(
+              item.getAttribute(
+                "title"
+              )
+            ) ===
+            snapshot.title
+        );
+
+      if (byTitle) {
+        return byTitle;
+      }
+    }
+
+    if (
+      snapshot.text
+    ) {
+      const byText =
+        items.find(
+          (
+            item
+          ) =>
+            String(
+              item.tagName ||
+                ""
+            ).toLowerCase() ===
+              snapshot.tag &&
+            normaliseText(
+              item.textContent
+            ) ===
+              snapshot.text
+        );
+
+      if (byText) {
+        return byText;
+      }
+    }
+
+    const rowTarget = rowFallbackTarget(snapshot, scope);
+
+    if (rowTarget) {
+      return rowTarget;
+    }
+
+    if (
+      snapshot.index >=
+        0 &&
+      snapshot.index <
+        items.length
+    ) {
+      return items[
+        snapshot.index
+      ];
+    }
+
+    return null;
+  };
+
+const restoreScroll =
+  (
+    scroll
+  ) => {
+    if (!scroll) {
+      return;
+    }
+
+    for (
+      const saved of
+      scroll.ancestors ||
+      []
+    ) {
+      if (
+        saved.element instanceof
+          HTMLElement &&
+        saved.element.isConnected
+      ) {
+        saved.element.scrollLeft =
+          saved.left;
+
+        saved.element.scrollTop =
+          saved.top;
+      }
+    }
+
+    try {
+      window.scrollTo(
+        scroll.windowX ||
+          0,
+        scroll.windowY ||
+          0
+      );
+    } catch {
+      // Ignore WebView scroll failures.
+    }
+  };
+
+const restoreSnapshot =
+  (
+    snapshot,
+    scope
+  ) => {
+    const target =
+      resolveSnapshot(
+        snapshot,
+        scope
+      );
+
+    if (!target) {
+      return false;
+    }
+
+    restoreScroll(
+      snapshot.scroll
+    );
+
+    try {
+      target.focus({
+        preventScroll:
+          true,
+      });
+    } catch {
+      target.focus();
+    }
+
+    restoreScroll(
+      snapshot.scroll
+    );
+
+    window.setTimeout(
+      () =>
+        restoreScroll(
+          snapshot.scroll
+        ),
+      40
+    );
+
+    return true;
+  };
+
+export default function FireTvFocusMemory() {
+  const [tvModeReady, setTvModeReady] = useState(isFireTv);
+
+  // Unknown Android boxes can only reveal their physical remote after the
+  // first D-pad presses. The focus-memory effect used to exit permanently on
+  // initial render and never activate after TV mode was detected.
+  useEffect(() => {
+    const onRemoteDetected = () => {
+      if (isFireTv()) setTvModeReady(true);
+    };
+    window.addEventListener("mg:tv-remote-detected", onRemoteDetected);
+    onRemoteDetected();
+    return () => window.removeEventListener("mg:tv-remote-detected", onRemoteDetected);
+  }, []);
+
+  const stateRef =
+    useRef({
+      currentScope:
+        null,
+
+      snapshots:
+        new Map(),
+
+      timer:
+        null,
+    });
+
+  useEffect(() => {
+    if (
+      !tvModeReady ||
+      !isFireTv()
+    ) {
+      return undefined;
+    }
+
+    const state =
+      stateRef.current;
+
+    state.currentScope =
+      navigationScope();
+
+    const remember =
+      (
+        element,
+        forcedScope =
+          null
+      ) => {
+        if (
+          !(
+            element instanceof
+            HTMLElement
+          )
+        ) {
+          return;
+        }
+
+        const scope =
+          forcedScope ||
+          scopeForElement(
+            element
+          );
+
+        if (
+          !(
+            scope instanceof
+            HTMLElement
+          ) ||
+          !scope.contains(
+            element
+          ) ||
+          !visible(
+            element,
+            scope
+          )
+        ) {
+          return;
+        }
+
+        const snapshot =
+          snapshotFocus(
+            element,
+            scope
+          );
+
+        if (snapshot) {
+          state.snapshots.set(
+            scope,
+            snapshot
+          );
+        }
+      };
+
+    const onFocusIn =
+      (
+        event
+      ) => {
+        remember(
+          event.target
+        );
+      };
+
+    const inspectScopeChange =
+      () => {
+        // Coalesce scope checks instead of restarting the delay on every
+        // catalogue mutation. Continuous row/image updates used to postpone
+        // focus recovery indefinitely on slower Fire TV devices.
+        if (state.timer !== null) return;
+
+        state.timer =
+          window.setTimeout(
+            () => {
+              state.timer = null;
+              const previous =
+                state.currentScope ||
+                document.body;
+
+              const active =
+                document.activeElement;
+
+              if (
+                active instanceof
+                  HTMLElement &&
+                previous instanceof
+                  HTMLElement &&
+                previous.contains(
+                  active
+                ) &&
+                visible(
+                  active,
+                  previous
+                )
+              ) {
+                remember(
+                  active,
+                  previous
+                );
+              }
+
+              const next =
+                navigationScope();
+
+              if (
+                next ===
+                previous
+              ) {
+                return;
+              }
+
+              state.currentScope =
+                next;
+
+              // A restored/new page may have already focused its intended
+              // control. Never force focus back to an old saved position.
+              if (
+                active instanceof HTMLElement &&
+                active !== document.body &&
+                next.contains(active) &&
+                visible(active, next)
+              ) {
+                return;
+              }
+
+              // Dialogs are remounted frequently. Drop snapshots for removed
+              // DOM scopes so old modal trees do not accumulate in memory.
+              for (const savedScope of state.snapshots.keys()) {
+                if (savedScope !== document.body && !savedScope.isConnected) {
+                  state.snapshots.delete(savedScope);
+                }
+              }
+
+              const saved =
+                state.snapshots.get(
+                  next
+                );
+
+              if (!saved) {
+                return;
+              }
+
+              window.setTimeout(
+                () => {
+                  if (
+                    navigationScope() !==
+                    next
+                  ) {
+                    return;
+                  }
+
+                  restoreSnapshot(
+                    saved,
+                    next
+                  );
+                },
+                120
+              );
+            },
+            45
+          );
+      };
+
+    document.addEventListener(
+      "focusin",
+      onFocusIn,
+      true
+    );
+
+    const onPlayerClosed = () => {
+      inspectScopeChange();
+    };
+
+    const onPlayerVisibility = (event) => {
+      if (event?.detail?.open === false) {
+        inspectScopeChange();
+      }
+    };
+
+    window.addEventListener(
+      "mg:core-player-closed",
+      onPlayerClosed
+    );
+    window.addEventListener(
+      "mg:player-visibility",
+      onPlayerVisibility
+    );
+
+    // Poster/card CSS animations can generate hundreds of class/style
+    // mutations without changing the active dialog or navigation scope.
+    // Ignore those *attribute-only* updates. Child additions/removals
+    // and overlay/route changes still trigger the existing recovery check.
+    const observer =
+      new MutationObserver(
+        (records) => {
+          const relevant = records.some((record) => {
+            if (record.type !== "attributes") return true;
+            const target = record.target;
+            if (!(target instanceof HTMLElement)) return true;
+            if (target.closest(
+              '[role="dialog"], [aria-modal="true"], [data-mg-player-root="true"], .fixed.inset-0'
+            )) return true;
+            // No focus scope change is possible from a poster badge,
+            // thumbnail fade, or row animation alone.
+            return !target.closest(
+              '.mg-fire-tv-card, .mg-fire-tv-resume-card, [data-mg-tv-row="true"]'
+            );
+          });
+          if (relevant) inspectScopeChange();
+        }
+      );
+
+    observer.observe(
+      document.body,
+      {
+        childList:
+          true,
+
+        subtree:
+          true,
+
+        attributes:
+          true,
+
+        attributeFilter: [
+          "class",
+          "style",
+          "aria-hidden",
+          "data-state",
+          "data-mg-fullscreen",
+        ],
+      }
+    );
+
+    const initial =
+      document.activeElement;
+
+    if (
+      initial instanceof
+        HTMLElement &&
+      initial !==
+        document.body
+    ) {
+      remember(
+        initial
+      );
+    }
+
+    return () => {
+      document.removeEventListener(
+        "focusin",
+        onFocusIn,
+        true
+      );
+      window.removeEventListener(
+        "mg:core-player-closed",
+        onPlayerClosed
+      );
+      window.removeEventListener(
+        "mg:player-visibility",
+        onPlayerVisibility
+      );
+
+      observer.disconnect();
+
+      if (
+        state.timer
+      ) {
+        window.clearTimeout(
+          state.timer
+        );
+      }
+
+      state.snapshots.clear();
+      state.currentScope =
+        null;
+    };
+  }, [tvModeReady]);
+
+  return null;
+}

@@ -1,0 +1,1179 @@
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  getPlaybackDeviceProfile,
+  scoreSourceCompatibility,
+} from "@/components/mg/mediaCompatibility";
+import { recordDevicePlaybackReliability } from "@/components/mg/playbackReliability";
+import { readPlaybackPreferences } from "@/components/mg/playbackPreferences";
+
+const STORAGE_KEY =
+  "mg:playback-reliability-v1";
+
+const FAILURE_TTL =
+  12 * 60 * 60 * 1000;
+
+const NO_SOUND_TTL =
+  7 * 24 * 60 * 60 * 1000;
+
+const GOOD_TTL =
+  30 * 24 * 60 * 60 * 1000;
+
+const BUFFER_TTL =
+  48 * 60 * 60 * 1000;
+
+const START_TTL =
+  30 * 24 * 60 * 60 * 1000;
+
+const normaliseLabel = (
+  value
+) =>
+  String(
+    value ||
+      ""
+  )
+    .replace(
+      /^failed\s*[—-]\s*/i,
+      ""
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+
+const sourceKey = (
+  value
+) =>
+  normaliseLabel(
+    value
+  )
+    .toLowerCase()
+    .slice(
+      0,
+      260
+    );
+
+const readStore = () => {
+  try {
+    const raw =
+      window.localStorage.getItem(
+        STORAGE_KEY
+      );
+
+    const parsed =
+      raw
+        ? JSON.parse(
+            raw
+          )
+        : {};
+
+    return parsed &&
+      typeof parsed ===
+        "object"
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeStore = (
+  value
+) => {
+  try {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(
+        value
+      )
+    );
+  } catch {
+    // Storage is optional.
+  }
+};
+
+const fresh = (
+  timestamp,
+  ttl
+) =>
+  Number(
+    timestamp ||
+      0
+  ) >
+  Date.now() -
+    ttl;
+
+const cleanStore = (
+  store
+) => {
+  const next =
+    {};
+
+  Object.entries(
+    store ||
+      {}
+  ).forEach(
+    ([
+      key,
+      record,
+    ]) => {
+      if (
+        !record ||
+        typeof record !==
+          "object"
+      ) {
+        return;
+      }
+
+      if (
+        fresh(
+          record.lastFailure,
+          FAILURE_TTL
+        ) ||
+        fresh(
+          record.lastNoSound,
+          NO_SOUND_TTL
+        ) ||
+        fresh(
+          record.lastGood,
+          GOOD_TTL
+        ) ||
+        fresh(
+          record.lastBuffer,
+          BUFFER_TTL
+        ) ||
+        fresh(
+          record.lastStartAt,
+          START_TTL
+        )
+      ) {
+        next[key] =
+          record;
+      }
+    }
+  );
+
+  return next;
+};
+
+const saveReliability = (
+  label,
+  kind,
+  value = null
+) => {
+  const key =
+    sourceKey(
+      label
+    );
+
+  if (!key) {
+    return;
+  }
+
+  const store =
+    cleanStore(
+      readStore()
+    );
+
+  const current = {
+    failures:
+      0,
+
+    noSound:
+      0,
+
+    lastFailure:
+      0,
+
+    lastNoSound:
+      0,
+
+    lastGood:
+      0,
+
+    buffers:
+      0,
+
+    lastBuffer:
+      0,
+
+    avgStartMs:
+      0,
+
+    startSamples:
+      0,
+
+    lastStartAt:
+      0,
+
+    ...(store[key] ||
+      {}),
+  };
+
+  const now =
+    Date.now();
+
+  if (
+    kind ===
+    "failure"
+  ) {
+    current.failures =
+      Number(
+        current.failures ||
+          0
+      ) +
+      1;
+
+    current.lastFailure =
+      now;
+  }
+
+  if (
+    kind ===
+    "no-sound"
+  ) {
+    current.noSound =
+      Number(
+        current.noSound ||
+          0
+      ) +
+      1;
+
+    current.lastNoSound =
+      now;
+  }
+
+  if (
+    kind ===
+    "buffer"
+  ) {
+    current.buffers =
+      Number(
+        current.buffers ||
+          0
+      ) +
+      1;
+
+    current.lastBuffer =
+      now;
+  }
+
+  if (
+    kind ===
+    "startup"
+  ) {
+    const startMs =
+      Math.max(
+        0,
+        Math.min(
+          60000,
+          Number(value || 0)
+        )
+      );
+
+    if (startMs > 0) {
+      const samples =
+        Number(
+          current.startSamples ||
+            0
+        );
+
+      const previous =
+        Number(
+          current.avgStartMs ||
+            0
+        );
+
+      current.avgStartMs =
+        samples > 0
+          ? Math.round(
+              previous * 0.7 +
+                startMs * 0.3
+            )
+          : Math.round(
+              startMs
+            );
+
+      current.startSamples =
+        samples +
+        1;
+
+      current.lastStartAt =
+        now;
+    }
+  }
+
+  if (
+    kind ===
+    "good"
+  ) {
+    current.lastGood =
+      now;
+
+    /*
+     * A stream that later proves healthy should gradually recover
+     * from an old transient failure, but a remembered no-sound
+     * problem stays in force for its longer TTL.
+     */
+    current.failures =
+      Math.max(
+        0,
+        Number(
+          current.failures ||
+            0
+        ) -
+          1
+      );
+  }
+
+  store[key] =
+    current;
+
+  writeStore(
+    store
+  );
+
+  recordDevicePlaybackReliability(
+    label,
+    kind,
+    value,
+    getPlaybackDeviceProfile()
+  );
+};
+
+const reliabilityAdjustment = (
+  label
+) => {
+  const key =
+    sourceKey(
+      label
+    );
+
+  if (!key) {
+    return 0;
+  }
+
+  const record =
+    readStore()[key];
+
+  if (!record) {
+    return 0;
+  }
+
+  let score =
+    0;
+
+  if (
+    fresh(
+      record.lastFailure,
+      FAILURE_TTL
+    )
+  ) {
+    score -=
+      220000 +
+      Math.min(
+        150000,
+        Number(
+          record.failures ||
+            0
+        ) *
+          18000
+      );
+  }
+
+  if (
+    fresh(
+      record.lastBuffer,
+      BUFFER_TTL
+    )
+  ) {
+    score -=
+      Math.min(
+        36000,
+        Number(
+          record.buffers ||
+            0
+        ) *
+          4500
+      );
+  }
+
+  if (
+    fresh(
+      record.lastStartAt,
+      START_TTL
+    )
+  ) {
+    const average =
+      Number(
+        record.avgStartMs ||
+          0
+      );
+
+    if (
+      average > 0 &&
+      average <= 2500
+    ) {
+      score +=
+        9000;
+    } else if (
+      average > 0 &&
+      average <= 5000
+    ) {
+      score +=
+        4500;
+    } else if (
+      average >= 15000
+    ) {
+      score -=
+        16000;
+    } else if (
+      average >= 9000
+    ) {
+      score -=
+        8000;
+    }
+  }
+
+  if (
+    fresh(
+      record.lastGood,
+      GOOD_TTL
+    )
+  ) {
+    score +=
+      3500;
+  }
+
+  return score;
+};
+
+const sourceBonus = (
+  label
+) => {
+  const text =
+    normaliseLabel(
+      label
+    ).toLowerCase();
+
+  let score =
+    0;
+
+  /*
+   * Ready/cached Real-Debrid sources should start before magnets
+   * that still need resolving.
+   */
+  if (
+    /real[ ._-]?debrid|\brd\b/.test(
+      text
+    )
+  ) {
+    score +=
+      18000;
+  }
+
+  if (
+    /\bcached\b|\binstant\b|\bready\b/.test(
+      text
+    )
+  ) {
+    score +=
+      16000;
+  }
+
+  if (
+    /\buncached\b|\bdownloading\b|\bpending\b/.test(
+      text
+    )
+  ) {
+    score -=
+      12000;
+  }
+
+  if (
+    /^failed\s*[—-]/i.test(
+      String(
+        label ||
+          ""
+      )
+    )
+  ) {
+    score -=
+      1000000;
+  }
+
+  return score;
+};
+
+const scoreLabel = (
+  label,
+  deviceProfile
+) => {
+  const clean =
+    normaliseLabel(
+      label
+    );
+
+  return (
+    scoreSourceCompatibility(
+      {
+        label:
+          clean,
+
+        name:
+          clean,
+      },
+      clean,
+      {
+        deviceProfile,
+        qualityPreference:
+          readPlaybackPreferences().quality,
+      }
+    ) +
+    sourceBonus(
+      label
+    ) +
+    reliabilityAdjustment(
+      clean
+    )
+  );
+};
+
+const visible = (
+  element
+) => {
+  if (
+    !(
+      element instanceof
+        HTMLElement
+    )
+  ) {
+    return false;
+  }
+
+  const rect =
+    element.getBoundingClientRect();
+
+  if (
+    rect.width <
+      2 ||
+    rect.height <
+      2
+  ) {
+    return false;
+  }
+
+  const style =
+    window.getComputedStyle(
+      element
+    );
+
+  return (
+    style.display !==
+      "none" &&
+    style.visibility !==
+      "hidden" &&
+    Number(
+      style.opacity ||
+        1
+    ) >
+      0.02
+  );
+};
+
+const playbackSelect =
+  () => {
+    const candidates =
+      Array.from(
+        document.querySelectorAll(
+          'select[aria-label="Choose playback source"], select[aria-label="Choose source or quality"], select[aria-label="Choose source or quality while loading"]'
+        )
+      ).filter(
+        visible
+      );
+
+    return candidates[
+      candidates.length -
+        1
+    ] ||
+      null;
+  };
+
+const activeSourceLabel =
+  () => {
+    const select =
+      playbackSelect();
+
+    if (
+      !select ||
+      select.selectedIndex <
+        0
+    ) {
+      return "";
+    }
+
+    const option = select.options[select.selectedIndex];
+
+    return normaliseLabel(
+      option?.dataset?.mgSourceLabel ||
+        option?.textContent ||
+        ""
+    );
+  };
+
+const pickBestSource =
+  () => {
+    const select =
+      playbackSelect();
+
+    if (
+      !select ||
+      select.options.length <
+        2
+    ) {
+      return null;
+    }
+
+    const deviceProfile =
+      getPlaybackDeviceProfile();
+
+    const ranked =
+      Array.from(
+        select.options
+      )
+        .map(
+          (
+            option,
+            index
+          ) => ({
+            index,
+
+            label:
+              normaliseLabel(
+                option?.dataset?.mgSourceLabel ||
+                  option.textContent ||
+                  ""
+              ),
+
+            disabled:
+              option.disabled,
+
+            score:
+              option.disabled
+                ? -Infinity
+                : scoreLabel(
+                    option?.dataset?.mgSourceLabel ||
+                      option.textContent ||
+                      "",
+                    deviceProfile
+                  ),
+          })
+        )
+        .sort(
+          (
+            a,
+            b
+          ) =>
+            b.score -
+              a.score ||
+            a.index -
+              b.index
+        );
+
+    const best =
+      ranked[0];
+
+    const current =
+      ranked.find(
+        (
+          item
+        ) =>
+          item.index ===
+          select.selectedIndex
+      );
+
+    if (
+      !best ||
+      !Number.isFinite(
+        best.score
+      )
+    ) {
+      return null;
+    }
+
+    /*
+     * Do not churn sources for tiny scoring differences. Switch when
+     * the current source is remembered bad or the better source is
+     * meaningfully more compatible.
+     */
+    const currentPenalty =
+      current
+        ? reliabilityAdjustment(
+            current.label
+          )
+        : 0;
+
+    /*
+     * Learning only.
+     *
+     * VideoPlayer is the single authority allowed to change playback
+     * sources. This assist records reliability and can identify which source
+     * scores best, but it must never dispatch a selector change itself.
+     */
+    void currentPenalty;
+
+    return {
+      ...best,
+      changed:
+        false,
+    };
+  };
+
+export default function PlaybackReliabilityAssist() {
+  const [
+    message,
+    setMessage,
+  ] =
+    useState(
+      ""
+    );
+
+  const stateRef =
+    useRef({
+      seenSelect:
+        null,
+
+      inspectTimer:
+        null,
+
+      messageTimer:
+        null,
+
+      goodTimer:
+        null,
+
+      startTimes:
+        new WeakMap(),
+
+      lastBufferTimes:
+        new WeakMap(),
+    });
+
+  useEffect(() => {
+    const state =
+      stateRef.current;
+
+    const showMessage =
+      (
+        value,
+        duration =
+          1800
+      ) => {
+        setMessage(
+          value
+        );
+
+        if (
+          state.messageTimer
+        ) {
+          window.clearTimeout(
+            state.messageTimer
+          );
+        }
+
+        state.messageTimer =
+          window.setTimeout(
+            () =>
+              setMessage(
+                ""
+              ),
+            duration
+          );
+      };
+
+    const inspectPlayer =
+      () => {
+        if (
+          state.inspectTimer
+        ) {
+          window.clearTimeout(
+            state.inspectTimer
+          );
+        }
+
+        state.inspectTimer =
+          window.setTimeout(
+            () => {
+              const select =
+                playbackSelect();
+
+              if (
+                !select ||
+                select ===
+                  state.seenSelect
+              ) {
+                return;
+              }
+
+              state.seenSelect =
+                select;
+
+              const best =
+                pickBestSource();
+
+              if (
+                best?.label &&
+                best.index ===
+                  select.selectedIndex
+              ) {
+                showMessage(
+                  `Best source selected · ${best.label}`,
+                  1400
+                );
+              }
+            },
+            120
+          );
+      };
+
+    const onError =
+      (
+        event
+      ) => {
+        if (
+          !(
+            event.target instanceof
+              HTMLVideoElement
+          )
+        ) {
+          return;
+        }
+
+        const label =
+          activeSourceLabel();
+
+        if (!label) {
+          return;
+        }
+
+        saveReliability(
+          label,
+          "failure"
+        );
+
+        showMessage(
+          "Source failure remembered · player recovery is handling it…",
+          2200
+        );
+      };
+
+    const onNoSound =
+      (
+        event
+      ) => {
+        const label =
+          normaliseLabel(
+            event?.detail && "label" in event.detail
+              ? event.detail.label
+              : activeSourceLabel()
+          );
+
+        if (!label) {
+          return;
+        }
+
+        saveReliability(
+          label,
+          "no-sound"
+        );
+
+        showMessage(
+          "No-sound report saved for this exact source · manual audio recovery started.",
+          2600
+        );
+      };
+
+    const onLoadStart =
+      (
+        event
+      ) => {
+        if (
+          !(
+            event.target instanceof
+              HTMLVideoElement
+          )
+        ) {
+          return;
+        }
+
+        state.startTimes.set(
+          event.target,
+          Date.now()
+        );
+      };
+
+    const onBuffer =
+      (
+        event
+      ) => {
+        if (
+          !(
+            event.target instanceof
+              HTMLVideoElement
+          )
+        ) {
+          return;
+        }
+
+        const label =
+          activeSourceLabel();
+
+        if (!label) {
+          return;
+        }
+
+        const previous =
+          Number(
+            state.lastBufferTimes.get(
+              event.target
+            ) ||
+              0
+          );
+
+        if (
+          Date.now() -
+            previous <
+          5000
+        ) {
+          return;
+        }
+
+        state.lastBufferTimes.set(
+          event.target,
+          Date.now()
+        );
+
+        saveReliability(
+          label,
+          "buffer"
+        );
+      };
+
+    const onPlaying =
+      (
+        event
+      ) => {
+        if (
+          !(
+            event.target instanceof
+              HTMLVideoElement
+          )
+        ) {
+          return;
+        }
+
+        const video =
+          event.target;
+
+        const startedAt =
+          Number(
+            state.startTimes.get(
+              video
+            ) ||
+              0
+          );
+
+        if (
+          startedAt >
+          0
+        ) {
+          state.startTimes.delete(
+            video
+          );
+        }
+
+        const label =
+          activeSourceLabel();
+
+        if (!label) {
+          return;
+        }
+
+        if (
+          startedAt >
+          0
+        ) {
+          saveReliability(
+            label,
+            "startup",
+            Date.now() -
+              startedAt
+          );
+        }
+
+        if (
+          state.goodTimer
+        ) {
+          window.clearTimeout(
+            state.goodTimer
+          );
+        }
+
+        state.goodTimer =
+          window.setTimeout(
+            () => {
+              if (
+                video.isConnected &&
+                !video.paused &&
+                !video.muted &&
+                video.volume > 0 &&
+                activeSourceLabel() ===
+                  label &&
+                !fresh(readStore()[sourceKey(label)]?.lastNoSound, NO_SOUND_TTL)
+              ) {
+                saveReliability(
+                  label,
+                  "good"
+                );
+              }
+            },
+            20000
+          );
+      };
+
+    document.addEventListener(
+      "error",
+      onError,
+      true
+    );
+
+    window.addEventListener(
+      "mg:playback-no-sound",
+      onNoSound
+    );
+
+    document.addEventListener(
+      "loadstart",
+      onLoadStart,
+      true
+    );
+
+    document.addEventListener(
+      "waiting",
+      onBuffer,
+      true
+    );
+
+    document.addEventListener(
+      "stalled",
+      onBuffer,
+      true
+    );
+
+    document.addEventListener(
+      "playing",
+      onPlaying,
+      true
+    );
+
+    const observer =
+      new MutationObserver(
+        inspectPlayer
+      );
+
+    observer.observe(
+      document.body,
+      {
+        childList:
+          true,
+
+        subtree:
+          true,
+      }
+    );
+
+    inspectPlayer();
+
+    return () => {
+      document.removeEventListener(
+        "error",
+        onError,
+        true
+      );
+
+      window.removeEventListener(
+        "mg:playback-no-sound",
+        onNoSound
+      );
+
+      document.removeEventListener(
+        "loadstart",
+        onLoadStart,
+        true
+      );
+
+      document.removeEventListener(
+        "waiting",
+        onBuffer,
+        true
+      );
+
+      document.removeEventListener(
+        "stalled",
+        onBuffer,
+        true
+      );
+
+      document.removeEventListener(
+        "playing",
+        onPlaying,
+        true
+      );
+
+      observer.disconnect();
+
+      if (
+        state.inspectTimer
+      ) {
+        window.clearTimeout(
+          state.inspectTimer
+        );
+      }
+
+      if (
+        state.messageTimer
+      ) {
+        window.clearTimeout(
+          state.messageTimer
+        );
+      }
+
+      if (
+        state.goodTimer
+      ) {
+        window.clearTimeout(
+          state.goodTimer
+        );
+      }
+    };
+  }, []);
+
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div
+      className="pointer-events-none fixed bottom-5 left-1/2 z-[2147483600] max-w-[90vw] -translate-x-1/2 rounded-full border border-white/15 bg-black/85 px-4 py-2 text-center text-xs font-semibold text-white shadow-2xl backdrop-blur-md sm:text-sm"
+      role="status"
+      aria-live="polite"
+    >
+      {message}
+    </div>
+  );
+}

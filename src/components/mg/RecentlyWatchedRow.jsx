@@ -1,0 +1,441 @@
+import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { profiledLibrary } from "@/components/mg/householdProfiles";
+import { watchContinueWatchingChanges } from "@/components/mg/continueWatchingSync";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  CheckCircle2,
+  Play,
+  X,
+} from "lucide-react";
+
+import { base44 } from "@/api/base44Client";
+import { usePlayer } from "@/components/mg/PlayerProvider";
+import { Image } from "@/components/ui/image";
+
+const PosterImage = /** @type {any} */ (Image);
+
+const WATCHED_THRESHOLD = 0.92;
+const TMDB_RESOLVE_BUDGET_MS = 300;
+
+const isCardActivationKey = (event) => {
+  const key = String(event?.key || event?.code || "");
+  const code = Number(event?.keyCode || event?.which || 0);
+
+  return (
+    key === "Enter" ||
+    key === "NumpadEnter" ||
+    key === "Select" ||
+    key === "Accept" ||
+    key === " " ||
+    code === 13 ||
+    code === 23 ||
+    code === 66
+  );
+};
+
+const positiveInt = (value) => {
+  const number = Number(value);
+
+  return Number.isInteger(number) && number > 0
+    ? number
+    : null;
+};
+
+const progressRatio = (item) => {
+  const duration = Number(item?.duration || 0);
+  const progress = Number(item?.progress || 0);
+
+  if (!duration || duration <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, progress / duration));
+};
+
+const normaliseTitle = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\s+[—-]\s+s\d{1,2}e\d{1,3}.*$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const parseContentKey = (item) => {
+  const key = String(item?.content_key || "");
+
+  if (key.startsWith("mg2|")) {
+    const [
+      ,
+      tmdbId,
+      mediaType,
+      year,
+      season,
+      episode,
+      encodedTitle,
+    ] = key.split("|");
+
+    let title = item?.title || "";
+
+    try {
+      title = decodeURIComponent(encodedTitle || "") || title;
+    } catch {
+      // Keep stored title.
+    }
+
+    return {
+      tmdbId: tmdbId || "",
+      mediaType: mediaType === "tv" ? "tv" : "movie",
+      year: year || item?.year || "",
+      season: positiveInt(season),
+      episode: positiveInt(episode),
+      title:
+        String(title || item?.title || "Video")
+          .replace(/\s+[—-]\s+S\d{1,2}E\d{1,3}.*$/i, "")
+          .trim() || "Video",
+    };
+  }
+
+  const parts = key.split("|");
+  const season = positiveInt(parts[2]);
+  const episode = positiveInt(parts[3]);
+  const storedTitle = String(parts[0] || item?.title || "Video");
+
+  return {
+    tmdbId: "",
+    mediaType: season && episode ? "tv" : "movie",
+    year: parts[1] || item?.year || "",
+    season,
+    episode,
+    title:
+      storedTitle
+        .replace(/\s+[—-]\s+S\d{1,2}E\d{1,3}.*$/i, "")
+        .trim() || storedTitle,
+  };
+};
+
+const resolveTmdbId = async (meta) => {
+  if (meta.tmdbId) {
+    return String(meta.tmdbId);
+  }
+
+  if (!meta.title) {
+    return "";
+  }
+
+  try {
+    const response = await base44.functions.invoke(
+      "getTmdbMovies",
+      {
+        multi_search: meta.title,
+      }
+    );
+
+    const candidates = Array.isArray(response?.data?.movies)
+      ? response.data.movies
+      : [];
+
+    const sameType = candidates.filter(
+      (candidate) =>
+        String(candidate?.media_type || "") === meta.mediaType
+    );
+
+    const sameYear = sameType.find((candidate) =>
+      meta.year
+        ? String(candidate?.year || "") === String(meta.year)
+        : false
+    );
+
+    const match = sameYear || sameType[0] || candidates[0];
+
+    return String(match?.id || match?.tmdb_id || "");
+  } catch {
+    return "";
+  }
+};
+
+const resolveTmdbIdQuickly = async (meta) => {
+  if (meta?.tmdbId) {
+    return String(meta.tmdbId);
+  }
+
+  let timer = 0;
+
+  try {
+    return await Promise.race([
+      resolveTmdbId(meta),
+      new Promise((resolve) => {
+        timer = window.setTimeout(() => resolve(""), TMDB_RESOLVE_BUDGET_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      window.clearTimeout(timer);
+    }
+  }
+};
+
+export default function RecentlyWatchedRow({ onOpenDetail }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const loadVersionRef = useRef(0);
+  const player = usePlayer();
+
+  const load = () => {
+    const version = ++loadVersionRef.current;
+    profiledLibrary.ContinueWatching
+      .list("-updated_date", 250)
+      .then((rows) => {
+        if (version !== loadVersionRef.current) return;
+        const completed = [];
+        const seen = new Set();
+
+        for (const item of rows || []) {
+          if (progressRatio(item) < WATCHED_THRESHOLD) {
+            continue;
+          }
+
+          const meta = parseContentKey(item);
+
+          const identity =
+            meta.mediaType === "tv"
+              ? `tv:${normaliseTitle(meta.title)}`
+              : `movie:${normaliseTitle(meta.title)}:${meta.year}`;
+
+          if (seen.has(identity)) {
+            continue;
+          }
+
+          seen.add(identity);
+          completed.push(item);
+        }
+
+        setItems(completed.slice(0, 20));
+      })
+      .catch(() => {})
+      .finally(() => { if (version === loadVersionRef.current) setLoading(false); });
+  };
+
+  useEffect(() => {
+    const cleanup = watchContinueWatchingChanges(load, {
+      subscribe: (onChange) => profiledLibrary.ContinueWatching.subscribe(onChange),
+    });
+    return () => {
+      loadVersionRef.current += 1;
+      cleanup();
+    };
+  }, []);
+
+  const remove = async (id, event) => {
+    event?.stopPropagation();
+
+    setItems((current) =>
+      current.filter((item) => item.id !== id)
+    );
+
+    try {
+      await profiledLibrary.ContinueWatching.delete(id);
+    } catch {
+      load();
+    }
+  };
+
+  const replay = async (item) => {
+    const meta = parseContentKey(item);
+    const isTv = meta.mediaType === "tv";
+    const tmdbId = await resolveTmdbIdQuickly(meta);
+
+    const title =
+      isTv && meta.season && meta.episode
+        ? `${meta.title} — S${String(meta.season).padStart(
+            2,
+            "0"
+          )}E${String(meta.episode).padStart(2, "0")}`
+        : meta.title;
+
+    player.play({
+      id: tmdbId || undefined,
+      tmdbId: tmdbId || undefined,
+      title,
+      poster: item.poster_url,
+      year: meta.year,
+      mediaType: meta.mediaType,
+      type: isTv ? "series" : "movie",
+      season: meta.season || undefined,
+      episode: meta.episode || undefined,
+      rdTitle: meta.title,
+      rdYear: meta.year,
+      rdSeason: meta.season || undefined,
+      rdEpisode: meta.episode || undefined,
+      startTime: 0,
+      preferRd: true,
+      sources: [],
+    });
+  };
+
+  const openDetail = async (item) => {
+    const meta = parseContentKey(item);
+    const tmdbId = await resolveTmdbIdQuickly(meta);
+
+    /*
+     * Movies launch straight into the OnlyFlix embed from the card for instant
+     * playback. TV still opens Details so the user can pick the exact episode.
+     */
+    if (meta.mediaType !== "tv" && launchFireTvCardPlay(player, {
+      id: tmdbId || undefined,
+      tmdbId: tmdbId || undefined,
+      tmdb_id: tmdbId || undefined,
+      imdbId: meta.imdbId || item.imdb_id,
+      title: meta.title,
+      year: meta.year,
+      poster: item.poster_url || "",
+      mediaType: "movie",
+      type: "movie",
+    })) return;
+    if (meta.mediaType !== "tv" && player.playOnlyFlix) {
+      if (player.playOnlyFlix({
+        id: tmdbId || undefined,
+        tmdbId: tmdbId || undefined,
+        tmdb_id: tmdbId || undefined,
+        imdbId: meta.imdbId || item.imdb_id,
+        title: meta.title,
+        year: meta.year,
+        poster: item.poster_url || "",
+        mediaType: "movie",
+        type: "movie",
+      })) return;
+    }
+
+    if (onOpenDetail) {
+      onOpenDetail({
+        id: tmdbId || undefined,
+        tmdb_id: tmdbId || undefined,
+        tmdbId: tmdbId || undefined,
+        title: meta.title,
+        name: meta.title,
+        year: meta.year,
+        poster_url: item.poster_url,
+        media_type: meta.mediaType,
+        mediaType: meta.mediaType,
+        type: meta.mediaType === "tv" ? "tv" : "movie",
+      });
+
+      return;
+    }
+
+    replay(item);
+  };
+
+  const displayItems = useMemo(
+    () =>
+      items.map((item) => ({
+        item,
+        meta: parseContentKey(item),
+      })),
+    [items]
+  );
+
+  if (loading || displayItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="px-3 min-[420px]:px-4 sm:px-6 md:px-8 3xl:px-10 4xl:px-14 pt-2 sm:pt-4">
+      <div className="flex items-center gap-2 3xl:gap-3 mb-3 3xl:mb-4">
+        <CheckCircle2 className="w-4 h-4 3xl:w-5 3xl:h-5 text-mg-green" />
+
+        <div>
+          <h2 className="text-white font-semibold text-sm sm:text-base 3xl:text-xl 4xl:text-2xl">
+            Recently Watched
+          </h2>
+
+          <p className="text-[10px] 3xl:text-sm text-white/35">
+            Finished titles stay here and help improve your recommendations.
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="flex gap-3 3xl:gap-5 overflow-x-auto overscroll-x-contain pb-3 scrollbar-hide snap-x snap-proximity"
+        data-mg-tv-row="true"
+        aria-label="Recently Watched"
+      >
+        {displayItems.map(({ item, meta }) => (
+          <div
+            key={item.id}
+            data-mg-card-primary="true"
+            data-mg-focus-key={`recent:${meta.mediaType}:${meta.tmdbId || normaliseTitle(meta.title)}:${meta.season || ""}:${meta.episode || ""}`}
+            onClick={() => openDetail(item)}
+            role="button"
+            tabIndex={0}
+            aria-label={`Replay ${meta.title}`}
+            onKeyDown={(event) => {
+              if (isCardActivationKey(event)) {
+                event.preventDefault();
+                event.stopPropagation();
+                openDetail(item);
+              }
+            }}
+            className="mg-fire-tv-resume-card group relative w-36 sm:w-44 md:w-48 xl:w-52 3xl:w-64 4xl:w-72 shrink-0 text-left cursor-pointer snap-start rounded-lg focus:outline-none focus:ring-2 focus:ring-mg-green focus:ring-offset-2 focus:ring-offset-mg-background"
+          >
+            <div className="relative aspect-video rounded-lg 3xl:rounded-xl overflow-hidden bg-mg-card border border-white/10 group-focus:border-mg-green">
+              <PosterImage
+                src={item.poster_url}
+                fittingType="fill"
+                className="w-full h-full object-cover"
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+
+              <div className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/75 px-2 py-1 text-[10px] font-semibold text-mg-green">
+                <CheckCircle2 className="w-3 h-3" />
+                Watched
+              </div>
+
+              {meta.mediaType === "tv" &&
+                meta.season &&
+                meta.episode && (
+                  <span className="absolute left-2 bottom-2 rounded bg-black/75 px-2 py-1 text-[10px] font-semibold text-white">
+                    S{String(meta.season).padStart(2, "0")} E
+                    {String(meta.episode).padStart(2, "0")}
+                  </span>
+                )}
+
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity pointer-events-none">
+                <div className="w-9 h-9 3xl:w-12 3xl:h-12 4xl:w-14 4xl:h-14 rounded-full bg-mg-green text-black flex items-center justify-center">
+                  <Play className="w-4 h-4 3xl:w-6 3xl:h-6 fill-black" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(event) => remove(item.id, event)}
+                className="mg-fire-tv-secondary-action absolute top-1 right-1 3xl:top-2 3xl:right-2 w-7 h-7 3xl:w-9 3xl:h-9 rounded-full bg-black/70 text-white/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100"
+                aria-label="Remove from watch history"
+              >
+                <X className="w-3.5 h-3.5 3xl:w-4 3xl:h-4" />
+              </button>
+            </div>
+
+            <div className="mt-1.5 3xl:mt-2 text-white font-semibold text-xs sm:text-sm 3xl:text-base truncate">
+              {meta.title}
+            </div>
+
+            <div className="text-white/40 text-[10px] sm:text-xs 3xl:text-sm truncate">
+              {meta.mediaType === "tv" && meta.season && meta.episode
+                ? `Latest watched: S${String(meta.season).padStart(
+                    2,
+                    "0"
+                  )} E${String(meta.episode).padStart(2, "0")}`
+                : meta.year || "Watched"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

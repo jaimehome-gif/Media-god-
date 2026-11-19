@@ -1,0 +1,11793 @@
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  ArrowLeft,
+  VolumeX,
+  Tv,
+  Loader2,
+  RefreshCw,
+  Maximize,
+  Minimize,
+  ListVideo,
+} from "lucide-react";
+
+import { base44 } from "@/api/base44Client";
+import { safeSeek } from "./safeSeek";
+import { hasUnusableEpisodeAudio } from "./episodeAudio";
+import { episodeAutoplayCanTrustSource, isUnverifiedHostedEpisodeStream } from "./episodeLaunchTrust.js";
+import { recordEpisodeSourceHealth } from "./episodeSourceHealth.js";
+import CastButton from "@/components/mg/CastButton";
+import InPlayerSourceDrawer from "@/components/mg/InPlayerSourceDrawer";
+import LiveVideo from "@/components/mg/LiveVideo";
+import { COMPATIBLE_AUTOPLAY_LIMIT } from "@/components/mg/automaticSourceOrder";
+import { stopExclusivePlayback } from "@/components/mg/exclusivePlayback";
+import PlayerControls from "@/components/mg/PlayerControls";
+import {
+  isNativeFireTvPlayerAvailable,
+  isNativeFireTvEmbedRemoteAvailable,
+  setNativeFireTvEmbedRemoteActive,
+  openNativeFireTvExternalUrl,
+  playNativeFireTv,
+  updateNativeEpisodePlaybackContext,
+} from "@/components/mg/nativeFireTvBridge";
+import OnlyFlixRemotePointer from "@/components/mg/OnlyFlixRemotePointer";
+import {
+  preferredAudioTrackScore,
+  readTrackPreferences,
+  trackLanguage,
+} from "@/components/mg/mediaTrackPreferences";
+import { readPlaybackPreferences } from "@/components/mg/playbackPreferences";
+import {
+  buildPlaybackAudioDiagnostic,
+  sanitizeNativePlaybackDiagnostic,
+  writePlaybackAudioDiagnostic,
+} from "@/components/mg/audioDiagnostics";
+import { isAdvancingVodPlayback, updateVodProgress } from "@/components/mg/playbackHealth";
+import {
+  devicePlaybackReliabilityAdjustment,
+  exactPlaybackSourceLabel,
+  hasRecentNoSoundHistory,
+  playbackReliabilityAdjustment,
+  recordPlaybackReliability,
+} from "@/components/mg/playbackReliability";
+import {
+  detectLanguagePreference,
+  detectStreamTraits,
+  getPlaybackDeviceProfile,
+  hasSevereVideoRisk,
+  scoreSourceCompatibility,
+  sourcePlaybackCompatibilityTier,
+} from "@/components/mg/mediaCompatibility";
+import {
+  debridProviderScoreHints,
+  recordDebridProviderResult,
+} from "@/components/mg/debridProviderReliability";
+import {
+  chooseDebridResolutionStrategy,
+  debridTorrentHasMetadata,
+} from "@/components/mg/debridResolutionStrategy";
+import {
+  concisePlaybackSourceLabel,
+  torrentFileLabel,
+} from "@/components/mg/playbackSourceLabels";
+import {
+  liveTvUrlQuarantined,
+  liveTvUrlScore,
+  recordLiveTvPlaybackResult,
+} from "@/components/mg/liveTvPlaybackLearning";
+import {
+  availableSourceSortOptions,
+  readSourceSortMode,
+  sortSourceEntries,
+  sourceIsUserSelectable,
+  SOURCE_SELECTOR_SORT_EVENT,
+  writeSourceSortMode,
+} from "@/components/mg/sourceSelectorPreferences";
+import { mergeCompleteSourcePool } from "@/components/mg/sourcePoolCompleteness";
+import { runRealDebridCacheSession } from "@/components/mg/realDebridCacheEngine";
+import {
+  detectMediaEdition,
+  sourceHasEdition,
+} from "@/components/mg/mediaEdition";
+import {
+  forgetSuccessfulPlaybackSource,
+  recordSuccessfulPlaybackSource,
+  recordTrustedCachedSource,
+} from "@/components/mg/trustedCachedSources";
+import { sourceHasAuthoritativeCachedSignal } from "@/components/mg/sourceCacheVisibility";
+import { sourceMatchesRequestedIdentity } from "@/components/mg/sourceIdentity";
+import { sourceIsAioStreamsCandidate } from "@/components/mg/sourceProviderIdentity";
+import { canAutoHandoffStartup } from "@/components/mg/startupSourceHandoff";
+import { emptyPlaybackSourceMessage } from "@/components/mg/sourceDiscoveryFeedback";
+import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
+import {
+  bestSmartUpgradeEntry,
+  detectSmartSourceUpgrade,
+  recordSmartSourceBaseline,
+  smartEntryUpgradeScore,
+  smartSourceFingerprint,
+} from "@/components/mg/smartSourceSelection";
+import { useProactiveCodecGuard } from "@/components/mg/useProactiveCodecGuard"; import { useSilentAudioGuard } from "@/components/mg/useSilentAudioGuard";
+const SUCCESSFUL_VOD_PLAYBACK_SECONDS = 20;
+
+const isMagnet = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .startsWith("magnet:");
+
+const prefersBrowserRdCompatibility = () => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+
+  /*
+   * Installed Android/Fire TV builds expose MediaGodNative and can hand the
+   * unrestricted Real-Debrid file to Media3/LibVLC. Normal web browsers and
+   * the Windows desktop shell use an HTML media pipeline instead, where common
+   * torrent-native containers such as MKV can fail even when the underlying
+   * codecs are otherwise valid. Ask Real-Debrid for its browser-safe HLS/MP4
+   * representation for every non-native browser runtime. Real-Debrid still
+   * returns the unrestricted file as a fallback when no transcode is available.
+   */
+  if (isNativeFireTvPlayerAvailable()) return false;
+
+  return true;
+};
+
+const magnetHash = (value) => {
+  const raw = String(value || "").trim();
+  const match = raw.match(/btih:([a-f0-9]{40}|[a-f0-9]{64})/i);
+  const hash = String(match?.[1] || (/^[a-f0-9]{40}$|^[a-f0-9]{64}$/i.test(raw) ? raw : ""))
+    .toLowerCase()
+    .trim();
+
+  return hash;
+};
+
+const currentFilePath = (files) =>
+  (
+    files?.find((file) => file.selected) ||
+    files?.[0] ||
+    {}
+  ).path || "";
+
+const getSourceUrl = (item) =>
+  item?.src ||
+  item?.url ||
+  item?.magnet ||
+  item?.magnetLink ||
+  "";
+
+const sourceDisplayLabel = (item, index) =>
+  String(
+    item?.label ||
+      item?.name ||
+      item?.title ||
+      `Source ${index + 1}`
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+
+const sourceTorrentHash = (item) =>
+  magnetHash(
+    item?.infoHash ||
+      item?.info_hash ||
+      item?.magnet ||
+      item?.magnetLink ||
+      getSourceUrl(item)
+  );
+
+const richestSourceMagnet = (item) =>
+  [
+    item?.richMagnet,
+    item?.magnet,
+    item?.magnetLink,
+    item?.src,
+    item?.url,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter((value) => /^magnet:/i.test(value))
+    .sort((left, right) => {
+      const leftTrackers = (left.match(/(?:[?&])tr=/gi) || []).length;
+      const rightTrackers = (right.match(/(?:[?&])tr=/gi) || []).length;
+      return rightTrackers - leftTrackers || right.length - left.length;
+    })[0] || "";
+
+const stablePlaybackSourceKey = (item, fallbackIndex = -1) => {
+  if (!item) return "";
+
+  const id = String(item?.id || "").trim();
+  if (id) return `id:${id}`;
+
+  const hash = sourceTorrentHash(item);
+  if (hash) {
+    /*
+     * Torrent identity must survive source-label enrichment while Android's
+     * native <select> popup is open. Cache/language/status text can change from
+     * "English" to "Trusted Cached · English" without changing the torrent.
+     * Including that mutable label made a user's selection impossible to map
+     * back into the refreshed source array.
+     */
+    return [
+      "torrent",
+      hash,
+      String(item?.fileIdx ?? item?.file_idx ?? ""),
+      String(item?.addon || item?.debridProvider || item?.sourceName || ""),
+    ].join(":");
+  }
+
+  const url = String(getSourceUrl(item) || "").trim();
+  if (url) return `url:${url}`;
+
+  return [
+    "label",
+    String(item?.type || ""),
+    sourceDisplayLabel(item, fallbackIndex),
+  ].join(":");
+};
+
+/*
+ * Torrent resolution has three deliberately separate ownership paths:
+ *
+ * 1. cached_debrid  - the payload already exists in debrid; resolve/play it.
+ * 2. comet_uncached - Comet discovered the torrent. When Comet's Torrent Mode
+ *                     companion row supplies its Stremio `sources`, Media God
+ *                     submits that exact tracker-rich magnet to Real-Debrid.
+ *                     The Comet playback URL is only a legacy fallback when no
+ *                     torrent-source metadata was returned.
+ * 3. rd_magnet      - a normal magnet/info-hash source that Media God may add
+ *                     to Real-Debrid itself.
+ */
+const sourceResolutionStrategy = (item) => {
+  if (!item) return "";
+
+  if (
+    item?.rdTorrentId ||
+    (
+      item?.type === "rd_torrent" &&
+      !sourceTorrentHash(item)
+    )
+  ) {
+    return "existing_rd";
+  }
+
+  const value = String(getSourceUrl(item) || "").trim();
+  const torrentLike =
+    item?.type === "rd" ||
+    item?.type === "rd_torrent" ||
+    item?.type === "torrent" ||
+    item?.type === "magnet" ||
+    isMagnet(value) ||
+    Boolean(sourceTorrentHash(item));
+
+  if (
+    !torrentLike &&
+    item?.debridCached !== true &&
+    item?.cometUncached !== true
+  ) {
+    return String(item?.resolutionStrategy || "").trim();
+  }
+
+  return chooseDebridResolutionStrategy(item, {
+    debridCached: item?.debridCached === true,
+  });
+};
+
+const sourceNeedsCaching = (item) => {
+  if (!item || item?.debridCached === true) return false;
+
+  const strategy = sourceResolutionStrategy(item);
+
+  return (
+    strategy === "comet_uncached" ||
+    strategy === "rd_magnet" ||
+    // This marker is applied only to matching TV torrent fallbacks after
+    // verified RD inspection found no ready link. Foreground cache/resolve
+    // must run automatically rather than leaving the viewer in Sources.
+    (item?.episodeAutoPrepare === true && Boolean(sourceTorrentHash(item))) ||
+    item?.cacheRequired === true ||
+    (
+      item?.debridCacheChecked === true &&
+      item?.debridCached !== true &&
+      Boolean(sourceTorrentHash(item))
+    )
+  );
+};
+
+const sourceIsTorrentPlaybackCandidate = (item) => {
+  if (!item) return false;
+
+  const type = String(item?.type || "").toLowerCase();
+  const url = String(getSourceUrl(item) || "").trim();
+
+  if (
+    type === "provider" ||
+    type === "youtube" ||
+    type === "status"
+  ) {
+    return false;
+  }
+
+  return Boolean(
+    sourceTorrentHash(item) ||
+      isMagnet(url) ||
+      ["rd", "rd_torrent", "torrent", "magnet"].includes(type) ||
+      item?.debridCached === true ||
+      item?.cacheRequired === true
+  );
+};
+
+const FAILED_TORRENT_HASHES_KEY =
+  "mg:failed-uncached-torrent-hashes:v7";
+const FAILED_TORRENT_HASH_TTL_MS =
+  2 * 60 * 60 * 1000;
+const FAILED_TORRENT_HASH_LIMIT = 80;
+
+const readPersistentFailedTorrentHashes = () => {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+
+  try {
+    const raw = JSON.parse(
+      window.localStorage.getItem(FAILED_TORRENT_HASHES_KEY) || "{}"
+    );
+    const now = Date.now();
+    const fresh = Object.entries(
+      /** @type {Record<string, number>} */ (
+        raw && typeof raw === "object" ? raw : {}
+      )
+    )
+      .map(([hash, failedAt]) =>
+        /** @type {[string, number]} */ ([
+          String(hash || "").toLowerCase(),
+          Number(failedAt || 0),
+        ])
+      )
+      .filter(
+        ([hash, failedAt]) =>
+          /^[a-f0-9]{40,64}$/i.test(hash) &&
+          failedAt > 0 &&
+          now - failedAt < FAILED_TORRENT_HASH_TTL_MS
+      )
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, FAILED_TORRENT_HASH_LIMIT);
+
+    const cleaned = Object.fromEntries(fresh);
+    window.localStorage.setItem(
+      FAILED_TORRENT_HASHES_KEY,
+      JSON.stringify(cleaned)
+    );
+
+    return new Set(fresh.map(([hash]) => hash));
+  } catch {
+    return new Set();
+  }
+};
+
+const rememberPersistentFailedTorrentHash = (hash) => {
+  const normalized = String(hash || "").trim().toLowerCase();
+
+  if (
+    typeof window === "undefined" ||
+    !/^[a-f0-9]{40,64}$/i.test(normalized)
+  ) {
+    return;
+  }
+
+  try {
+    const now = Date.now();
+    const raw = JSON.parse(
+      window.localStorage.getItem(FAILED_TORRENT_HASHES_KEY) || "{}"
+    );
+    const fresh = Object.entries(
+      /** @type {Record<string, number>} */ (
+        raw && typeof raw === "object" ? raw : {}
+      )
+    )
+      .map(([storedHash, failedAt]) =>
+        /** @type {[string, number]} */ ([
+          String(storedHash || "").toLowerCase(),
+          Number(failedAt || 0),
+        ])
+      )
+      .filter(
+        ([storedHash, failedAt]) =>
+          /^[a-f0-9]{40,64}$/i.test(storedHash) &&
+          failedAt > 0 &&
+          now - failedAt < FAILED_TORRENT_HASH_TTL_MS
+      );
+
+    fresh.push([normalized, now]);
+
+    const trimmed = Object.fromEntries(
+      fresh
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, FAILED_TORRENT_HASH_LIMIT)
+    );
+
+    window.localStorage.setItem(
+      FAILED_TORRENT_HASHES_KEY,
+      JSON.stringify(trimmed)
+    );
+  } catch {
+    // Persistence is an optimisation; in-memory recovery still works.
+  }
+};
+
+const forgetPersistentFailedTorrentHash = (hash) => {
+  const normalized = String(hash || "").trim().toLowerCase();
+
+  if (
+    typeof window === "undefined" ||
+    !/^[a-f0-9]{40,64}$/i.test(normalized)
+  ) {
+    return;
+  }
+
+  try {
+    const raw = JSON.parse(
+      window.localStorage.getItem(FAILED_TORRENT_HASHES_KEY) || "{}"
+    );
+
+    if (raw && typeof raw === "object") {
+      delete raw[normalized];
+      window.localStorage.setItem(
+        FAILED_TORRENT_HASHES_KEY,
+        JSON.stringify(raw)
+      );
+    }
+  } catch {
+    // Persistence is only a recovery optimisation.
+  }
+};
+
+const formatCacheBytes = (value) => {
+  const bytes = Math.max(0, Number(value || 0));
+
+  if (!bytes) return "";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = bytes;
+  let unit = 0;
+
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+
+  const decimals = amount >= 100 || unit === 0 ? 0 : amount >= 10 ? 1 : 2;
+  return `${amount.toFixed(decimals)} ${units[unit]}`;
+};
+
+const formatCacheSpeed = (value) => {
+  const bytesPerSecond = Math.max(0, Number(value || 0));
+  if (!bytesPerSecond) return "";
+
+  /*
+   * Real-Debrid reports torrent speed in bytes/second, while users normally
+   * recognise their internet/download speed in bits/second. Show Mbps so the
+   * number matches the way broadband and mobile-data speeds are advertised.
+   * Example: 2.95 MB/s ~= 23.6 Mbps.
+   */
+  const bitsPerSecond = bytesPerSecond * 8;
+
+  if (bitsPerSecond >= 1_000_000) {
+    const mbps = bitsPerSecond / 1_000_000;
+    const decimals = mbps >= 100 ? 0 : mbps >= 10 ? 1 : 2;
+    return `${mbps.toFixed(decimals)} Mbps`;
+  }
+
+  if (bitsPerSecond >= 1_000) {
+    const kbps = bitsPerSecond / 1_000;
+    const decimals = kbps >= 100 ? 0 : kbps >= 10 ? 1 : 2;
+    return `${kbps.toFixed(decimals)} Kbps`;
+  }
+
+  return `${Math.round(bitsPerSecond)} bps`;
+};
+
+const formatCacheDuration = (value) => {
+  const seconds = Math.max(0, Math.round(Number(value || 0)));
+
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+
+  if (minutes < 60) {
+    return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+};
+
+const friendlyRdStatus = (value) => {
+  const status = String(value || "").trim().toLowerCase();
+  const labels = {
+    magnet_conversion: "Reading magnet",
+    comet_starting: "Starting in Comet",
+    comet_start_failed: "Comet could not start torrent",
+    restarting: "Restarting torrent",
+    stalled: "Waiting for peers",
+    waiting_files_selection: "Selecting files",
+    waiting_selection: "Queued",
+    queued: "Queued",
+    downloading: "Downloading",
+    downloaded: "Cached",
+    compressing: "Finishing",
+    uploading: "Finishing",
+    dead: "No live seeders",
+    error: "Real-Debrid error",
+    magnet_error: "Magnet failed",
+    virus: "Blocked by Real-Debrid",
+  };
+
+  return labels[status] || (status ? status.replace(/_/g, " ") : "Preparing");
+};
+
+const cachePhaseDetails = (preparation = {}) => {
+  const phase = String(preparation?.phase || "").trim().toLowerCase();
+  const status = String(preparation?.status || "").trim().toLowerCase();
+  const progress = Math.max(0, Math.min(100, Number(preparation?.progress || 0)));
+
+  if (phase === "ready" || status === "ready") {
+    return { key: "ready", step: 5, label: "Ready" };
+  }
+
+  if (
+    phase === "finalizing" ||
+    status === "downloaded" ||
+    progress >= 100
+  ) {
+    return { key: "finalizing", step: 4, label: "Finalising stream" };
+  }
+
+  if (
+    phase === "selecting" ||
+    /^(?:waiting_files_selection|waiting_selection)$/.test(status)
+  ) {
+    return { key: "selecting", step: 2, label: "Selecting file" };
+  }
+
+  if (
+    phase === "downloading" ||
+    status === "downloading" ||
+    progress > 0
+  ) {
+    return { key: "downloading", step: 3, label: "Downloading" };
+  }
+
+  if (phase === "restarting" || status === "restarting") {
+    return { key: "starting", step: 1, label: "Restarting torrent" };
+  }
+
+  return {
+    key: "starting",
+    step: 1,
+    label: friendlyRdStatus(status || "preparing"),
+  };
+};
+
+const friendlyPlaybackError = (value) => {
+  const message = String(value || "").replace(/\s+/g, " ").trim();
+
+  if (!message) {
+    return "";
+  }
+
+  if (/\b451\b|infringing[_ -]?file|copyright|infringing/i.test(message)) {
+    return "Real-Debrid rejected this torrent. Choose another release.";
+  }
+
+  if (/traffic[_ -]?exhausted|\btraffic exhausted\b/i.test(message)) {
+    return "Real-Debrid reports that its traffic allowance is exhausted. Media God has kept this source available and will not mark the torrent bad.";
+  }
+
+  if (/\b502\b|bad gateway|temporarily unavailable/i.test(message)) {
+    return "The source service is temporarily unavailable. Try again later or choose another source.";
+  }
+
+  if (/no other playable source/i.test(message)) {
+    return "No working source was found. Choose another source or try again.";
+  }
+
+  if (/no sound|audio/i.test(message) && /fail|error|unsupported/i.test(message)) {
+    return "This source has an audio problem. Try Fix audio or another source.";
+  }
+
+  return message.length > 170
+    ? `${message.slice(0, 167)}…`
+    : message;
+};
+
+const openExternalPlaybackFallback = (url) => {
+  const target = String(url || "").trim();
+
+  if (!/^https?:\/\//i.test(target)) {
+    return false;
+  }
+
+  if (openNativeFireTvExternalUrl(target)) {
+    return true;
+  }
+
+  try {
+    const opened = window.open(target, "_blank", "noopener,noreferrer");
+    if (opened) return true;
+  } catch {
+    // Fall through to same-window navigation.
+  }
+
+  try {
+    window.location.assign(target);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isFireTvRemoteRuntime = () => {
+  if (typeof navigator === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+
+  const ua = String(navigator.userAgent || "");
+
+  return (
+    /(?:\bAFT[A-Z0-9]*\b|Fire\s*TV|AmazonWebAppPlatform|Silk|MediaGodFireTV)/i.test(ua) ||
+    document.documentElement.classList.contains("mg-fire-tv") ||
+    document.documentElement.classList.contains("mg-fire-tv-mode") ||
+    document.body?.classList.contains("mg-fire-tv") ||
+    document.body?.classList.contains("mg-fire-tv-mode")
+  );
+};
+
+/*
+ * The phone/tablet wrapper exposes the exact same MediaGodNative playback
+ * bridge as Fire TV, but it deliberately uses a different UA/class marker.
+ * Previously VOD only entered Media3 automatically on Fire TV, so Android
+ * Mobile could keep a multi-audio AIOStreams file inside WebView and simply
+ * play the container's first (foreign) audio track. The strict native English
+ * gate therefore never got a chance to run.
+ */
+const isAndroidMobileNativeRuntime = () => {
+  if (typeof navigator === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+
+  const ua = String(navigator.userAgent || "");
+
+  return (
+    /(?:MediaGodMobile|AndroidMobile)/i.test(ua) ||
+    document.documentElement.classList.contains("mg-android-mobile") ||
+    document.documentElement.classList.contains("mg-native-android-mobile") ||
+    document.body?.classList.contains("mg-android-mobile") ||
+    document.body?.classList.contains("mg-native-android-mobile")
+  );
+};
+
+const browserFullscreenElement = () => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement ||
+    null
+  );
+};
+
+const requestBrowserFullscreen = async (element) => {
+  if (!(element instanceof HTMLElement)) {
+    throw new Error("Fullscreen target is unavailable.");
+  }
+
+  if (typeof element.requestFullscreen === "function") {
+    try {
+      await element.requestFullscreen({ navigationUI: "hide" });
+    } catch (firstError) {
+      try {
+        await element.requestFullscreen();
+      } catch {
+        throw firstError;
+      }
+    }
+    return;
+  }
+
+  if (typeof element.webkitRequestFullscreen === "function") {
+    await Promise.resolve(element.webkitRequestFullscreen());
+    return;
+  }
+
+  if (typeof element.mozRequestFullScreen === "function") {
+    await Promise.resolve(element.mozRequestFullScreen());
+    return;
+  }
+
+  if (typeof element.msRequestFullscreen === "function") {
+    await Promise.resolve(element.msRequestFullscreen());
+    return;
+  }
+
+  throw new Error("Browser fullscreen is unavailable.");
+};
+
+const exitBrowserFullscreen = async () => {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  if (typeof document.exitFullscreen === "function") {
+    await document.exitFullscreen();
+    return;
+  }
+
+  if (typeof document.webkitExitFullscreen === "function") {
+    await Promise.resolve(document.webkitExitFullscreen());
+    return;
+  }
+
+  if (typeof document.mozCancelFullScreen === "function") {
+    await Promise.resolve(document.mozCancelFullScreen());
+    return;
+  }
+
+  if (typeof document.msExitFullscreen === "function") {
+    await Promise.resolve(document.msExitFullscreen());
+  }
+};
+
+const isDesktopFullscreenBrowser = () => {
+  if (
+    typeof window === "undefined" ||
+    typeof navigator === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return false;
+  }
+
+  const ua = `${navigator.userAgent || ""} ${navigator.platform || ""}`;
+  const root = document.documentElement;
+  const body = document.body;
+
+  // Dedicated TV/Android wrappers deliberately keep Media God's safe in-app
+  // fullscreen. Their host activity owns the physical display and using the
+  // browser Fullscreen API can restart playback or create a second surface.
+  if (
+    isFireTvRemoteRuntime() ||
+    root.classList.contains("mg-android-mobile") ||
+    body?.classList.contains("mg-android-mobile") ||
+    /(?:Android|iPhone|iPad|iPod)/i.test(ua)
+  ) {
+    return false;
+  }
+
+  // Desktop/PWA/Electron-style windows are detected by capability rather than
+  // a fragile OS user-agent allow-list. This lets installed desktop web apps
+  // hide the Windows taskbar/browser frame just like a normal browser tab.
+  return Boolean(
+    root.requestFullscreen ||
+      root.webkitRequestFullscreen ||
+      root.mozRequestFullScreen ||
+      root.msRequestFullscreen
+  );
+};
+
+const audioTrackScore = (track, preferredLanguage = "en") =>
+  preferredAudioTrackScore(track, preferredLanguage);
+
+const resolvedMediaEnglishMainState = (mediaInfo) => {
+  const tracks = Array.isArray(mediaInfo?.audio_tracks)
+    ? mediaInfo.audio_tracks
+    : [];
+
+  if (tracks.length === 0) return "unknown";
+
+  let explicitlyKnownTracks = 0;
+
+  for (const track of tracks) {
+    const language = String(
+      track?.language_iso ||
+        track?.language ||
+        track?.lang_iso ||
+        track?.lang ||
+        ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, "-");
+
+    const labelText = [
+      track?.title,
+      track?.name,
+      track?.label,
+      track?.description,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const english =
+      language === "en" ||
+      language === "eng" ||
+      language === "english" ||
+      language.startsWith("en-") ||
+      /(?:^|[^a-z0-9])(?:eng|en|english)(?=$|[^a-z0-9])/i.test(
+        labelText
+      );
+
+    const commentaryOrDescriptive =
+      /\b(?:commentary|audio[ ._-]*description|descriptive|visually[ ._-]*impaired|director(?:'s)?[ ._-]*commentary|cast[ ._-]*commentary)\b/i.test(
+        labelText
+      );
+
+    if (english && !commentaryOrDescriptive) {
+      return "proven";
+    }
+
+    const languageKnownFromCode =
+      Boolean(language) &&
+      !["und", "unknown", "zxx", "mul", "multi"].includes(language);
+
+    const languageKnownFromLabel =
+      /\b(?:english|eng|french|fra|fre|spanish|spa|german|deu|ger|italian|ita|portuguese|por|dutch|nld|dut|polish|pol|japanese|jpn|korean|kor|chinese|mandarin|cantonese|zho|chi|arabic|ara|hindi|hin|russian|rus|ukrainian|ukr|turkish|tur)\b/i.test(
+        labelText
+      );
+
+    if (languageKnownFromCode || languageKnownFromLabel) {
+      explicitlyKnownTracks += 1;
+    }
+  }
+
+  return explicitlyKnownTracks === tracks.length
+    ? "foreign"
+    : "unknown";
+};
+
+export default function VideoPlayer({
+  source,
+  onClose,
+  onOpenVidSrc,
+}) {
+  const fallbackSourceUrl =
+    getSourceUrl(source);
+
+  const publishedSources =
+    source?.sources &&
+    source.sources.length > 0
+      ? source.sources
+      : fallbackSourceUrl
+        ? [
+            {
+              label:
+                source?.label ||
+                (source?.type === "live"
+                  ? "LIVE"
+                  : "Stream"),
+
+              type:
+                source?.type ||
+                (source?.type === "live"
+                  ? "live"
+                  : "url"),
+
+              src:
+                fallbackSourceUrl,
+
+              url:
+                fallbackSourceUrl,
+
+              magnet:
+                source?.magnet ||
+                source?.magnetLink ||
+                source?.src ||
+                source?.url,
+
+              live:
+                source?.type === "live",
+            },
+          ]
+        : [
+            {
+              /*
+               * Never invent a selectable RD "Stream" when discovery returned
+               * no media URL. That fake row made an empty source pool look like
+               * "Found 1 / Shown 1" and left every surface spinning forever.
+               * Keep the state diagnostic-only until real discovery arrives.
+               */
+              label:
+                source?.sourceDiagnostics?.diagnosticLabel ||
+                "Finding playback sources…",
+
+              type:
+                "status",
+
+              src:
+                "",
+
+              url:
+                "",
+
+              diagnostic:
+                true,
+            },
+          ];
+
+  /*
+   * source.sources is the fast-start/live player list and can be refreshed by
+   * asynchronous discovery. completeSources is the final cache-annotated pool.
+   * Reconcile both on every render so a late six-row fast-start snapshot can
+   * never hide the rest of the confirmed cached sources from either selector.
+   */
+  const sources = mergeCompleteSourcePool(
+    publishedSources,
+    source?.completeSources,
+    {
+      preservePublishedStatus:
+        source?.qualifiedLaunchOnly === true,
+    }
+  );
+
+  const [activeIdx, setActiveIdx] =
+    useState(0);
+  const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(false);
+
+  useEffect(() => {
+    setInPlayerSourcesOpen(false);
+  }, [source?.playRequestId]);
+
+  const [sourceSortMode, setSourceSortMode] = useState(
+    () => readSourceSortMode()
+  );
+
+  const [smartUpgradeNotice, setSmartUpgradeNotice] =
+    useState(null);
+
+  const [
+    isAppFullscreen,
+    setIsAppFullscreen,
+  ] = useState(false);
+
+  const [rdResolving, setRdResolving] =
+    useState(false);
+
+  const [rdPolling, setRdPolling] =
+    useState(false);
+
+  const [rdError, setRdErrorState] =
+    useState("");
+
+  const [vodStartupNotice, setVodStartupNotice] =
+    useState("");
+
+  const [audioUnlockUrl, setAudioUnlockUrl] =
+    useState("");
+
+  const [liveRecoveryNotice, setLiveRecoveryNotice] =
+    useState(null);
+
+  const [rdPreparation, setRdPreparation] =
+    useState(null);
+
+  const [rdOverride, setRdOverride] =
+    useState(null);
+
+  const [rdFiles, setRdFiles] =
+    useState([]);
+
+  const [rdTorrentId, setRdTorrentId] =
+    useState(null);
+
+  const [rdManualFileSelection, setRdManualFileSelection] =
+    useState(null);
+
+  const [rdCacheEngineNonce, setRdCacheEngineNonce] =
+    useState(0);
+
+  const [backgroundCacheNonce, setBackgroundCacheNonce] =
+    useState(0);
+
+  const [runtimeReadyTorrentHashes, setRuntimeReadyTorrentHashes] =
+    useState(() => new Set());
+
+  const [fileSwitching, setFileSwitching] =
+    useState(false);
+
+  const [nativeFallbackUrl, setNativeFallbackUrl] =
+    useState("");
+
+  const [forceNativePlayback, setForceNativePlayback] =
+    useState(false);
+  const [nativeBusyRetryTick, setNativeBusyRetryTick] = useState(0);
+  const [playerContextRevision, setPlayerContextRevision] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const onPlayerContext = (event) => {
+      updateNativeEpisodePlaybackContext(
+        event?.detail || window.__MG_PLAYER_CONTEXT__,
+        nativePlaybackRef.current?.requestId
+      );
+      setPlayerContextRevision((value) => value + 1);
+    };
+
+    const onNativeProgress = () => updateNativeEpisodePlaybackContext(
+      window.__MG_PLAYER_CONTEXT__, nativePlaybackRef.current?.requestId
+    );
+    window.addEventListener("mg:player-context", onPlayerContext);
+    window.addEventListener("mg:native-playback-progress", onNativeProgress);
+    return () => {
+      window.removeEventListener("mg:player-context", onPlayerContext);
+      window.removeEventListener("mg:native-playback-progress", onNativeProgress);
+    };
+  }, []);
+
+  const [
+    failedSources,
+    setFailedSources,
+  ] = useState(() => new Set());
+
+  const failedSourcesRef =
+    useRef(new Set());
+
+  /*
+   * A title can expose the same torrent through several addons/rows. Source-
+   * index failure alone is not enough: automatic recovery could otherwise
+   * select a duplicate row and reconnect to the exact same stalled RD job.
+   * Keep a per-playback hash blacklist for hard torrent/cache failures.
+   */
+  const failedTorrentHashesRef =
+    useRef(readPersistentFailedTorrentHashes());
+
+  useEffect(() => {
+    setAudioUnlockUrl("");
+  }, [activeIdx, source?.playRequestId, rdOverride?.src]);
+
+  const videoRef = useRef(null);
+  const liveVideoRef = useRef(null);
+  const stageRef = useRef(null);
+  const vodProgressRef = useRef({ video: null, time: 0, advancedAt: 0 });
+  const pollRef = useRef(null);
+  const recoveryResumeRef = useRef(0);
+  const rdResolutionQueueRef = useRef(Promise.resolve());
+  const rdCacheEngineAbortRef = useRef(null);
+  const rdCacheEngineOwnsPollingRef = useRef(false);
+  const backgroundCacheControllersRef = useRef(new Map());
+  const backgroundCacheScheduledHashesRef = useRef(new Set());
+  const backgroundCacheAttemptedRef = useRef(new Set());
+  const backgroundCacheRetryTimerRef = useRef(null);
+  const backgroundCacheTitleKeyRef = useRef("");
+  const retryExistingTorrentIdRef = useRef("");
+  const retryInactiveTorrentHashRef = useRef("");
+  const repairedStuckTorrentHashesRef = useRef(new Set());
+  const torrentFailoverTimerRef = useRef(null);
+  const nativePlaybackRef = useRef({
+    requestId: "",
+    url: "",
+    playRequestId: null,
+  });
+  const nativeBusyRequestRef = useRef(null);
+  const liveRecoveryNoticeTimerRef = useRef(null);
+  const streamActionGenerationRef = useRef(0);
+  const reportedNoSoundTracksRef = useRef({
+    key: "", tried: new Set(), hlsTried: new Set(),
+  });
+  const manualSourceLockRef = useRef({
+    // A source chosen on the episode detail page is as authoritative
+    // as one picked from the in-player Sources drawer. Claim it before
+    // any automatic English/best-source handoff can run.
+    sourceKey: source?.manualSourceSelection === true
+      ? stablePlaybackSourceKey(sources[0], 0)
+      : "",
+    playRequestId: source?.playRequestId ?? null,
+  });
+  const startupAutoplayClaimRef = useRef({
+    playRequestId: source?.playRequestId ?? null,
+    claimed: false,
+  });
+  const preparationBackupRef = useRef({
+    playRequestId: source?.playRequestId ?? null,
+    attempted: false,
+  });
+  const sourceChooserRef = useRef(null);
+  const lastPlayRequestIdRef = useRef(
+    source?.playRequestId ?? null
+  );
+
+  /*
+   * A new movie/episode owns a new source list. Never carry an old list index
+   * or manual source lock into the next playback request.
+   */
+  useEffect(() => {
+    const nextPlayRequestId = source?.playRequestId ?? null;
+
+    if (lastPlayRequestIdRef.current === nextPlayRequestId) {
+      return;
+    }
+
+    lastPlayRequestIdRef.current = nextPlayRequestId;
+    // Retain the viewer's explicit episode-source choice across new
+    // playback requests, but leave normal Play and Live TV unrestricted.
+    const initialManualSourceKey =
+      source?.manualSourceSelection === true && source?.type !== "live"
+        ? stablePlaybackSourceKey(sources[0], 0)
+        : "";
+    manualSourceLockRef.current = {
+      sourceKey: initialManualSourceKey,
+      playRequestId: nextPlayRequestId,
+    };
+    startupAutoplayClaimRef.current = {
+      playRequestId: nextPlayRequestId,
+      claimed: Boolean(initialManualSourceKey),
+    };
+    englishAudioRejectedRef.current = new Set();
+    setSmartUpgradeNotice(null);
+    setActiveIdx(0);
+    preparationBackupRef.current = {
+      playRequestId: nextPlayRequestId,
+      attempted: false,
+    };
+  }, [source?.playRequestId]);
+
+  useEffect(() => {
+    return () => {
+      if (torrentFailoverTimerRef.current) {
+        window.clearTimeout(torrentFailoverTimerRef.current);
+        torrentFailoverTimerRef.current = null;
+      }
+
+      if (liveRecoveryNoticeTimerRef.current) {
+        window.clearTimeout(liveRecoveryNoticeTimerRef.current);
+        liveRecoveryNoticeTimerRef.current = null;
+      }
+
+      if (backgroundCacheRetryTimerRef.current) {
+        window.clearTimeout(backgroundCacheRetryTimerRef.current);
+        backgroundCacheRetryTimerRef.current = null;
+      }
+
+      backgroundCacheControllersRef.current.forEach((controller) => {
+        controller?.abort?.();
+      });
+      backgroundCacheControllersRef.current.clear();
+      backgroundCacheScheduledHashesRef.current.clear();
+    };
+  }, []);
+
+  const autoVideoRescueRef = useRef({
+    key: "",
+    timer: null,
+  });
+  const autoRecoveryRef = useRef({
+    lastTime: 0,
+    lastProgressAt: Date.now(),
+    lastSwitchAt: 0,
+    rapidImmediateWindowAt: 0,
+    rapidImmediateCount: 0,
+    abandoned: new Set(),
+  });
+  const vodStartupAttemptedRef = useRef(new Set());
+  const englishAudioRejectedRef = useRef(new Set());
+
+  const sourcesForSelector = sources.map((item) => {
+    const hash = sourceTorrentHash(item);
+    return hash && runtimeReadyTorrentHashes.has(hash)
+      ? {
+          ...item,
+          debridCached: true,
+          runtimeReadyCached: true,
+        }
+      : item;
+  });
+
+  const playbackMediaType =
+    source?.type === "live" ||
+    sources[activeIdx]?.live ||
+    sources[activeIdx]?.type === "live"
+      ? "live"
+      : source?.mediaType === "tv" ||
+          source?.type === "series" ||
+          source?.season != null ||
+          source?.episode != null ||
+          source?.rdSeason != null ||
+          source?.rdEpisode != null
+        ? "tv"
+        : "movie";
+
+  const vidSrcEmbedUrl = buildVidSrcEmbedUrl({
+    ...source,
+    mediaType: playbackMediaType,
+  });
+
+  const preferredAudioLanguage = String(
+    readTrackPreferences()?.audioLanguage || "en"
+  )
+    .trim()
+    .toLowerCase();
+
+  /*
+   * Manual source-first rollback: keep English as a sorting preference only.
+   * Do not block playback, probe/reject sources, or hold startup waiting for
+   * file-level English proof.
+   */
+  const strictEnglishAutoplayRequired = false;
+
+  const manualSourceLockActive = () => {
+    if (playbackMediaType === "live") return false;
+
+    const lock = manualSourceLockRef.current;
+    if (!lock?.sourceKey) return false;
+
+    const currentPlayRequestId = source?.playRequestId ?? null;
+    const currentSourceKey = stablePlaybackSourceKey(active, activeIdx);
+
+    return (
+      lock.playRequestId === currentPlayRequestId &&
+      lock.sourceKey === currentSourceKey
+    );
+  };
+
+  const lockCurrentVodSourceForAudioRecovery = () => {
+    if (playbackMediaType === "live") return;
+
+    manualSourceLockRef.current = {
+      sourceKey: stablePlaybackSourceKey(active, activeIdx),
+      playRequestId: source?.playRequestId ?? null,
+    };
+  };
+
+  const returnFromPlayback = useCallback(() => {
+    if (playbackMediaType !== "tv") {
+      // Movie Back always returns Home rather than exposing the previous
+      // details/search overlay. TV episodes still restore their episode list.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mg:return-to-home"));
+      }
+      onClose?.();
+      return;
+    }
+
+    const tmdbId =
+      source?.tmdbId ??
+      source?.tmdb_id ??
+      source?.id ??
+      null;
+
+    const seriesTitle = String(
+      source?.rdTitle ||
+        source?.seriesTitle ||
+        source?.title ||
+        "TV Show"
+    )
+      .replace(/\s+[—-]\s+S\d{1,2}E\d{1,3}.*$/i, "")
+      .trim();
+
+    const episodeContext = {
+      mediaType: "tv",
+      tmdbId,
+      title: seriesTitle || "TV Show",
+      year: source?.rdYear ?? source?.year ?? null,
+      poster: source?.poster || "",
+      season: source?.season ?? source?.rdSeason ?? null,
+      episode: source?.episode ?? source?.rdEpisode ?? null,
+    };
+
+    /*
+     * Restore the episode-screen identity before closing playback. Closing the
+     * core player clears shared playback context synchronously, so dispatching
+     * after close could race with Home and leave the user on the dashboard.
+     * Home can mount/focus the show selector while the player still covers it,
+     * then the close reveals that exact episode screen cleanly.
+     */
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("mg:return-to-episode-selector", {
+          detail: episodeContext,
+        })
+      );
+    }
+
+    onClose?.();
+  }, [
+    onClose,
+    playbackMediaType,
+    source?.episode,
+    source?.id,
+    source?.poster,
+    source?.rdEpisode,
+    source?.rdSeason,
+    source?.rdTitle,
+    source?.rdYear,
+    source?.season,
+    source?.seriesTitle,
+    source?.title,
+    source?.tmdbId,
+    source?.tmdb_id,
+    source?.year,
+  ]);
+
+  const availableSortOptions = availableSourceSortOptions(
+    sourcesForSelector,
+    { mediaType: playbackMediaType }
+  );
+  const availableSortOptionValues = availableSortOptions
+    .map((option) => option.value)
+    .join("|");
+
+  useEffect(() => {
+    if (!availableSortOptionValues.split("|").includes(sourceSortMode)) {
+      setSourceSortMode(writeSourceSortMode("best"));
+    }
+  }, [availableSortOptionValues, sourceSortMode]);
+
+  const episodeHealthContext = {
+    tmdbId: source?.tmdbId ?? source?.tmdb_id ?? source?.id,
+    season: source?.season ?? source?.rdSeason,
+    episode: source?.episode ?? source?.rdEpisode,
+  };
+  const sortedSourceEntries = sortSourceEntries(
+    sourcesForSelector,
+    sourceSortMode,
+    { mediaType: playbackMediaType, episodeContext: episodeHealthContext }
+  );
+
+  const smartMediaContext = {
+    mediaType: playbackMediaType,
+    imdbId: source?.imdbId ?? source?.imdb_id ?? "",
+    tmdbId: source?.tmdbId ?? source?.tmdb_id ?? source?.id ?? "",
+    id: source?.id ?? "",
+    title: source?.rdTitle || source?.seriesTitle || source?.title || "",
+    year: source?.rdYear ?? source?.year ?? "",
+    season: source?.season ?? source?.rdSeason ?? null,
+    episode: source?.episode ?? source?.rdEpisode ?? null,
+  };
+
+  const smartUpgradeBestEntry =
+    playbackMediaType === "live"
+      ? null
+      : bestSmartUpgradeEntry(
+          sortedSourceEntries.filter(({ item }) =>
+            sourceIsUserSelectable(item)
+          )
+        );
+
+  const smartUpgradeBestFingerprint =
+    smartUpgradeBestEntry
+      ? smartSourceFingerprint(
+          smartUpgradeBestEntry.item,
+          smartUpgradeBestEntry.index
+        )
+      : "";
+
+  const smartUpgradeBestScore =
+    smartUpgradeBestEntry
+      ? smartEntryUpgradeScore(smartUpgradeBestEntry)
+      : Number.NEGATIVE_INFINITY;
+
+  const smartUpgradeDiscoveryComplete = Boolean(
+    source?.sourceDiagnostics?.combinedSourceCount != null ||
+      source?.sourceDiagnostics?.phase === "prepared-handoff"
+  );
+
+  useEffect(() => {
+    if (
+      playbackMediaType === "live" ||
+      !smartUpgradeDiscoveryComplete ||
+      !smartUpgradeBestEntry
+    ) {
+      return;
+    }
+
+    const upgrade = detectSmartSourceUpgrade(
+      smartMediaContext,
+      smartUpgradeBestEntry
+    );
+
+    setSmartUpgradeNotice(
+      upgrade?.available === true
+        ? upgrade
+        : null
+    );
+
+    recordSmartSourceBaseline(
+      smartMediaContext,
+      smartUpgradeBestEntry
+    );
+  }, [
+    playbackMediaType,
+    smartUpgradeBestFingerprint,
+    smartUpgradeBestScore,
+    smartUpgradeDiscoveryComplete,
+    source?.playRequestId,
+  ]);
+
+  const hasTorrentPlaybackCandidate =
+    playbackMediaType !== "live" &&
+    sourcesForSelector.some((item) =>
+      sourceIsUserSelectable(item) &&
+      sourceIsTorrentPlaybackCandidate(item)
+    );
+
+  /*
+   * Addon identity matters more than the normalized row type here. AIOStreams
+   * can return a perfectly ordinary type:"torrent" row, so checking only for
+   * type:"provider" lets it bypass the old fallback guard.
+   */
+  const hasNonAioTorrentPlaybackCandidate =
+    playbackMediaType !== "live" &&
+    sourcesForSelector.some(
+      (item) =>
+        sourceIsUserSelectable(item) &&
+        sourceIsTorrentPlaybackCandidate(item) &&
+        !sourceIsAioStreamsCandidate(item) &&
+        detectLanguagePreference(item) !== "foreign"
+    );
+
+  /*
+   * Show every discovered source regardless of cache/readiness state.
+   * Automatic recovery still applies playback safety rules, but the manual
+   * chooser itself must never collapse to only the currently-ready rows.
+   */
+  let selectableSourceEntries = sortedSourceEntries.filter(
+    ({ item }) => sourceIsUserSelectable(item)
+  );
+
+  /*
+   * "Best" is the live playback view, not a static catalogue sort. If a VOD
+   * source is already playing successfully, keep that exact source at the top
+   * of the chooser. Metadata guesses from uncached rows must never appear above
+   * the source the viewer is actually watching.
+   */
+  if (sourceSortMode === "best" && playbackMediaType !== "live") {
+    const activeEntry = selectableSourceEntries.find(
+      (entry) => entry.index === activeIdx
+    );
+
+    /*
+     * Only pin a source after it has real playback/launch proof. An arbitrary
+     * startup provider row (for example AIOStreams) must not jump above the
+     * English-first Best ordering merely because raw source index 0 selected it.
+     */
+    if (activeEntry?.provenWorking === true) {
+      selectableSourceEntries = [
+        activeEntry,
+        ...selectableSourceEntries.filter(
+          (entry) => entry.index !== activeIdx
+        ),
+      ];
+    }
+  }
+
+  const automaticReadySourceIndex =
+    selectableSourceEntries.find(
+      ({ item, index, languageRank }) => {
+        const type = String(item?.type || "").trim().toLowerCase();
+
+        return Boolean(
+          index !== activeIdx &&
+            !failedSourcesRef.current.has(index) &&
+            (playbackMediaType !== "tv" || episodeAutoplayCanTrustSource(item)) &&
+            (
+              playbackMediaType === "live" ||
+              !["provider", "external", "youtube"].includes(type)
+            ) &&
+            (
+              playbackMediaType === "live" ||
+              !["en", "eng", "english"].includes(preferredAudioLanguage) ||
+              Number(languageRank ?? 3) <= 3
+            ) &&
+            (
+              !hasNonAioTorrentPlaybackCandidate ||
+              !sourceIsAioStreamsCandidate(item)
+            ) &&
+            !sourceNeedsCaching(item)
+        );
+      }
+    )?.index ?? -1;
+
+  /*
+   * A strict-start status row may be active while verified/cached results are
+   * arriving asynchronously. Only rows explicitly approved for automatic
+   * playback are allowed to replace that barrier automatically.
+   */
+  const autoplayEntryApproved = (entry) => {
+    const { item, index } = entry || {};
+
+    if (
+      !item ||
+      failedSourcesRef.current.has(index) ||
+      (playbackMediaType === "tv" && (!episodeAutoplayCanTrustSource(item) || hasUnusableEpisodeAudio(item))) ||
+      sourceNeedsCaching(item)
+    ) {
+      return false;
+    }
+
+    const hash = sourceTorrentHash(item);
+    const runtimeReady = Boolean(
+      hash && runtimeReadyTorrentHashes.has(hash)
+    );
+    const type = String(item?.type || "").toLowerCase();
+
+    /*
+     * AIOStreams/provider rows remain visible as fallbacks, but they must not
+     * own movie/episode autoplay while a real torrent candidate exists. The
+     * screenshots that exposed this bug showed a working cached Torrentio row
+     * sitting underneath an AIOStreams row that never started.
+     */
+    if (
+      playbackMediaType !== "live" &&
+      ["provider", "external", "youtube"].includes(type)
+    ) {
+      return false;
+    }
+
+    /*
+     * AIOStreams is fallback-only whenever Media God has another non-foreign
+     * torrent candidate. This is deliberately based on addon/source identity,
+     * not on item.type, because AIOStreams commonly arrives as type:"torrent".
+     */
+    if (
+      playbackMediaType !== "live" &&
+      hasNonAioTorrentPlaybackCandidate &&
+      sourceIsAioStreamsCandidate(item)
+    ) {
+      return false;
+    }
+
+    if (strictEnglishAutoplayRequired) {
+      const mediaInfo =
+        item?.mediaInfo && typeof item.mediaInfo === "object"
+          ? item.mediaInfo
+          : item?.media_info && typeof item.media_info === "object"
+            ? item.media_info
+            : null;
+      const englishProof =
+        resolvedMediaEnglishMainState(mediaInfo);
+      /*
+       * "Cached + filename says English" is not enough. Mature players choose
+       * from the file's real audio streams after preparation; doing otherwise
+       * is exactly how a foreign/default or silent track slips through. Strict
+       * autoplay therefore requires file-level English-main proof.
+       */
+      const nativeRuntimeEnglishFallback = Boolean(
+        item?.runtimeQualificationFallback === true &&
+          item?.runtimeNativeEnglishValidation === true &&
+          isNativeFireTvPlayerAvailable() &&
+          Number(entry?.languageRank ?? 3) <= 1 &&
+          Number(entry?.hardSubtitleRank ?? 0) === 0
+      );
+
+      return Boolean(
+        item?.launchQualified === true ||
+          englishProof === "proven" ||
+          nativeRuntimeEnglishFallback
+      );
+    }
+
+    /*
+     * The source selector already owns Media God's canonical "Best available"
+     * order. Autoplay must use that exact same ordering instead of starting at
+     * raw source-array index 0 and making the menu/player disagree.
+     */
+    const cachedCompatibleEnglishAutoplay = Boolean(
+      entry?.cached === true &&
+        Number(entry?.compatibilityTier ?? 3) <= 1 &&
+        Number(entry?.languageRank ?? 3) <= 3 &&
+        Number(entry?.hardSubtitleRank ?? 0) === 0
+    );
+
+    const runtimeReadyEnglishAutoplay = Boolean(
+      runtimeReady &&
+        Number(entry?.languageRank ?? 3) <= 3 &&
+        Number(entry?.hardSubtitleRank ?? 0) === 0
+    );
+
+    return Boolean(
+      item?.launchQualified === true ||
+        item?.runtimeQualificationFallback === true ||
+        item?.playbackVerified === true ||
+        item?.runtimePlaybackVerified === true ||
+        entry?.autoplayReady === true ||
+        runtimeReadyEnglishAutoplay ||
+        cachedCompatibleEnglishAutoplay
+    );
+  };
+
+  const bestApprovedAutoplaySourceIndex =
+    sortedSourceEntries.find(
+      (entry) =>
+        sourceIsUserSelectable(entry?.item) &&
+        autoplayEntryApproved(entry)
+    )?.index ?? -1;
+
+  /*
+   * If no English source is ready yet, do not leave an unproven provider row
+   * selected doing nothing. Pick the same explicit-English candidate that Best
+   * ordering prefers and let the foreground Real-Debrid cache engine prepare
+   * it immediately. This gives one-click playback a deterministic path:
+   * ready English -> play; otherwise best English torrent -> prepare -> play.
+   */
+  const bestEnglishAutoplayCandidateIndex =
+    sortedSourceEntries.find((entry) => {
+      const item = entry?.item;
+      const type = String(item?.type || "").toLowerCase();
+
+      return Boolean(
+        sourceIsUserSelectable(item) &&
+          !failedSourcesRef.current.has(entry?.index) &&
+          (playbackMediaType !== "tv" || episodeAutoplayCanTrustSource(item)) &&
+          Number(entry?.languageRank ?? 3) <= 3 &&
+          Number(entry?.hardSubtitleRank ?? 0) === 0 &&
+          type !== "provider" &&
+          type !== "youtube" &&
+          !(
+            hasNonAioTorrentPlaybackCandidate &&
+            sourceIsAioStreamsCandidate(item)
+          ) &&
+          (
+            autoplayEntryApproved(entry) ||
+            sourceNeedsCaching(item)
+          )
+      );
+    })?.index ?? -1;
+
+  /*
+   * Some valid Torrentio/Comet/etc. rows do not advertise an audio language
+   * until Real-Debrid resolves the exact file. They still need a chance to beat
+   * AIOStreams. Unknown language is allowed for qualification; known-foreign
+   * rows and hard-sub releases are not.
+   */
+  const bestNonAioTorrentAutoplayCandidateIndex =
+    hasNonAioTorrentPlaybackCandidate
+      ? sortedSourceEntries.find((entry) => {
+          const item = entry?.item;
+
+          return Boolean(
+            sourceIsUserSelectable(item) &&
+              !failedSourcesRef.current.has(entry?.index) &&
+              (playbackMediaType !== "tv" || episodeAutoplayCanTrustSource(item)) &&
+              sourceIsTorrentPlaybackCandidate(item) &&
+              !sourceIsAioStreamsCandidate(item) &&
+              Number(entry?.languageRank ?? 3) <= 3 &&
+              Number(entry?.hardSubtitleRank ?? 0) === 0 &&
+              (
+                autoplayEntryApproved(entry) ||
+                sourceNeedsCaching(item)
+              )
+          );
+        })?.index ?? -1
+      : -1;
+
+  const automaticApprovedAutoplaySourceIndex =
+    sortedSourceEntries.find(
+      (entry) =>
+        entry?.index !== activeIdx &&
+        sourceIsUserSelectable(entry?.item) &&
+        autoplayEntryApproved(entry)
+    )?.index ?? -1;
+
+  /*
+   * Android/Fire TV native <select> popups close if React changes their
+   * option list while they are open. Source discovery can legitimately add
+   * results a few seconds after the player appears, so freeze the visible
+   * choices for the duration of the user's selection gesture. The live list
+   * resumes as soon as the select closes or a choice is made.
+   */
+  const sourceSelectorPinnedRef = useRef(false);
+  const sourceSelectorPinnedAtRef = useRef(0);
+  const sourceSelectorEntriesRef = useRef([]);
+  const sourceSelectorValueRef = useRef(
+    /** @type {number | ""} */ (0)
+  );
+
+  const rdFileSelectorPinnedRef = useRef(false);
+  const rdFileSelectorPinnedAtRef = useRef(0);
+  const rdFileSelectorFilesRef = useRef([]);
+  const rdFileSelectorValueRef = useRef("");
+
+  const pinSourceSelector = () => {
+    /*
+     * Continue Watching deliberately opens with one fast-start stream while
+     * addon/cache discovery runs. Never freeze that temporary one-option list;
+     * cached alternatives must flow into the selector as soon as they arrive.
+     */
+    if (selectableSourceEntries.length <= 1) {
+      sourceSelectorPinnedRef.current = false;
+      sourceSelectorPinnedAtRef.current = 0;
+      sourceSelectorEntriesRef.current = [];
+      sourceSelectorValueRef.current = activeIdx;
+      return;
+    }
+
+    sourceSelectorEntriesRef.current = selectableSourceEntries;
+    sourceSelectorValueRef.current = selectableSourceEntries.some(
+      (entry) => entry.index === activeIdx
+    )
+      ? activeIdx
+      : "";
+    sourceSelectorPinnedRef.current = true;
+    sourceSelectorPinnedAtRef.current = Date.now();
+  };
+
+  const releaseSourceSelector = () => {
+    sourceSelectorPinnedRef.current = false;
+    sourceSelectorPinnedAtRef.current = 0;
+    sourceSelectorEntriesRef.current = [];
+  };
+
+  /*
+   * Android WebView can dismiss a native <select> popup without firing blur.
+   * If the live chooser grows after this snapshot was pinned, the snapshot is
+   * stale and must stop controlling the rendered options immediately. Keep the
+   * ref-based pin (it protects the native picker from unrelated rerenders), but
+   * never allow a smaller pinned list to hide newly selectable cached sources.
+   */
+  const sourceSelectorSnapshotIsStale =
+    sourceSelectorPinnedRef.current &&
+    sourceSelectorEntriesRef.current.length > 0 &&
+    selectableSourceEntries.length > sourceSelectorEntriesRef.current.length;
+
+  const selectorOpenKey = (event) =>
+    [
+      "Enter",
+      "NumpadEnter",
+      "Select",
+      "Accept",
+      " ",
+      "Spacebar",
+      "ArrowDown",
+    ].includes(String(event?.key || event?.code || ""));
+
+  const visibleSourceSelectorEntries =
+    sourceSelectorPinnedRef.current &&
+    !sourceSelectorSnapshotIsStale &&
+    sourceSelectorEntriesRef.current.length > 0
+      ? sourceSelectorEntriesRef.current
+      : selectableSourceEntries;
+
+  const requestedSourceSelectorValue =
+    sourceSelectorPinnedRef.current && !sourceSelectorSnapshotIsStale
+      ? sourceSelectorValueRef.current
+      : activeIdx;
+
+  const visibleSourceSelectorValue = visibleSourceSelectorEntries.some(
+    (entry) => String(entry.index) === String(requestedSourceSelectorValue)
+  )
+    ? requestedSourceSelectorValue
+    : "";
+
+  const rdFileIdentityRequest = {
+    title:
+      source?.rdTitle ||
+      source?.title ||
+      "",
+    year:
+      source?.rdYear ??
+      source?.year ??
+      "",
+    alternateYears:
+      Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+        ? (source?.rdAlternateYears || source?.alternateYears)
+        : [],
+    alternateTitles:
+      Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+        ? (source?.rdAlternateTitles || source?.alternateTitles)
+        : [],
+    mediaType:
+      source?.rdSeason != null ||
+      source?.season != null ||
+      source?.rdEpisode != null ||
+      source?.episode != null
+        ? "tv"
+        : "movie",
+  };
+
+  const identitySafeRdFiles = rdFiles.filter((file) =>
+    sourceMatchesRequestedIdentity(
+      {
+        label: file?.path || file?.name || "",
+        filename: file?.path || file?.name || "",
+      },
+      rdFileIdentityRequest
+    )
+  );
+
+  const pinRdFileSelector = () => {
+    rdFileSelectorFilesRef.current = identitySafeRdFiles;
+    rdFileSelectorValueRef.current = String(
+      identitySafeRdFiles.find(
+        (file) =>
+          file.path === rdOverride?.file ||
+          file.name === rdOverride?.file
+      )?.id ?? ""
+    );
+    rdFileSelectorPinnedRef.current = true;
+    rdFileSelectorPinnedAtRef.current = Date.now();
+  };
+
+  const releaseRdFileSelector = () => {
+    rdFileSelectorPinnedRef.current = false;
+    rdFileSelectorPinnedAtRef.current = 0;
+    rdFileSelectorFilesRef.current = [];
+  };
+
+  const visibleRdFileSelectorFiles =
+    rdFileSelectorPinnedRef.current && rdFileSelectorFilesRef.current.length > 0
+      ? rdFileSelectorFilesRef.current
+      : identitySafeRdFiles;
+
+  const visibleRdFileSelectorValue =
+    rdFileSelectorPinnedRef.current
+      ? rdFileSelectorValueRef.current
+      : String(
+          identitySafeRdFiles.find(
+            (file) =>
+              file.path === rdOverride?.file ||
+              file.name === rdOverride?.file
+          )?.id ?? ""
+        );
+
+  const active =
+    sources[activeIdx] ||
+    sources[0] ||
+    {};
+
+  const activeExactReliabilityLabel = () => {
+    const resolvedFile = rdFiles.find((file) =>
+      rdOverride?.file &&
+      (file?.path === rdOverride.file || file?.name === rdOverride.file)
+    );
+    return exactPlaybackSourceLabel(
+      active,
+      resolvedFile?.id != null ? String(resolvedFile.id) : rdOverride?.file || ""
+    );
+  };
+
+  useEffect(() => {
+    if (playbackMediaType === "live") return;
+    writePlaybackAudioDiagnostic(buildPlaybackAudioDiagnostic({
+      source: active,
+      resolved: rdOverride,
+      player: rdOverride?.src?.includes(".m3u8") ? "browser HLS" : "browser media",
+    }));
+  }, [active, rdOverride, playbackMediaType]);
+
+  useEffect(() => {
+    if (playbackMediaType === "live") return undefined;
+    const onHlsTracks = (event) => {
+      const tracks = event?.detail?.tracks;
+      if (!Array.isArray(tracks) || tracks.length === 0) return;
+      const activeIndex = Number(event.detail.activeIndex);
+      writePlaybackAudioDiagnostic(buildPlaybackAudioDiagnostic({
+        source: active,
+        resolved: {
+          ...rdOverride,
+          mediaInfo: {
+            ...(rdOverride?.mediaInfo || {}),
+            audio_tracks: tracks.map((track, index) => ({
+              index,
+              language: track?.language || track?.lang || "",
+              codec: track?.audioCodec || "",
+              name: track?.name || track?.label || "",
+              selected: index === activeIndex,
+            })),
+          },
+        },
+        player: "browser HLS",
+      }));
+    };
+    window.addEventListener("mg:hls-audio-tracks", onHlsTracks);
+    return () => window.removeEventListener("mg:hls-audio-tracks", onHlsTracks);
+  }, [active, rdOverride, playbackMediaType]);
+
+  /*
+   * An unverified MediaFusion episode URL can return a perfectly playable
+   * ElfHosted "Stream not found" video. Never start that clip automatically.
+   * Keep the row in Sources so the viewer can explicitly try it.
+   */
+  const activeIsUnverifiedHostedEpisode =
+    playbackMediaType === "tv" &&
+    isUnverifiedHostedEpisodeStream(active) &&
+    !rdOverride?.src &&
+    !manualSourceLockActive();
+
+  const activeUrl = activeIsUnverifiedHostedEpisode
+    ? ""
+    : getSourceUrl(active);
+
+  const activeResolutionKey =
+    stablePlaybackSourceKey(active, activeIdx);
+
+  const rdMediaContextKey = [
+    source?.rdTitle || source?.title || "",
+    source?.rdYear ?? source?.year ?? "",
+    source?.rdSeason ?? source?.season ?? "",
+    source?.rdEpisode ?? source?.episode ?? "",
+  ].join("|");
+
+  const liveSelectableIndices = () =>
+    sources
+      .map((item, index) => ({ item, index }))
+      .filter(
+        ({ item }) =>
+          item &&
+          (item?.live || item?.type === "live") &&
+          !item?.diagnostic &&
+          item?.type !== "status" &&
+          item?.type !== "provider" &&
+          item?.type !== "youtube" &&
+          Boolean(getSourceUrl(item))
+      )
+      .map(({ index }) => index);
+
+  const liveSourcePosition = (index = activeIdx) => {
+    const indices = liveSelectableIndices();
+    const ordinal = indices.indexOf(Number(index));
+
+    return {
+      current: ordinal >= 0 ? ordinal + 1 : 0,
+      total: indices.length,
+    };
+  };
+
+  const classifyLiveFailure = (message, explicitClass = "") => {
+    const explicit = String(explicitClass || "").trim().toLowerCase();
+    if (explicit) return explicit;
+
+    const text = String(message || "").toLowerCase();
+    if (/too long|start(?:up)?|did not open|didn['’]?t open/.test(text)) return "startup";
+    if (/stall|stopped responding|buffer/.test(text)) return "stall";
+    if (/fire tv|native|media3/.test(text)) return "native";
+    if (/decode|decoder|codec|format|not supported/.test(text)) return "decoder";
+    if (/network|http|connection|fetch|load/.test(text)) return "network";
+    return "media";
+  };
+
+  const liveFailureLabel = (failureClass) => {
+    switch (String(failureClass || "").toLowerCase()) {
+      case "startup":
+        return "startup timeout";
+      case "stall":
+        return "stream stalled";
+      case "network":
+        return "network failure";
+      case "decoder":
+        return "decoder failure";
+      case "native":
+        return "native player failure";
+      default:
+        return "playback failure";
+    }
+  };
+
+  const safeLiveHost = (item) => {
+    try {
+      const url = new URL(String(getSourceUrl(item) || ""));
+      return url.hostname || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const emitLiveDiagnostic = ({
+    event = "status",
+    failureClass = "",
+    index = activeIdx,
+    message = "",
+  } = {}) => {
+    const candidate = sources[index] || {};
+    const liveItem =
+      source?.type === "live" || candidate?.live || candidate?.type === "live";
+
+    if (!liveItem || typeof window === "undefined") return;
+
+    const position = liveSourcePosition(index);
+    const detail = {
+      at: new Date().toISOString(),
+      event: String(event || "status"),
+      failureClass: String(failureClass || ""),
+      channel: String(source?.title || "Live TV"),
+      sourceNumber: position.current,
+      sourceTotal: position.total,
+      sourceName: String(candidate?.sourceName || ""),
+      sourceCategory: String(candidate?.sourceCategory || ""),
+      host: safeLiveHost(candidate),
+      format: String(candidate?.format || candidate?.mimeType || ""),
+      geoRestricted: candidate?.geoRestricted === true,
+      browserPlayable: candidate?.browserPlayable !== false,
+      mixedContent: candidate?.mixedContent === true,
+      requiresHeaders: candidate?.requiresHeaders === true,
+      message: String(message || "").slice(0, 180),
+    };
+
+    try {
+      const history = Array.isArray(window.__MG_LIVE_TV_DIAGNOSTICS__)
+        ? window.__MG_LIVE_TV_DIAGNOSTICS__
+        : [];
+      window.__MG_LIVE_TV_DIAGNOSTICS__ = [...history.slice(-39), detail];
+      window.dispatchEvent(
+        new CustomEvent("mg:live-tv-diagnostic", { detail })
+      );
+      console.info("[Media God Live TV]", detail);
+    } catch {
+      // Diagnostics must never interrupt playback.
+    }
+  };
+
+  const showLiveRecoveryNotice = (
+    message,
+    {
+      index = activeIdx,
+      failureClass = "",
+      kind = "info",
+      clearAfterMs = 0,
+    } = {}
+  ) => {
+    const liveItem =
+      source?.type === "live" ||
+      sources[index]?.live ||
+      sources[index]?.type === "live";
+
+    if (!liveItem) return;
+
+    if (liveRecoveryNoticeTimerRef.current) {
+      window.clearTimeout(liveRecoveryNoticeTimerRef.current);
+      liveRecoveryNoticeTimerRef.current = null;
+    }
+
+    const position = liveSourcePosition(index);
+    setLiveRecoveryNotice({
+      message: String(message || ""),
+      sourceNumber: position.current,
+      sourceTotal: position.total,
+      failureClass: String(failureClass || ""),
+      kind: String(kind || "info"),
+    });
+
+    if (clearAfterMs > 0) {
+      liveRecoveryNoticeTimerRef.current = window.setTimeout(() => {
+        liveRecoveryNoticeTimerRef.current = null;
+        setLiveRecoveryNotice(null);
+      }, clearAfterMs);
+    }
+  };
+
+  const mediaElementFailureClass = () => {
+    const video = stageRef.current?.querySelector("video");
+    const code = Number(video?.error?.code || 0);
+
+    if (code === 2) return "network";
+    if (code === 3 || code === 4) return "decoder";
+    return "media";
+  };
+
+  const trackPreferences = readTrackPreferences();
+
+  useEffect(() => {
+    const onSourceSortChanged = (event) => {
+      setSourceSortMode(
+        String(event?.detail?.mode || readSourceSortMode())
+      );
+    };
+
+    window.addEventListener(
+      SOURCE_SELECTOR_SORT_EVENT,
+      onSourceSortChanged
+    );
+
+    return () => {
+      window.removeEventListener(
+        SOURCE_SELECTOR_SORT_EVENT,
+        onSourceSortChanged
+      );
+    };
+  }, []);
+
+  const automaticNetworkScore = (item, label) => {
+    const preferences = readPlaybackPreferences();
+    if (!preferences.networkAware4K || typeof navigator === "undefined") return 0;
+
+    const traits = detectStreamTraits(item, label);
+    if (Number(traits.resolution || 0) < 2160) return 0;
+
+    const downlink = Number(navigator.connection?.downlink || 0);
+    if (!Number.isFinite(downlink) || downlink <= 0) return 0;
+
+    const rawBitrate = Number(
+      item?.bitrate || item?.bit_rate || item?.videoBitrate || item?.video_bitrate || 0
+    );
+    const labelRate = Number(
+      String(label || "").match(/(\d+(?:\.\d+)?)\s*(?:mbps|mb\/s)/i)?.[1] || 0
+    );
+    const bitrateMbps = rawBitrate > 100000 ? rawBitrate / 1_000_000 : rawBitrate > 0 ? rawBitrate : labelRate;
+    const remux = /\b(?:remux|blu-?ray|bdmv)\b/i.test(String(label || ""));
+    const required = bitrateMbps > 0 ? bitrateMbps * 1.2 : remux ? 55 : 24;
+
+    if (downlink < required * 0.72) return -70000;
+    if (downlink < required) return -22000;
+    if (downlink >= required * 1.5) return 6000;
+    return 0;
+  };
+
+  const hdrRecoveryScore = (item, label) => {
+    const activeTraits = detectStreamTraits(
+      active,
+      sourceDisplayLabel(active, activeIdx)
+    );
+    if (!activeTraits.dolbyVision) return 0;
+    const candidate = detectStreamTraits(item, label);
+    if (candidate.dolbyVision) return -8000;
+    const sameQuality = Number(candidate.resolution || 0) >= Number(activeTraits.resolution || 0);
+    if (candidate.hdr && sameQuality) return 36000;
+    if (sameQuality) return 26000;
+    return candidate.hdr ? 16000 : 10000;
+  };
+
+  const recoverySourceScore = (item, index) => {
+    const label = sourceDisplayLabel(item, index);
+    const deviceProfile = getPlaybackDeviceProfile();
+    const preferences = readPlaybackPreferences();
+
+    const compatibility = scoreSourceCompatibility(
+      item,
+      label,
+      {
+        deviceProfile,
+        qualityPreference: preferences.quality,
+      }
+    );
+    const compatibilityTier = sourcePlaybackCompatibilityTier(
+      item,
+      label,
+      { deviceProfile }
+    );
+    const compatibilityTierPriority =
+      item?.live || item?.type === "live"
+        ? 0
+        : (3 - compatibilityTier) * 250000;
+
+    const learned = playbackReliabilityAdjustment(
+      label,
+      deviceProfile
+    ) + devicePlaybackReliabilityAdjustment(
+      exactPlaybackSourceLabel(item),
+      deviceProfile
+    );
+
+    const languagePreference = detectLanguagePreference(item, label);
+    const preferredAudioLanguage = String(
+      trackPreferences?.audioLanguage || "en"
+    ).toLowerCase();
+    const languagePriority =
+      preferredAudioLanguage === "en"
+        ? languagePreference === "english"
+          ? 50000
+          : languagePreference === "multi"
+            ? 24000
+            : languagePreference === "foreign"
+              ? -50000
+              : 0
+        : 0;
+
+    const directBonus = /^https?:\/\//i.test(
+      String(getSourceUrl(item) || "")
+    )
+      ? 2500
+      : 0;
+
+    const rdBonus =
+      item?.viaRealDebrid && item?.cacheRequired !== true
+        ? 5000
+        : item?.cacheRequired === true
+          ? -1000
+          : 0;
+    const trackerRichValue = String(item?.richMagnet || "").trim();
+    const trackerRichBonus =
+      /^magnet:/i.test(trackerRichValue) && /(?:[?&])tr=/i.test(trackerRichValue)
+        ? 3500
+        : 0;
+
+    const swarmBonus = Math.min(
+      4000,
+      Math.max(0, Number(item?.reportedSeeders || 0)) * 20
+    );
+    const liveItem = item?.live || item?.type === "live";
+    const liveBonus =
+      liveItem
+        ? liveTvUrlScore(getSourceUrl(item))
+        : 0;
+    const liveQuarantinePenalty =
+      liveItem && liveTvUrlQuarantined(getSourceUrl(item))
+        ? -180000
+        : 0;
+    const liveGeoPenalty =
+      liveItem && item?.geoRestricted === true
+        ? -120000
+        : 0;
+    const liveRepositoryBonus =
+      item?.live || item?.type === "live"
+        ? Number(item?.sourcePriority || 0) * 30 +
+          Number(item?.quality || 0) * 2
+        : 0;
+
+    return (
+      compatibilityTierPriority +
+      compatibility +
+      languagePriority +
+      learned +
+      directBonus +
+      rdBonus +
+      trackerRichBonus +
+      swarmBonus +
+      liveBonus +
+      liveQuarantinePenalty +
+      liveGeoPenalty +
+      liveRepositoryBonus +
+      automaticNetworkScore(item, label) +
+      hdrRecoveryScore(item, label)
+    );
+  };
+
+  const markSourceFailed = (index) => {
+    const failedItem = sources[index];
+
+    if (failedItem) {
+      forgetSuccessfulPlaybackSource(failedItem);
+      if (playbackMediaType === "tv" && !failedSourcesRef.current.has(index)) {
+        recordEpisodeSourceHealth(failedItem, episodeHealthContext, "failure");
+      }
+    }
+
+    failedSourcesRef.current.add(index);
+
+    setFailedSources(
+      new Set(
+        failedSourcesRef.current
+      )
+    );
+  };
+
+  const markTorrentHashFailed = (item = active) => {
+    const hash = sourceTorrentHash(item);
+
+    if (hash) {
+      failedTorrentHashesRef.current.add(hash);
+      rememberPersistentFailedTorrentHash(hash);
+    }
+
+    return hash;
+  };
+
+  const markTorrentHashReady = (item = active) => {
+    const hash = sourceTorrentHash(item);
+    if (!hash) return "";
+
+    failedTorrentHashesRef.current.delete(hash);
+    forgetPersistentFailedTorrentHash(hash);
+    recordTrustedCachedSource(item);
+    setRuntimeReadyTorrentHashes((current) => {
+      if (current.has(hash)) return current;
+      const next = new Set(current);
+      next.add(hash);
+      return next;
+    });
+
+    return hash;
+  };
+
+  const clearSourceFailed = (index) => {
+    if (
+      !failedSourcesRef.current.has(
+        index
+      )
+    ) {
+      return;
+    }
+
+    failedSourcesRef.current.delete(
+      index
+    );
+
+    setFailedSources(
+      new Set(
+        failedSourcesRef.current
+      )
+    );
+  };
+
+  const cancelPendingTorrentFailover = () => {
+    if (!torrentFailoverTimerRef.current) {
+      return false;
+    }
+
+    window.clearTimeout(torrentFailoverTimerRef.current);
+    torrentFailoverTimerRef.current = null;
+    return true;
+  };
+
+  const vodPlaybackIsAdvancing = (video) => {
+    return video instanceof HTMLVideoElement &&
+      isAdvancingVodPlayback(video, vodProgressRef.current);
+  };
+
+  const setRdError = (message) => {
+    if (
+      message &&
+      playbackMediaType !== "live" &&
+      vodPlaybackIsAdvancing(stageRef.current?.querySelector("video"))
+    ) {
+      return;
+    }
+
+    setRdErrorState(message);
+  };
+
+  const confirmRecoveredSource = (video = null) => {
+    const cancelledFailover = cancelPendingTorrentFailover();
+    const sourceWasFailed = failedSourcesRef.current.has(activeIdx);
+    const sourceWasAbandoned =
+      autoRecoveryRef.current.abandoned.has(activeIdx);
+    const hash = sourceTorrentHash(active);
+    const hashWasFailed =
+      Boolean(hash) && failedTorrentHashesRef.current.has(hash);
+
+    if (sourceWasFailed) {
+      clearSourceFailed(activeIdx);
+    }
+
+    if (sourceWasAbandoned) {
+      autoRecoveryRef.current.abandoned.delete(activeIdx);
+    }
+
+    if (hashWasFailed) {
+      failedTorrentHashesRef.current.delete(hash);
+      forgetPersistentFailedTorrentHash(hash);
+    }
+
+    const currentTime = Math.max(
+      0,
+      Number(
+        video?.currentTime ||
+          lastPosRef.current?.t ||
+          0
+      )
+    );
+
+    autoRecoveryRef.current.lastTime = currentTime;
+    autoRecoveryRef.current.lastProgressAt = Date.now();
+
+    if (
+      !isLive &&
+      (playbackMediaType !== "tv" || episodeAutoplayCanTrustSource(active)) &&
+      currentTime >= SUCCESSFUL_VOD_PLAYBACK_SECONDS &&
+      !hasRecentNoSoundHistory(activeExactReliabilityLabel())
+    ) {
+      const activeEntry = sortedSourceEntries.find(
+        (entry) => entry?.index === activeIdx
+      );
+
+      recordSuccessfulPlaybackSource(active, {
+        languageRank: Number(activeEntry?.languageRank ?? 3),
+      });
+      if (playbackMediaType === "tv") {
+        recordEpisodeSourceHealth(active, episodeHealthContext, "good");
+      }
+      recordPlaybackReliability(
+        sourceDisplayLabel(active, activeIdx),
+        "good"
+      );
+    }
+
+    if (
+      cancelledFailover ||
+      sourceWasFailed ||
+      sourceWasAbandoned ||
+      hashWasFailed
+    ) {
+      setRdError("");
+    }
+  };
+
+  const findNextPlayableSource = (
+    fromIndex,
+    { allowCaching = true } = {}
+  ) => {
+    /*
+     * Automatic failover must follow the same source ordering the user sees
+     * in the selector. Previously the 4K/1080p sort only changed the dropdown
+     * display while recovery used a separate compatibility score; that could
+     * jump from a rejected 4K torrent straight to 720p even though unused 4K
+     * or 1080p alternatives were still listed.
+     */
+    const selectorRankByIndex =
+      new Map(
+        sortedSourceEntries.map(
+          (entry, rank) => [
+            entry.index,
+            rank,
+          ]
+        )
+      );
+    const trustedCachedByIndex =
+      new Map(
+        sortedSourceEntries.map((entry) => [
+          entry.index,
+          entry?.trustedCached === true,
+        ])
+      );
+
+    const liveFailover =
+      isLive || sources.some((item) => item?.live || item?.type === "live");
+    const compatibilityFirstRecovery =
+      !liveFailover &&
+      sourceSortMode === "best" &&
+      failedSourcesRef.current.size < COMPATIBLE_AUTOPLAY_LIMIT;
+    const obeySelectorOrder =
+      sourceSortMode !== "best" && !liveFailover;
+
+    const activeRecoveryTraits = detectStreamTraits(
+      active,
+      sourceDisplayLabel(active, fromIndex)
+    );
+    const activeRecoveryResolution = Number(
+      activeRecoveryTraits?.resolution || 0
+    );
+    const activeRecoveryDolbyVision =
+      activeRecoveryTraits?.dolbyVision === true;
+
+    const qualityRecoveryRank = (traits) => {
+      const resolution = Number(traits?.resolution || 0);
+      if (activeRecoveryResolution <= 0) return 0;
+      if (resolution === activeRecoveryResolution) return 0;
+      if (resolution > 0 && resolution < activeRecoveryResolution) {
+        return activeRecoveryResolution - resolution;
+      }
+      if (resolution > activeRecoveryResolution) {
+        return 10000 + resolution - activeRecoveryResolution;
+      }
+      return 20000;
+    };
+
+    const hdrRecoveryRank = (traits) => {
+      if (
+        !activeRecoveryDolbyVision ||
+        activeRecoveryResolution < 2000 ||
+        Number(traits?.resolution || 0) !== activeRecoveryResolution
+      ) {
+        return 0;
+      }
+
+      if (traits?.dolbyVision !== true && traits?.hdr === true) return 0;
+      if (traits?.dolbyVision !== true) return 1;
+      return 2;
+    };
+
+    const candidates = sources
+      .map((candidate, index) => {
+        const url = getSourceUrl(candidate);
+        const torrent =
+          candidate?.type === "rd" ||
+          candidate?.type === "rd_torrent" ||
+          candidate?.type === "torrent" ||
+          candidate?.type === "magnet" ||
+          isMagnet(url);
+
+        const candidateHash = sourceTorrentHash(candidate);
+
+        if (
+          index === fromIndex ||
+          failedSourcesRef.current.has(index) ||
+          (candidateHash && failedTorrentHashesRef.current.has(candidateHash)) ||
+          candidate?.diagnostic ||
+          (playbackMediaType === "tv" && !episodeAutoplayCanTrustSource(candidate)) ||
+          candidate?.type === "status" ||
+          candidate?.type === "provider" ||
+          candidate?.type === "youtube" ||
+          (allowCaching === false && sourceNeedsCaching(candidate)) ||
+          (!url && !torrent)
+        ) {
+          return null;
+        }
+
+        const candidateTraits = detectStreamTraits(
+          candidate,
+          sourceDisplayLabel(candidate, index)
+        );
+        return {
+          index,
+          trustedCached: trustedCachedByIndex.get(index) === true,
+          qualityRank: qualityRecoveryRank(candidateTraits),
+          hdrRescueRank: hdrRecoveryRank(candidateTraits),
+          selectorRank:
+            selectorRankByIndex.get(index) ??
+            Number.MAX_SAFE_INTEGER,
+          quarantined:
+            liveFailover && liveTvUrlQuarantined(url),
+          score: recoverySourceScore(candidate, index),
+          decodableRank: ((t) => t <= 1 ? 0 : t === 2 ? 1 : 2)(sourcePlaybackCompatibilityTier(candidate, sourceDisplayLabel(candidate, index), { deviceProfile: getPlaybackDeviceProfile() })),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (liveFailover) {
+          const aRestricted = sources[a.index]?.geoRestricted === true;
+          const bRestricted = sources[b.index]?.geoRestricted === true;
+
+          if (aRestricted !== bRestricted) {
+            return Number(aRestricted) - Number(bRestricted);
+          }
+
+          if (a.quarantined !== b.quarantined) {
+            return Number(a.quarantined) - Number(b.quarantined);
+          }
+
+          // Live TV recovery is always health-first. User selector sorting still
+          // controls the visible list, but automatic failover should never jump
+          // to a known-bad mirror merely because it appears earlier in that list.
+          return b.score - a.score || a.index - b.index;
+        }
+
+        /*
+         * VOD recovery must use a verified cached/ready source before an
+         * uncached/direct guess whenever one exists. This prevents a terminal
+         * Android decoder failure or an RD rejection from jumping onto an
+         * uncached torrent while trusted cached releases are ready.
+         * Live TV deliberately bypasses this rule.
+         */
+        if (a.trustedCached !== b.trustedCached) {
+          return Number(b.trustedCached) - Number(a.trustedCached);
+        }
+
+        if (compatibilityFirstRecovery) {
+          return (
+            a.selectorRank - b.selectorRank ||
+            b.score - a.score ||
+            a.index - b.index
+          );
+        }
+        if (a.decodableRank !== b.decodableRank) return a.decodableRank - b.decodableRank;
+        if (a.qualityRank !== b.qualityRank) {
+          return a.qualityRank - b.qualityRank;
+        }
+
+        if (a.hdrRescueRank !== b.hdrRescueRank) {
+          return a.hdrRescueRank - b.hdrRescueRank;
+        }
+
+        return obeySelectorOrder
+          ? a.selectorRank - b.selectorRank ||
+            b.score - a.score ||
+            a.index - b.index
+          : b.score - a.score ||
+            a.index - b.index;
+      });
+
+    return candidates[0]?.index ?? -1;
+  };
+
+  const switchToSource = (
+    nextIndex,
+    {
+      preservePosition = true,
+      statusMessage = "",
+      manualSelection = false,
+    } = {}
+  ) => {
+    /*
+     * A manual movie/TV source choice is authoritative. Automatic recovery may
+     * repair that exact source (for example by opening LibVLC for DTS/TrueHD),
+     * but it must never fight the viewer by jumping back to source 1 or another
+     * release. Only another manual source choice can replace the lock.
+     */
+    if (!manualSelection && manualSourceLockActive()) {
+      return false;
+    }
+
+    /*
+     * Never move the active source underneath an open native selector during
+     * background recovery. A deliberate movie/TV source choice is allowed to
+     * break the pin because that exact choice is the action the user requested.
+     */
+    if (
+      !manualSelection &&
+      (
+        sourceSelectorPinnedRef.current ||
+        rdFileSelectorPinnedRef.current
+      )
+    ) {
+      return false;
+    }
+
+    if (manualSelection) {
+      manualSourceLockRef.current = {
+        sourceKey: stablePlaybackSourceKey(sources[nextIndex], nextIndex),
+        playRequestId:
+          sources[nextIndex]?.playRequestId ??
+          source?.playRequestId ??
+          null,
+      };
+      startupAutoplayClaimRef.current = {
+        playRequestId:
+          sources[nextIndex]?.playRequestId ??
+          source?.playRequestId ??
+          null,
+        claimed: true,
+      };
+
+      /* Keep the phone's current native activity as owner until Android
+       * reports its result. The new source waits for the native slot to free. */
+      if (
+        typeof window !== "undefined" &&
+        !isAndroidMobileNativeRuntime()
+      ) {
+        window.__MG_NATIVE_PLAYBACK_ACTIVE__ = false;
+      }
+
+      const selectedHash = sourceTorrentHash(sources[nextIndex]);
+      if (selectedHash) {
+        failedTorrentHashesRef.current.delete(selectedHash);
+        forgetPersistentFailedTorrentHash(selectedHash);
+      }
+
+      autoRecoveryRef.current.abandoned.delete(nextIndex);
+      vodStartupAttemptedRef.current.delete(nextIndex);
+      releaseSourceSelector();
+      releaseRdFileSelector();
+    }
+
+    streamActionGenerationRef.current += 1;
+
+    nativeBusyRequestRef.current = null;
+    nativePlaybackRef.current = {
+      requestId: "",
+      url: "",
+      playRequestId: null,
+    };
+
+    if (torrentFailoverTimerRef.current) {
+      window.clearTimeout(torrentFailoverTimerRef.current);
+      torrentFailoverTimerRef.current = null;
+    }
+
+    const currentVideo =
+      stageRef.current?.querySelector("video");
+    const currentIsLive =
+      source?.type === "live" ||
+      active?.live ||
+      active?.type === "live";
+    const resumeAt =
+      preservePosition && !currentIsLive
+        ? Math.max(
+            0,
+            Number(
+              currentVideo?.currentTime ||
+                lastPosRef.current?.t ||
+                0
+            )
+          )
+        : 0;
+
+    if (resumeAt > 5) {
+      recoveryResumeRef.current = resumeAt;
+    }
+
+    stopExclusivePlayback();
+
+    clearSourceFailed(nextIndex);
+    setRdTorrentId(null);
+    setRdManualFileSelection(null);
+    setRdPreparation(null);
+    setRdError("");
+    setRdResolving(false);
+    setRdPolling(false);
+    setFileSwitching(false);
+
+    setRdOverride(null);
+    setRdFiles([]);
+    setForceNativePlayback(false);
+    setNativeFallbackUrl("");
+    setAudioUnlockUrl("");
+    vodProgressRef.current = { video: null, time: 0, advancedAt: 0 };
+    setActiveIdx(nextIndex);
+
+    if (statusMessage) {
+      window.dispatchEvent(
+        new CustomEvent("mg:player-status", {
+          detail: {
+            message:
+              resumeAt > 5
+                ? `${statusMessage} Resuming at ${Math.floor(resumeAt / 60)} min…`
+                : statusMessage,
+          },
+        })
+      );
+    }
+
+    return true;
+  };
+
+  const rejectResolvedForeignAutoplay = (
+    _mediaInfo,
+    _options = {}
+  ) => {
+    // RD mediaInfos may omit or mislabel tracks. Its result influences source
+    // order, but only the active decoder can determine whether playback fails.
+    // The call sites keep this advisory hook for all RD resolution paths.
+    return false;
+  };
+
+  const tryNextSource = (
+    message =
+      "This source could not be played.",
+    {
+      blacklistTorrentHash = false,
+      immediate = false,
+      liveFailureClass = "",
+      allowCaching = true,
+      authoritativeSourceRejection = false,
+      userReportedNoSound = false,
+    } = {}
+  ) => {
+    const activeIsLive =
+      source?.type === "live" || active?.live || active?.type === "live";
+    const selectorPinned =
+      sourceSelectorPinnedRef.current || rdFileSelectorPinnedRef.current;
+
+    /* A late provider or decoder error cannot overrule video advancing now,
+     * including a manually chosen source. Wait for a real stop. */
+    if (
+      !activeIsLive &&
+      !userReportedNoSound &&
+      vodPlaybackIsAdvancing(stageRef.current?.querySelector("video"))
+    ) {
+      return false;
+    }
+
+    if (!activeIsLive && manualSourceLockActive() && !userReportedNoSound) {
+      setRdResolving(false);
+      setRdPolling(false);
+      setRdError(
+        `${String(message || "This source could not be played.").trim()} This source was selected manually, so Media God kept it selected. Use Source to choose another release.`
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("mg:player-status", {
+          detail: {
+            message:
+              "Keeping your manually selected source. Media God will not switch back to another release automatically.",
+          },
+        })
+      );
+
+      return false;
+    }
+
+    /*
+     * A native Android/Fire TV source chooser can remain focused after the
+     * visual popup has gone away. Do not let that stale UI pin strand a failed
+     * live stream on screen. Fatal/immediate recovery and all live-TV recovery
+     * are allowed to dismiss the stale selector snapshot and continue to the
+     * next healthy source. Movie/TV background recovery still respects an
+     * actively pinned selector unless the failure is explicitly immediate.
+     */
+    if (selectorPinned && !immediate && !activeIsLive) {
+      return false;
+    }
+
+    if (selectorPinned) {
+      releaseSourceSelector();
+      releaseRdFileSelector();
+    }
+
+    const rapidImmediateVodFailover =
+      !activeIsLive && immediate;
+
+    if (rapidImmediateVodFailover) {
+      const now = Date.now();
+      const state = autoRecoveryRef.current;
+      const RAPID_FAILOVER_WINDOW_MS = 8000;
+      const MAX_RAPID_IMMEDIATE_VOD_FAILOVERS = playbackMediaType === "tv"
+        ? Math.max(2, sources.length)
+        : 2;
+
+      if (
+        !state.rapidImmediateWindowAt ||
+        now - Number(state.rapidImmediateWindowAt || 0) >
+          RAPID_FAILOVER_WINDOW_MS
+      ) {
+        state.rapidImmediateWindowAt = now;
+        state.rapidImmediateCount = 0;
+      }
+
+      if (
+        Number(state.rapidImmediateCount || 0) >=
+        MAX_RAPID_IMMEDIATE_VOD_FAILOVERS
+      ) {
+        setRdResolving(false);
+        setRdPolling(false);
+        setRdTorrentId(null);
+        setRdError(
+          String(message || "This source could not be played.").trim() +
+            " Automatic recovery paused after two rapid source failures so Media God will not flash through the whole list. The remaining sources are still available from Source or Retry."
+        );
+        return false;
+      }
+    }
+
+    const hardFailureMessage =
+      /(?:\b451\b|infringing[_ -]?file|copyright|wrong\s+ip|rate[-\s]?limit|not\s+cached|couldn['’]?t\s+start|could\s+not\s+start|comet\s+returned\s+its\s+error)/i.test(
+        String(message || "")
+      );
+
+    const permanentRdTorrentRejection =
+      /(?:\b451\b|infringing[_ -]?file|copyright|infringing)/i.test(
+        String(message || "")
+      );
+
+    /*
+     * Language qualification is different from decoder recovery. A file that
+     * is proven to contain no English/audio can be rejected by automatic
+     * English-first selection, while decoder/no-sound recovery stays on the
+     * same chosen file.
+     */
+
+    /*
+     * Uncached torrent caching is an explicit operation, not ordinary playback
+     * failover. Never silently abandon the torrent the user chose just because
+     * its first RD/Comet request failed. Keep the same source on screen, show
+     * the actual reason and let Retry/manual source selection decide what to do
+     * next. Cached/direct playback can continue to use automatic failover.
+     */
+    if (
+      sourceNeedsCaching(active) &&
+      !permanentRdTorrentRejection &&
+      !authoritativeSourceRejection
+    ) {
+      if (torrentFailoverTimerRef.current) {
+        window.clearTimeout(torrentFailoverTimerRef.current);
+        torrentFailoverTimerRef.current = null;
+      }
+
+      setRdResolving(false);
+      setRdPolling(false);
+      setRdError(
+        `${String(message || "This uncached torrent could not be started.").trim()} Retry this source or choose another source manually.`
+      );
+
+      return false;
+    }
+
+    /*
+     * A late error from the previous URL can arrive after React/Chromium has
+     * already started the replacement stream. Never let that stale event kick
+     * a healthy, buffered video onto yet another source. Hard provider/RD
+     * failures are still allowed through because those are explicit upstream
+     * rejections rather than a speculative playback watchdog decision.
+     */
+    const currentVideo = stageRef.current?.querySelector("video");
+    const currentVideoHealthy =
+      currentVideo instanceof HTMLVideoElement &&
+      !currentVideo.paused &&
+      !currentVideo.ended &&
+      !currentVideo.error &&
+      currentVideo.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+      currentVideo.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+
+    if (
+      currentVideoHealthy &&
+      !hardFailureMessage &&
+      !authoritativeSourceRejection &&
+      !userReportedNoSound
+    ) {
+      autoRecoveryRef.current.lastTime = Number(currentVideo.currentTime || 0);
+      autoRecoveryRef.current.lastProgressAt = Date.now();
+      return false;
+    }
+
+    const classifiedLiveFailure = activeIsLive
+      ? classifyLiveFailure(message, liveFailureClass)
+      : "";
+
+    if (activeIsLive) {
+      emitLiveDiagnostic({
+        event: "failure",
+        failureClass: classifiedLiveFailure,
+        index: activeIdx,
+        message,
+      });
+    }
+
+    markSourceFailed(
+      activeIdx
+    );
+
+    if (blacklistTorrentHash) {
+      markTorrentHashFailed(active);
+    }
+
+    const nextIndex =
+      findNextPlayableSource(
+        activeIdx,
+        { allowCaching }
+      );
+
+    if (
+      nextIndex === -1
+    ) {
+      setRdResolving(false);
+      setRdPolling(false);
+      setRdTorrentId(null);
+
+      if (activeIsLive) {
+        showLiveRecoveryNotice(
+          `Source ${liveSourcePosition(activeIdx).current || 1}/${liveSourcePosition(activeIdx).total || 1} failed • no working backup`,
+          {
+            index: activeIdx,
+            failureClass: classifiedLiveFailure,
+            kind: "error",
+          }
+        );
+      }
+
+      setRdError(
+        `${message} No other playable source is available.`
+      );
+
+      return false;
+    }
+
+    if (rapidImmediateVodFailover) {
+      autoRecoveryRef.current.rapidImmediateCount =
+        Number(autoRecoveryRef.current.rapidImmediateCount || 0) + 1;
+      autoRecoveryRef.current.lastSwitchAt = Date.now();
+    }
+
+    const activeTorrentLike =
+      active?.type === "rd" ||
+      active?.type === "rd_torrent" ||
+      active?.type === "torrent" ||
+      active?.type === "magnet" ||
+      isMagnet(activeUrl) ||
+      Boolean(magnetHash(activeUrl));
+
+    if (activeTorrentLike) {
+      const rdRejectedTorrent =
+        /(?:\b451\b|infringing[_ -]?file|copyright|infringing)/i.test(
+          String(message || "")
+        );
+
+      /*
+       * RD 451 / infringing_file means this exact torrent hash has been
+       * refused upstream. Waiting and retrying the same quality is pointless;
+       * move immediately to the next source in the user's visible sort order.
+       * With 4K selected this exhausts all remaining 4K, then 1080p, before
+       * considering 720p.
+       */
+      if (rdRejectedTorrent || immediate) {
+        if (rdRejectedTorrent) {
+          markTorrentHashFailed(active);
+        }
+
+        setRdResolving(false);
+        setRdPolling(false);
+        setRdTorrentId(null);
+        setRdError("");
+
+        switchToSource(nextIndex, {
+          preservePosition: true,
+          statusMessage:
+            immediate && !rdRejectedTorrent
+              ? "Torrent stalled — trying a different torrent…"
+              : sourceSortMode === "4k"
+                ? "Real-Debrid rejected that torrent — trying the next 4K/1080p source…"
+                : sourceSortMode === "1080p"
+                  ? "Real-Debrid rejected that torrent — trying the next 1080p source…"
+                  : "Real-Debrid rejected that torrent — trying the next source…",
+        });
+
+        return true;
+      }
+
+      if (torrentFailoverTimerRef.current) {
+        return true;
+      }
+
+      setRdResolving(false);
+      setRdPolling(false);
+      setRdTorrentId(null);
+      setRdError(`${message} Trying one backup torrent source…`);
+
+      const scheduledGeneration =
+        streamActionGenerationRef.current;
+
+      torrentFailoverTimerRef.current = window.setTimeout(() => {
+        torrentFailoverTimerRef.current = null;
+
+        if (
+          streamActionGenerationRef.current !== scheduledGeneration
+        ) {
+          return;
+        }
+
+        const currentVideo =
+          stageRef.current?.querySelector("video");
+        const recoveredPlayback =
+          currentVideo instanceof HTMLVideoElement &&
+          !currentVideo.paused &&
+          !currentVideo.ended &&
+          !currentVideo.error &&
+          currentVideo.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+          currentVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          Number(currentVideo.currentTime || 0) > 0.15;
+
+        if (recoveredPlayback) {
+          confirmRecoveredSource(currentVideo);
+          return;
+        }
+
+        switchToSource(nextIndex, {
+          preservePosition: true,
+          statusMessage:
+            "Torrent source failed — trying the next best source…",
+        });
+      }, 1800);
+
+      return true;
+    }
+
+    if (activeIsLive) {
+      const nextPosition = liveSourcePosition(nextIndex);
+      const reasonLabel = liveFailureLabel(classifiedLiveFailure);
+      showLiveRecoveryNotice(
+        `Trying source ${nextPosition.current || 1}/${nextPosition.total || sources.length} • ${reasonLabel}`,
+        {
+          index: nextIndex,
+          failureClass: classifiedLiveFailure,
+          kind: "trying",
+        }
+      );
+      emitLiveDiagnostic({
+        event: "failover",
+        failureClass: classifiedLiveFailure,
+        index: nextIndex,
+        message: `Trying backup after ${reasonLabel}`,
+      });
+    }
+
+    switchToSource(nextIndex, {
+      preservePosition: true,
+      statusMessage:
+        activeIsLive
+          ? `Live stream failed (${liveFailureLabel(classifiedLiveFailure)}) — trying the best available backup…`
+          : "Source failed — switching to the best available backup…",
+    });
+
+    return true;
+  };
+
+  const sourceSelectionKey = (item, fallbackIndex = -1) =>
+    stablePlaybackSourceKey(item, fallbackIndex);
+
+  const selectSource = (
+    index,
+    pinnedItem = null
+  ) => {
+    const requestedIndex = Number(index);
+    const selectingLive =
+      source?.type === "live" || active?.live || active?.type === "live";
+
+    let nextIndex = requestedIndex;
+
+    /*
+     * Movie/TV source discovery can refresh or reorder the source array while a
+     * native Android selector is open. The option the user sees belongs to the
+     * pinned snapshot, so its old numeric index may no longer identify the same
+     * cached/uncached torrent when onChange fires. Resolve the chosen snapshot
+     * item back into the CURRENT source array before switching.
+     */
+    if (!selectingLive && pinnedItem) {
+      const exactIndex = sources.indexOf(pinnedItem);
+
+      if (exactIndex >= 0) {
+        nextIndex = exactIndex;
+      } else {
+        const wantedKey = sourceSelectionKey(pinnedItem, requestedIndex);
+        const refreshedIndex = sources.findIndex(
+          (candidate, candidateIndex) =>
+            sourceSelectionKey(candidate, candidateIndex) === wantedKey
+        );
+
+        if (refreshedIndex >= 0) {
+          nextIndex = refreshedIndex;
+        }
+      }
+    }
+
+    if (
+      Number.isNaN(nextIndex) ||
+      nextIndex < 0 ||
+      nextIndex >= sources.length ||
+      nextIndex === activeIdx
+    ) {
+      return;
+    }
+
+    if (!selectingLive && typeof window !== "undefined") {
+      const selectedSource = sources[nextIndex];
+      if (selectedSource && typeof selectedSource === "object") {
+        window.dispatchEvent(new CustomEvent("mg:continue-watching-source", {
+          detail: { source: selectedSource },
+        }));
+      }
+    }
+
+    switchToSource(nextIndex, {
+      preservePosition: true,
+      manualSelection: !selectingLive,
+      statusMessage:
+        selectingLive
+          ? "Switching Live TV source…"
+          : "Switching source…",
+    });
+  };
+
+  const isLive =
+    source?.type === "live" ||
+    active?.live ||
+    active?.type === "live";
+
+  const isYoutube =
+    active?.type ===
+    "youtube";
+
+  const isProvider =
+    active?.type ===
+    "provider";
+
+  useEffect(() => {
+    if (!isLive || !isProvider || !isNativeFireTvEmbedRemoteAvailable()) {
+      return undefined;
+    }
+
+    setNativeFireTvEmbedRemoteActive(true);
+    return () => {
+      setNativeFireTvEmbedRemoteActive(false);
+    };
+  }, [isLive, isProvider, activeUrl]);
+
+  useEffect(() => {
+    if (!isLive || !isProvider || !isFireTvRemoteRuntime()) {
+      return undefined;
+    }
+
+    const stage = stageRef.current;
+    const root = stage?.closest?.('[data-mg-player-root="true"]');
+
+    if (!(root instanceof HTMLElement)) {
+      return undefined;
+    }
+
+    let hideTimer = null;
+
+    const clearProviderHideTimer = () => {
+      if (hideTimer) {
+        window.clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    };
+
+    const scheduleProviderChromeHide = () => {
+      clearProviderHideTimer();
+      hideTimer = window.setTimeout(() => {
+        root.dataset.mgControlsVisible = "false";
+      }, 2200);
+    };
+
+    const revealProviderChrome = () => {
+      root.dataset.mgControlsVisible = "true";
+      scheduleProviderChromeHide();
+    };
+
+    /*
+     * Provider/iframe playback has no parent <video> element, so the normal
+     * PlayerControls component never receives a `playing` event. Without this
+     * bridge the Exit/source/Fix-audio panel stays visible forever over EV
+     * SPORTS and over movie/TV provider fallbacks. Treat an opened provider as
+     * playing for chrome purposes only: hide after a short delay and let the
+     * first Fire TV D-pad/OK action reveal it again.
+     */
+    revealProviderChrome();
+    window.addEventListener("mg:player-reveal-controls", revealProviderChrome);
+    root.addEventListener("focusin", revealProviderChrome);
+
+    return () => {
+      clearProviderHideTimer();
+      window.removeEventListener("mg:player-reveal-controls", revealProviderChrome);
+      root.removeEventListener("focusin", revealProviderChrome);
+
+      if (root.dataset.mgControlsVisible != null) {
+        delete root.dataset.mgControlsVisible;
+      }
+    };
+  }, [isLive, isProvider, activeUrl]);
+
+  const activeType = String(active?.type || "").trim().toLowerCase();
+  const activeMediaHint = [
+    active?.format,
+    active?.mimeType,
+    active?.mime_type,
+    active?.contentType,
+    active?.content_type,
+    active?.label,
+    active?.name,
+    activeUrl,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const activeLooksLikeMedia =
+    /\.(?:m3u8|mpd|mp4|m4v|mkv|webm|mov|avi|ts|m2ts|flv|mpg|mpeg)(?:[?#&/]|$)/i.test(
+      String(activeUrl || "")
+    ) ||
+    /(?:\bhls\b|mpegurl|mpeg-url|\bdash\b|mpeg[- ]?dash|video\/|audio\/|application\/(?:vnd\.apple\.mpegurl|x-mpegurl|dash\+xml))/i.test(
+      activeMediaHint
+    );
+
+  const isGenericHttpsStream =
+    /^https:\/\//i.test(String(activeUrl || "").trim()) &&
+    ![
+      "youtube",
+      "provider",
+      "external",
+      "status",
+      "torrent",
+      "magnet",
+    ].includes(activeType) &&
+    !isMagnet(activeUrl) &&
+    (
+      ["url", "file", "live", "direct", "stream"].includes(activeType) ||
+      Boolean(active?.live) ||
+      activeLooksLikeMedia
+    );
+
+  const activeTorrentHash = sourceTorrentHash(active);
+  const activeRuntimeReady = Boolean(
+    activeTorrentHash && runtimeReadyTorrentHashes.has(activeTorrentHash)
+  );
+  const runtimeNativeDirect = Boolean(
+    active?.runtimeNativeDirect === true &&
+      active?.runtimeQualificationFallback === true &&
+      active?.runtimeNativeEnglishValidation === true &&
+      isNativeFireTvPlayerAvailable() &&
+      /^https?:\/\//i.test(String(activeUrl || "").trim())
+  );
+
+  const launchQualifiedDirect = Boolean(
+    (active?.launchQualified === true || runtimeNativeDirect) &&
+      /^https?:\/\//i.test(String(activeUrl || "").trim())
+  );
+
+  const activeHasResolvedStream = Boolean(
+    rdOverride?.src ||
+      rdOverride?.url ||
+      activeRuntimeReady ||
+      launchQualifiedDirect
+  );
+  const activeNeedsCaching =
+    !activeHasResolvedStream && sourceNeedsCaching(active);
+  /*
+   * AIOStreams yields only while the startup selector can actually hand off
+   * to another torrent. After that one handoff, or with another quality sort,
+   * suppressing resolution leaves a bare spinner and Try Again forever.
+   */
+  const startupHandoffAvailable = canAutoHandoffStartup({
+    sortMode: sourceSortMode,
+    mediaType: playbackMediaType,
+    manuallySelected: manualSourceLockActive(),
+    alreadyClaimed:
+      startupAutoplayClaimRef.current.playRequestId === (source?.playRequestId ?? null) &&
+      startupAutoplayClaimRef.current.claimed === true,
+    selectorPinned: sourceSelectorPinnedRef.current,
+    fileSelectorPinned: rdFileSelectorPinnedRef.current,
+    fileSwitching,
+    nativePlaying:
+      typeof window !== "undefined" &&
+      window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true,
+  });
+  const activeAioShouldYieldToAlternative = Boolean(
+    startupHandoffAvailable &&
+      sourceIsAioStreamsCandidate(active) &&
+      bestNonAioTorrentAutoplayCandidateIndex >= 0 &&
+      bestNonAioTorrentAutoplayCandidateIndex !== activeIdx
+  );
+  const activeIsWaitingForVerifiedSource =
+    Boolean(
+      active?.diagnostic ||
+        String(active?.type || "").toLowerCase() === "status"
+    );
+
+  /*
+   * Torrent identity is authoritative. Addons can expose an uncached torrent
+   * as a generic HTTPS/"stream" row while also attaching infoHash/magnet
+   * metadata. Treating that row as a normal direct file bypasses the RD cache
+   * engine: Chromium can load metadata (and sometimes a few seconds of an
+   * upstream placeholder/partial stream), then the VOD watchdog abandons it.
+   * Any source that still needs caching must therefore NEVER enter the direct
+   * file path merely because its URL/type looks streamable.
+   */
+  const isRdSource =
+    !launchQualifiedDirect &&
+    (
+      active?.type === "rd" ||
+      active?.type ===
+        "rd_torrent" ||
+      active?.type ===
+        "torrent" ||
+      active?.type ===
+        "magnet" ||
+      isMagnet(activeUrl) ||
+      Boolean(magnetHash(activeUrl)) ||
+      Boolean(activeTorrentHash) ||
+      activeNeedsCaching
+    );
+
+  const isDirectFile =
+    launchQualifiedDirect ||
+    (
+      !activeIsUnverifiedHostedEpisode &&
+      !activeNeedsCaching &&
+      !isRdSource &&
+      (
+        activeType === "file" ||
+        activeType === "url" ||
+        activeType === "live" ||
+        activeType === "direct" ||
+        activeType === "stream" ||
+        isGenericHttpsStream
+      )
+    );
+
+  /*
+   * READY-SOURCE FIRST
+   *
+   * If discovery ranks an uncached torrent first while another source is
+   * already ready, move straight to the ready source automatically. Uncached
+   * torrents remain visible manual choices and background-cache candidates;
+   * one slow torrent must not block an already-ready backup.
+   */
+  useEffect(() => {
+    const currentVideo = stageRef.current?.querySelector("video");
+    const webPlaybackStarted =
+      currentVideo instanceof HTMLVideoElement &&
+      !currentVideo.paused &&
+      !currentVideo.ended &&
+      !currentVideo.error &&
+      Number(currentVideo.currentTime || 0) > 0.15;
+    const nativePlaybackStarted =
+      typeof window !== "undefined" &&
+      window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true;
+
+    /*
+     * STARTUP MUST FOLLOW "BEST AVAILABLE".
+     *
+     * The screenshot/source chooser can already identify the best cached
+     * English row. Before playback has actually started, make that exact row
+     * authoritative for the active source too. This intentionally overrides
+     * raw array index 0 and an in-flight resolve of a worse startup candidate.
+     * Once real playback begins, normal recovery owns the session and we do not
+     * jump to a newly discovered release underneath the viewer.
+     */
+    const startupSelectionAllowed =
+      sourceSortMode === "best" &&
+      playbackMediaType !== "live" &&
+      !manualSourceLockActive() &&
+      !webPlaybackStarted &&
+      !nativePlaybackStarted;
+
+    const currentPlayRequestId =
+      source?.playRequestId ?? null;
+    const startupAlreadyClaimed =
+      startupAutoplayClaimRef.current.playRequestId === currentPlayRequestId &&
+      startupAutoplayClaimRef.current.claimed === true;
+    const activeIsAioStreamsCandidate =
+      sourceIsAioStreamsCandidate(active);
+
+    /*
+     * An early uncached torrent is only a temporary startup owner. If cache
+     * discovery later proves that a source is already playable, upgrade to that
+     * ready source before video has actually started. This is intentionally the
+     * one exception to the single-startup-claim rule: an uncached row must never
+     * strand the viewer while verified cached rows are sitting ready.
+     */
+    const claimedUncachedCanUpgradeToReady =
+      startupAlreadyClaimed &&
+      activeNeedsCaching &&
+      (
+        bestApprovedAutoplaySourceIndex >= 0 ||
+        automaticReadySourceIndex >= 0
+      ) &&
+      (
+        bestApprovedAutoplaySourceIndex >= 0
+          ? bestApprovedAutoplaySourceIndex
+          : automaticReadySourceIndex
+      ) !== activeIdx;
+
+    /*
+     * Discovery may improve the source list several times during the first few
+     * seconds. It may choose ONE verified/ready startup owner, but it must not
+     * keep stealing playback every time a newly discovered row sorts higher.
+     * The only allowed upgrade after an initial claim is uncached -> ready.
+     */
+    const bestSourceShouldOwnStartup =
+      startupSelectionAllowed &&
+      (!startupAlreadyClaimed || claimedUncachedCanUpgradeToReady) &&
+      bestApprovedAutoplaySourceIndex >= 0 &&
+      bestApprovedAutoplaySourceIndex !== activeIdx;
+
+    /*
+     * If nothing is ready yet, claim ONE explicit-English candidate and let
+     * the foreground Real-Debrid engine prepare that exact source. The claim is
+     * written immediately after the switch below, so later discovery cannot
+     * bounce playback through newly arriving "better" candidates.
+     */
+    const bestEnglishCandidateShouldOwnStartup =
+      startupSelectionAllowed &&
+      !startupAlreadyClaimed &&
+      bestApprovedAutoplaySourceIndex < 0 &&
+      bestEnglishAutoplayCandidateIndex >= 0 &&
+      bestEnglishAutoplayCandidateIndex !== activeIdx;
+
+    /*
+     * If AIOStreams is the raw index-0 row, do not let it become the foreground
+     * cache owner just because other addons have not supplied language metadata
+     * yet. Hand startup to the best non-AIO torrent and qualify that exact file.
+     */
+    const aioFallbackShouldYieldStartup =
+      startupSelectionAllowed &&
+      !startupAlreadyClaimed &&
+      activeIsAioStreamsCandidate &&
+      bestNonAioTorrentAutoplayCandidateIndex >= 0 &&
+      bestNonAioTorrentAutoplayCandidateIndex !== activeIdx;
+
+    const nextAutomaticSourceIndex =
+      bestSourceShouldOwnStartup
+        ? bestApprovedAutoplaySourceIndex
+        : bestEnglishCandidateShouldOwnStartup
+          ? bestEnglishAutoplayCandidateIndex
+          : aioFallbackShouldYieldStartup
+            ? bestNonAioTorrentAutoplayCandidateIndex
+            : activeIsWaitingForVerifiedSource
+              ? automaticApprovedAutoplaySourceIndex
+              : automaticReadySourceIndex;
+
+    if (
+      sourceSortMode === "best" &&
+      startupAlreadyClaimed &&
+      !claimedUncachedCanUpgradeToReady
+    ) {
+      return;
+    }
+
+    if (
+      isLive ||
+      isYoutube ||
+      (
+        isProvider &&
+        !bestSourceShouldOwnStartup &&
+        !bestEnglishCandidateShouldOwnStartup &&
+        !aioFallbackShouldYieldStartup
+      ) ||
+      nextAutomaticSourceIndex < 0 ||
+      fileSwitching
+    ) {
+      return;
+    }
+
+    if (
+      !bestSourceShouldOwnStartup &&
+      !bestEnglishCandidateShouldOwnStartup &&
+      !aioFallbackShouldYieldStartup &&
+      !claimedUncachedCanUpgradeToReady &&
+      (
+        (!activeNeedsCaching && !activeIsWaitingForVerifiedSource) ||
+        rdResolving ||
+        rdPolling ||
+        rdTorrentId
+      )
+    ) {
+      return;
+    }
+
+    const switched = switchToSource(nextAutomaticSourceIndex, {
+      preservePosition: false,
+      statusMessage:
+        bestSourceShouldOwnStartup
+          ? "Best cached English source ready — starting automatically…"
+          : claimedUncachedCanUpgradeToReady
+            ? "Verified cached source is ready — leaving the uncached torrent and starting it now…"
+            : bestEnglishCandidateShouldOwnStartup
+              ? "Preparing the best English source automatically…"
+              : aioFallbackShouldYieldStartup
+                ? "AIOStreams is fallback-only — preparing the best non-AIO source…"
+                : activeIsWaitingForVerifiedSource
+                  ? "Verified cached source ready — starting automatically…"
+                  : "Opening a ready source while Media God prepares the other torrents in the background…",
+    });
+
+    if (switched && sourceSortMode === "best") {
+      startupAutoplayClaimRef.current = {
+        playRequestId: currentPlayRequestId,
+        claimed: true,
+      };
+    }
+  }, [
+    activeIdx,
+    activeIsWaitingForVerifiedSource,
+    activeNeedsCaching,
+    automaticApprovedAutoplaySourceIndex,
+    automaticReadySourceIndex,
+    bestApprovedAutoplaySourceIndex,
+    bestEnglishAutoplayCandidateIndex,
+    bestNonAioTorrentAutoplayCandidateIndex,
+    fileSwitching,
+    isLive,
+    isProvider,
+    isYoutube,
+    playbackMediaType,
+    rdMediaContextKey,
+    rdPolling,
+    rdResolving,
+    rdTorrentId,
+    sourceSortMode,
+  ]);
+
+  /*
+   * TRUSTED CACHED BACKGROUND BUILDER
+   *
+   * Keep several uncached candidates moving toward ready at the same time
+   * instead of serialising the entire title behind one slow torrent. The
+   * Real-Debrid cache engine performs an active-slot preflight for every job,
+   * so this scheduler can safely offer up to three background candidates while
+   * RD remains the authority on the account's actual concurrent-download limit.
+   *
+   * Continue through the entire eligible source pool. The old five-per-shelf
+   * stop produced exactly six visible choices once the active source was
+   * included, even when discovery had found many more torrents. Real-Debrid's
+   * active-slot preflight and the worker limit below remain the authority on
+   * safe concurrency. Slot-blocked candidates are NOT poisoned as attempted:
+   * they are retried when capacity becomes available.
+   */
+  useEffect(() => {
+    const titleKey = rdMediaContextKey;
+    const BACKGROUND_CACHE_CONCURRENCY = 3;
+    const BACKGROUND_CACHE_START_DELAY_MS = 1_200;
+    const BACKGROUND_CACHE_STAGGER_MS = 700;
+    const BACKGROUND_CACHE_SLOT_RETRY_MS = 5_000;
+
+    const abortAllBackgroundCacheJobs = () => {
+      backgroundCacheControllersRef.current.forEach((controller) => {
+        controller?.abort?.();
+      });
+      backgroundCacheControllersRef.current.clear();
+      backgroundCacheScheduledHashesRef.current.clear();
+    };
+
+    if (backgroundCacheTitleKeyRef.current !== titleKey) {
+      abortAllBackgroundCacheJobs();
+      backgroundCacheAttemptedRef.current = new Set();
+
+      if (backgroundCacheRetryTimerRef.current) {
+        window.clearTimeout(backgroundCacheRetryTimerRef.current);
+        backgroundCacheRetryTimerRef.current = null;
+      }
+
+      backgroundCacheTitleKeyRef.current = titleKey;
+    }
+
+    const backgroundForegroundStatus = String(
+      rdPreparation?.status || ""
+    ).toLowerCase();
+    const backgroundForegroundBusy =
+      Boolean(rdPreparation) &&
+      ![
+        "ready",
+        "downloaded",
+        "cached",
+        "stalled",
+        "failed",
+        "error",
+        "dead",
+        "magnet_error",
+        "virus",
+        "comet_start_failed",
+      ].includes(backgroundForegroundStatus);
+
+    if (
+      !titleKey ||
+      isLive ||
+      isYoutube ||
+      rdResolving ||
+      rdPolling ||
+      rdTorrentId ||
+      backgroundForegroundBusy ||
+      fileSwitching
+    ) {
+      return undefined;
+    }
+
+    const qualityBucketFor = (entry) => {
+      const resolution = Number(entry?.resolution || 0);
+      if (resolution >= 2000) return "4k";
+      if (resolution >= 900) return "1080p";
+      if (resolution >= 650) return "720p";
+      return "other";
+    };
+
+    const cachedCounts = new Map();
+
+    sortedSourceEntries.forEach((entry) => {
+      if (!entry?.cached) return;
+      const edition = entry.editionValue || detectMediaEdition(entry.item).value;
+      const bucket = qualityBucketFor(entry);
+      const key = `${edition}|${bucket}`;
+      cachedCounts.set(key, Number(cachedCounts.get(key) || 0) + 1);
+    });
+
+    const activeHashes = new Set(backgroundCacheControllersRef.current.keys());
+    const scheduledHashes = backgroundCacheScheduledHashesRef.current;
+
+    const candidates = sortedSourceEntries
+      .map((entry) => {
+        const original = sources[entry.index];
+        const edition = entry.editionValue || detectMediaEdition(original).value;
+        const hash = sourceTorrentHash(original);
+        const magnet = richestSourceMagnet(original);
+        const qualityBucket = qualityBucketFor(entry);
+        const cacheBucketKey = `${edition}|${qualityBucket}`;
+
+        return {
+          ...entry,
+          original,
+          edition,
+          hash,
+          magnet,
+          qualityBucket,
+          cachedCount: Number(cachedCounts.get(cacheBucketKey) || 0),
+        };
+      })
+      .filter(
+        (entry) =>
+          entry.index !== activeIdx &&
+          !entry.cached &&
+          (
+            !hasNonAioTorrentPlaybackCandidate ||
+            !sourceIsAioStreamsCandidate(entry.original)
+          ) &&
+          sourceNeedsCaching(entry.original) &&
+          /^[a-f0-9]{40}$/i.test(entry.hash) &&
+          /^magnet:/i.test(entry.magnet) &&
+          !activeHashes.has(entry.hash) &&
+          !scheduledHashes.has(entry.hash) &&
+          !backgroundCacheAttemptedRef.current.has(entry.hash) &&
+          !failedTorrentHashesRef.current.has(entry.hash)
+      )
+      .sort(
+        (left, right) =>
+          Number(left.languageRank ?? 3) - Number(right.languageRank ?? 3) ||
+          Number(left.hardSubtitleRank ?? 0) - Number(right.hardSubtitleRank ?? 0) ||
+          Number(right.qualityBucket === "4k") - Number(left.qualityBucket === "4k") ||
+          Number(right.qualityBucket === "1080p") - Number(left.qualityBucket === "1080p") ||
+          left.cachedCount - right.cachedCount ||
+          Number(right.reportedSeeders || 0) - Number(left.reportedSeeders || 0) ||
+          Number(right.trackerRich) - Number(left.trackerRich) ||
+          Number(right.compatibility || 0) - Number(left.compatibility || 0) ||
+          left.index - right.index
+      );
+
+    const freeWorkerCount = Math.max(
+      0,
+      BACKGROUND_CACHE_CONCURRENCY -
+        backgroundCacheControllersRef.current.size -
+        backgroundCacheScheduledHashesRef.current.size
+    );
+    const batch = candidates.slice(0, freeWorkerCount);
+
+    if (batch.length === 0) {
+      return undefined;
+    }
+
+    const timers = [];
+    const scheduleSlotRetry = () => {
+      if (backgroundCacheRetryTimerRef.current) return;
+
+      backgroundCacheRetryTimerRef.current = window.setTimeout(() => {
+        backgroundCacheRetryTimerRef.current = null;
+
+        if (backgroundCacheTitleKeyRef.current === titleKey) {
+          setBackgroundCacheNonce((value) => value + 1);
+        }
+      }, BACKGROUND_CACHE_SLOT_RETRY_MS);
+    };
+
+    batch.forEach((candidate, batchIndex) => {
+      backgroundCacheScheduledHashesRef.current.add(candidate.hash);
+
+      const timer = window.setTimeout(() => {
+        backgroundCacheScheduledHashesRef.current.delete(candidate.hash);
+
+        if (
+          backgroundCacheTitleKeyRef.current !== titleKey ||
+          backgroundCacheControllersRef.current.has(candidate.hash)
+        ) {
+          return;
+        }
+
+        /*
+         * A foreground uncached selection gets priority. Do not start new
+         * background work while it owns the cache engine; the normal player
+         * state change will rerun this scheduler when foreground preparation
+         * ends.
+         */
+        if (rdCacheEngineOwnsPollingRef.current) {
+          setBackgroundCacheNonce((value) => value + 1);
+          return;
+        }
+
+        backgroundCacheAttemptedRef.current.add(candidate.hash);
+        const controller = new AbortController();
+        backgroundCacheControllersRef.current.set(candidate.hash, controller);
+
+        window.dispatchEvent(
+          new CustomEvent("mg:background-cache-status", {
+            detail: {
+              state: "starting",
+              edition: candidate.edition,
+              hash: candidate.hash,
+              activeJobs: backgroundCacheControllersRef.current.size,
+            },
+          })
+        );
+
+        let accountBlocked = false;
+
+        void runRealDebridCacheSession({
+          source: candidate.original,
+          context: {
+            title: source?.rdTitle || source?.title || "",
+            year: source?.rdYear ?? source?.year ?? null,
+            alternateYears:
+              Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                ? (source?.rdAlternateYears || source?.alternateYears)
+                : [],
+            alternateTitles:
+              Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                ? (source?.rdAlternateTitles || source?.alternateTitles)
+                : [],
+            season: source?.rdSeason ?? source?.season ?? null,
+            episode: source?.rdEpisode ?? source?.episode ?? null,
+            fileIdx:
+              candidate.original?.fileIdx != null &&
+              Number.isFinite(Number(candidate.original.fileIdx))
+                ? Number(candidate.original.fileIdx)
+                : null,
+            preferBrowserTranscode: false,
+            preferredTorrentId: "",
+          },
+          signal: controller.signal,
+          onProgress: null,
+        })
+          .then((result) => {
+            if (controller.signal.aborted || !result) return;
+
+            if (result.accountBlocked === true) {
+              accountBlocked = true;
+              backgroundCacheAttemptedRef.current.delete(candidate.hash);
+
+              window.dispatchEvent(
+                new CustomEvent("mg:background-cache-status", {
+                  detail: {
+                    state: "waiting-slot",
+                    edition: candidate.edition,
+                    hash: candidate.hash,
+                  },
+                })
+              );
+              scheduleSlotRetry();
+              return;
+            }
+
+            if (result.status === "ready" && result.streamUrl) {
+              recordTrustedCachedSource(candidate.original);
+              setRuntimeReadyTorrentHashes((current) => {
+                if (current.has(candidate.hash)) return current;
+                const next = new Set(current);
+                next.add(candidate.hash);
+                return next;
+              });
+
+              window.dispatchEvent(
+                new CustomEvent("mg:background-cache-status", {
+                  detail: {
+                    state: "ready",
+                    edition: candidate.edition,
+                    hash: candidate.hash,
+                  },
+                })
+              );
+            }
+          })
+          .catch((error) => {
+            if (controller.signal.aborted || error?.name === "AbortError") {
+              return;
+            }
+          })
+          .finally(() => {
+            if (
+              backgroundCacheControllersRef.current.get(candidate.hash) === controller
+            ) {
+              backgroundCacheControllersRef.current.delete(candidate.hash);
+            }
+
+            if (!accountBlocked) {
+              setBackgroundCacheNonce((value) => value + 1);
+            }
+          });
+      }, BACKGROUND_CACHE_START_DELAY_MS + batchIndex * BACKGROUND_CACHE_STAGGER_MS);
+
+      timers.push({
+        timer,
+        hash: candidate.hash,
+      });
+    });
+
+    /*
+     * Dependency changes may happen while discovery is still filling the pool.
+     * Cancel only jobs that have not started yet. Running background downloads
+     * are intentionally left alive; they are aborted only when the title
+     * changes or the player unmounts.
+     */
+    return () => {
+      timers.forEach(({ timer, hash }) => {
+        window.clearTimeout(timer);
+        backgroundCacheScheduledHashesRef.current.delete(hash);
+      });
+    };
+  }, [
+    activeIdx,
+    activeNeedsCaching,
+    backgroundCacheNonce,
+    fileSwitching,
+    isLive,
+    isProvider,
+    isYoutube,
+    hasNonAioTorrentPlaybackCandidate,
+    rdMediaContextKey,
+    rdPolling,
+    rdPreparation,
+    rdResolving,
+    rdTorrentId,
+    runtimeReadyTorrentHashes,
+    source?.episode,
+    source?.rdEpisode,
+    source?.rdSeason,
+    source?.season,
+    source?.title,
+    sources.length,
+  ]);
+
+  useEffect(() => {
+    recoveryResumeRef.current = 0;
+    autoRecoveryRef.current.lastTime = 0;
+    autoRecoveryRef.current.lastProgressAt = Date.now();
+    autoRecoveryRef.current.lastSwitchAt = 0;
+    autoRecoveryRef.current.rapidImmediateWindowAt = 0;
+    autoRecoveryRef.current.rapidImmediateCount = 0;
+    autoRecoveryRef.current.abandoned = new Set();
+    vodStartupAttemptedRef.current = new Set();
+    englishAudioRejectedRef.current = new Set();
+    setLiveRecoveryNotice(null);
+    if (liveRecoveryNoticeTimerRef.current) {
+      window.clearTimeout(liveRecoveryNoticeTimerRef.current);
+      liveRecoveryNoticeTimerRef.current = null;
+    }
+    if (torrentFailoverTimerRef.current) {
+      window.clearTimeout(torrentFailoverTimerRef.current);
+      torrentFailoverTimerRef.current = null;
+    }
+  }, [
+    source?.tmdbId,
+    source?.tmdb_id,
+    source?.id,
+    source?.title,
+    source?.rdSeason,
+    source?.rdEpisode,
+    source?.season,
+    source?.episode,
+  ]);
+
+  useEffect(() => {
+    if (!isLive || isNativeFireTvPlayerAvailable()) {
+      /*
+       * Native Fire TV playback lives in PlayerActivity/Media3, so there is no
+       * WebView <video> element to observe here. Trying to attach browser
+       * playback listeners while Media3 owns the stream can leave stale timers
+       * behind and make the web player think a healthy native stream failed.
+       */
+      return undefined;
+    }
+
+    const url = String(activeUrl || "").trim();
+    if (!/^https?:\/\//i.test(url)) {
+      return undefined;
+    }
+
+    const startedAt =
+      typeof performance !== "undefined" && performance.now
+        ? performance.now()
+        : Date.now();
+    let successRecorded = false;
+    let failureRecorded = false;
+    let attachTimer = null;
+    let video = null;
+
+    const onPlaying = () => {
+      if (successRecorded) return;
+      successRecorded = true;
+
+      const now =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+
+      recordLiveTvPlaybackResult(url, {
+        success: true,
+        startupMs: Math.max(0, now - startedAt),
+      });
+
+      const position = liveSourcePosition(activeIdx);
+      showLiveRecoveryNotice(
+        `Source ${position.current || 1}/${position.total || 1} connected`,
+        {
+          index: activeIdx,
+          kind: "connected",
+          clearAfterMs: 2800,
+        }
+      );
+      emitLiveDiagnostic({
+        event: "playing",
+        index: activeIdx,
+        message: "Live source started successfully",
+      });
+    };
+
+    const onError = () => {
+      if (failureRecorded) return;
+      failureRecorded = true;
+      recordLiveTvPlaybackResult(url, {
+        success: false,
+        startupMs: 0,
+      });
+    };
+
+    const attach = () => {
+      video = stageRef.current?.querySelector("video") || null;
+      if (!(video instanceof HTMLVideoElement)) {
+        attachTimer = window.setTimeout(attach, 120);
+        return;
+      }
+
+      video.addEventListener("playing", onPlaying);
+      video.addEventListener("error", onError);
+
+      if (!video.paused && video.readyState >= 2) {
+        onPlaying();
+      }
+    };
+
+    attach();
+
+    return () => {
+      if (attachTimer) {
+        window.clearTimeout(attachTimer);
+      }
+
+      if (video instanceof HTMLVideoElement) {
+        video.removeEventListener("playing", onPlaying);
+        video.removeEventListener("error", onError);
+      }
+    };
+  }, [
+    activeIdx,
+    activeUrl,
+    isLive,
+  ]);
+
+  const applyStageFullscreen = (stage) => {
+    if (!stage) return;
+
+    if (stage.dataset.mgFullscreen !== "true") {
+      stage.dataset.mgPreviousStyle = stage.getAttribute("style") || "";
+    }
+
+    stage.dataset.mgFullscreen = "true";
+    setIsAppFullscreen(true);
+
+    Object.assign(stage.style, {
+      position: "fixed",
+      top: "0",
+      right: "0",
+      bottom: "0",
+      left: "0",
+      width: "100vw",
+      height: "100vh",
+      maxWidth: "none",
+      maxHeight: "none",
+      margin: "0",
+      padding: "0",
+      border: "0",
+      borderRadius: "0",
+      aspectRatio: "auto",
+      background: "#000",
+      overflow: "hidden",
+      zIndex: "2147483647",
+    });
+  };
+
+  const restoreInAppFullscreen = (stage) => {
+    if (!stage) return;
+
+    const previousStyle = stage.dataset.mgPreviousStyle || "";
+
+    if (previousStyle) {
+      stage.setAttribute("style", previousStyle);
+    } else {
+      stage.removeAttribute("style");
+    }
+
+    delete stage.dataset.mgFullscreen;
+    delete stage.dataset.mgPreviousStyle;
+    setIsAppFullscreen(false);
+  };
+
+  const goFullscreen = async () => {
+    const stage = stageRef.current;
+
+    if (!stage) {
+      return;
+    }
+
+    /*
+     * Desktop browsers/PWAs use the real Fullscreen API so the Windows taskbar,
+     * browser frame and macOS dock disappear. The document element is the most
+     * reliable fullscreen target across normal tabs and installed Chromium web
+     * apps; the video stage is then pinned over that fullscreen viewport.
+     * Fire TV/Android wrappers deliberately keep the safe CSS-only path.
+     */
+    if (isDesktopFullscreenBrowser()) {
+      const nativeFullscreenElement = browserFullscreenElement();
+
+      /*
+       * If a browser rejected the real Fullscreen API and Media God fell back
+       * to its fixed-position CSS fullscreen, the next fullscreen/Back/Escape
+       * gesture must EXIT that fallback. Retrying requestFullscreen first can
+       * turn an exit gesture into a new browser-fullscreen request.
+       */
+      if (
+        stage.dataset.mgFullscreen === "true" &&
+        !nativeFullscreenElement
+      ) {
+        restoreInAppFullscreen(stage);
+        return;
+      }
+
+      if (nativeFullscreenElement) {
+        try {
+          await exitBrowserFullscreen();
+        } catch {
+          // Keep the player usable even if the browser has already started
+          // leaving fullscreen through Escape/F11 or its own window controls.
+        }
+
+        if (stage.dataset.mgFullscreen === "true") {
+          restoreInAppFullscreen(stage);
+        }
+
+        return;
+      }
+
+      try {
+        await requestBrowserFullscreen(document.documentElement);
+        applyStageFullscreen(stage);
+        return;
+      } catch {
+        /*
+         * Some older embedded Chromium shells allow an element fullscreen even
+         * when the document element request is rejected. Try the actual player
+         * stage before falling back to CSS-only fullscreen.
+         */
+        try {
+          await requestBrowserFullscreen(stage);
+          applyStageFullscreen(stage);
+          return;
+        } catch {
+          // The CSS fallback below still gives a usable in-window fullscreen.
+        }
+      }
+    }
+
+    const currentlyFullscreen = stage.dataset.mgFullscreen === "true";
+
+    if (currentlyFullscreen) {
+      restoreInAppFullscreen(stage);
+      return;
+    }
+
+    applyStageFullscreen(stage);
+  };
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      if (!isDesktopFullscreenBrowser()) return;
+
+      const stage = stageRef.current;
+      const fullscreenElement = browserFullscreenElement();
+      const playerOwnsFullscreen = Boolean(
+        stage &&
+          fullscreenElement &&
+          (
+            fullscreenElement === stage ||
+            fullscreenElement === document.documentElement ||
+            fullscreenElement.contains?.(stage) ||
+            stage.contains?.(fullscreenElement)
+          )
+      );
+
+      if (playerOwnsFullscreen) {
+        if (stage.dataset.mgFullscreen !== "true") {
+          applyStageFullscreen(stage);
+        } else {
+          setIsAppFullscreen(true);
+        }
+        return;
+      }
+
+      if (!fullscreenElement && stage?.dataset.mgFullscreen === "true") {
+        restoreInAppFullscreen(stage);
+        return;
+      }
+
+      if (!fullscreenElement) {
+        setIsAppFullscreen(false);
+      }
+    };
+
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenState);
+    document.addEventListener("mozfullscreenchange", syncFullscreenState);
+    document.addEventListener("MSFullscreenChange", syncFullscreenState);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreenState);
+      document.removeEventListener("mozfullscreenchange", syncFullscreenState);
+      document.removeEventListener("MSFullscreenChange", syncFullscreenState);
+    };
+  }, []);
+
+  /*
+   * Reset RD state whenever the user chooses
+   * another source.
+   */
+  useEffect(
+    () => {
+      setRdOverride(
+        null
+      );
+
+      setRdError(
+        ""
+      );
+
+      setRdFiles(
+        []
+      );
+
+      setRdTorrentId(
+        null
+      );
+
+      retryExistingTorrentIdRef.current = "";
+
+      if (
+        pollRef.current
+      ) {
+        clearTimeout(
+          pollRef.current
+        );
+
+        pollRef.current =
+          null;
+      }
+    },
+    [
+      activeIdx,
+    ]
+  );
+
+  /*
+   * UNCACHED REAL-DEBRID CACHE ENGINE
+   *
+   * Uncached torrents used to share the same giant resolution/polling effects
+   * as cached library links, browser playback and source failover. That made a
+   * refresh or background source update capable of re-adopting an old partial
+   * RD job and presenting its last percentage forever. The cache lifecycle now
+   * has one owner and one AbortController from start -> monitor -> verified
+   * restart -> ready/failover. The older resolution path below is deliberately
+   * bypassed for every source that actually requires caching.
+   */
+  useEffect(() => {
+    if (
+      !active ||
+      activeAioShouldYieldToAlternative ||
+      isYoutube ||
+      isProvider ||
+      isDirectFile ||
+      isLive ||
+      !isRdSource ||
+      !sourceNeedsCaching(active)
+    ) {
+      return undefined;
+    }
+
+    rdCacheEngineAbortRef.current?.abort?.();
+    const controller = new AbortController();
+    rdCacheEngineAbortRef.current = controller;
+    rdCacheEngineOwnsPollingRef.current = true;
+
+    const preferredTorrentId = String(
+      retryExistingTorrentIdRef.current || ""
+    ).trim();
+    retryExistingTorrentIdRef.current = "";
+
+    setRdResolving(true);
+    setRdPolling(false);
+    setRdError("");
+    setRdOverride(null);
+    setRdFiles([]);
+    setRdTorrentId(null);
+    setRdPreparation({
+      status: "starting",
+      phase: "starting",
+      progress: 0,
+      seeders: Math.max(0, Number(active?.reportedSeeders || 0)),
+      speed_bps: 0,
+      size_bytes: 0,
+      downloaded_bytes: 0,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      attempts: 0,
+      cacheEngine: "v2",
+    });
+
+    const context = {
+      title: source?.rdTitle || source?.title || "",
+      year: source?.rdYear ?? source?.year ?? null,
+      alternateYears:
+        Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+          ? (source?.rdAlternateYears || source?.alternateYears)
+          : [],
+      alternateTitles:
+        Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+          ? (source?.rdAlternateTitles || source?.alternateTitles)
+          : [],
+      season: source?.rdSeason ?? source?.season ?? null,
+      episode: source?.rdEpisode ?? source?.episode ?? null,
+      fileIdx:
+        active?.fileIdx != null && Number.isFinite(Number(active.fileIdx))
+          ? Number(active.fileIdx)
+          : null,
+      preferBrowserTranscode: prefersBrowserRdCompatibility(),
+      preferredTorrentId,
+    };
+
+    void runRealDebridCacheSession({
+      source: active,
+      context,
+      signal: controller.signal,
+      onProgress: (snapshot) => {
+        if (controller.signal.aborted) return;
+
+        const torrentId = String(snapshot?.torrent_id || "").trim();
+        const phase = String(snapshot?.phase || "").toLowerCase();
+
+        setRdTorrentId(torrentId || null);
+        setRdResolving(
+          phase === "starting" ||
+          phase === "restarting"
+        );
+        setRdPolling(
+          Boolean(torrentId) &&
+          phase !== "restarting"
+        );
+        setRdPreparation((current) => ({
+          ...(current || {}),
+          ...snapshot,
+          status: snapshot?.status || current?.status || "preparing",
+          progress: Math.max(
+            0,
+            Math.min(100, Number(snapshot?.progress ?? current?.progress ?? 0))
+          ),
+          startedAt: current?.startedAt || Date.now(),
+          updatedAt: Date.now(),
+          attempts: Number(snapshot?.attempt ?? current?.attempts ?? 0),
+          cacheEngine: "v2",
+        }));
+      },
+    })
+      .then((result) => {
+        if (controller.signal.aborted || !result) return;
+
+        if (rdCacheEngineAbortRef.current === controller) {
+          rdCacheEngineAbortRef.current = null;
+          rdCacheEngineOwnsPollingRef.current = false;
+        }
+
+        if (result.status === "ready" && result.streamUrl) {
+          markTorrentHashReady(active);
+
+          if (
+            rejectResolvedForeignAutoplay(
+              result.mediaInfo,
+              {
+                label:
+                  result.filename ||
+                  active?.label ||
+                  "This release",
+              }
+            )
+          ) {
+            return;
+          }
+
+          setRdOverride({
+            src: result.streamUrl,
+            label:
+              result.filename ||
+              active?.label ||
+              "Real-Debrid Stream",
+            file: currentFilePath(result.files),
+            audioRescue: result.audioRescue || null,
+            fallbackSrc: result.fallbackStreamUrl || "",
+            videoRescue: result.videoRescue || null,
+            mediaInfo: result.mediaInfo || null,
+          });
+          setRdFiles(result.files || []);
+          setRdResolving(false);
+          setRdPolling(false);
+          setRdTorrentId(null);
+          setRdPreparation(null);
+          setRdError("");
+          return;
+        }
+
+        setRdResolving(false);
+        setRdPolling(false);
+        setRdTorrentId(null);
+
+        /*
+         * A failed cache job must stay in the media-source pool. Embedded web
+         * pages can show adverts or APK prompts instead of a playable video.
+         * Active-slot exhaustion is account-wide, so keep the selected source
+         * available for Retry rather than cycling through other torrents.
+         */
+        const preserveUncachedSource =
+          result.accountBlocked === true ||
+          result.retrySameSource === true ||
+          result.errorCode === "RD_ACTIVE_SLOTS_FULL" ||
+          result.errorCode === "RD_CACHE_STATUS_UNAVAILABLE";
+
+        // A completed download with no playable link, or a zero-peer torrent,
+        // cannot start the video. Give automatic startup one verified-ready
+        // backup attempt. A viewer's manual choice remains authoritative.
+        const preparationFailure = [
+          "RD_CACHE_FINAL_LINK_TIMEOUT",
+          "RD_CACHE_NO_PEERS",
+        ].includes(result.errorCode);
+        const backupState = preparationBackupRef.current;
+        const currentPlayRequestId = source?.playRequestId ?? null;
+        if (backupState.playRequestId !== currentPlayRequestId) {
+          backupState.playRequestId = currentPlayRequestId;
+          backupState.attempted = false;
+        }
+        if (
+          preparationFailure &&
+          !manualSourceLockActive() &&
+          !backupState.attempted &&
+          !sourceSelectorPinnedRef.current &&
+          !rdFileSelectorPinnedRef.current
+        ) {
+          const readyBackup = bestApprovedAutoplaySourceIndex >= 0 &&
+            bestApprovedAutoplaySourceIndex !== activeIdx
+              ? bestApprovedAutoplaySourceIndex
+              : automaticReadySourceIndex;
+          if (readyBackup >= 0 && readyBackup !== activeIdx) {
+            backupState.attempted = true;
+            if (switchToSource(readyBackup, {
+              preservePosition: true,
+              statusMessage: "That torrent cannot start. Opening a ready source instead…",
+            })) return;
+          }
+        }
+
+        if (!preserveUncachedSource) {
+          markSourceFailed(activeIdx);
+        }
+        if (result.hashFailed === true) {
+          markTorrentHashFailed(active);
+        }
+
+        if (preserveUncachedSource) {
+          setRdPreparation((current) => ({
+            ...(current || {}),
+            status: "stalled",
+            stallReason:
+              result.errorCode ||
+              (result.hashFailed ? "hash_failed" : "cache_failed"),
+            progress: Math.max(
+              0,
+              Math.min(100, Number(result.progress ?? current?.progress ?? 0))
+            ),
+            updatedAt: Date.now(),
+            cacheEngine: "v2",
+          }));
+          setRdError(
+            result.message ||
+            "Real-Debrid paused this uncached torrent. The same source has been kept selected; Retry will reconnect to it."
+          );
+          return;
+        }
+
+        const nextReadySource = findNextPlayableSource(activeIdx, {
+          allowCaching: false,
+        });
+
+        if (
+          nextReadySource !== -1 &&
+          switchToSource(nextReadySource, {
+            preservePosition: true,
+            statusMessage:
+              `${result.message || "This uncached torrent could not be prepared."} Trying an already-playable backup…`,
+          })
+        ) {
+          return;
+        }
+
+        if (!preserveUncachedSource) {
+          const nextSource = findNextPlayableSource(activeIdx);
+          if (
+            nextSource !== -1 &&
+            switchToSource(nextSource, {
+              preservePosition: true,
+              statusMessage:
+                `${result.message || "This uncached torrent could not be prepared."} Trying a different torrent…`,
+            })
+          ) {
+            return;
+          }
+        }
+
+        setRdPreparation((current) => ({
+          ...(current || {}),
+          status: "stalled",
+          stallReason:
+            result.errorCode ||
+            (result.hashFailed ? "hash_failed" : "cache_failed"),
+          progress: Math.max(
+            0,
+            Math.min(100, Number(result.progress ?? current?.progress ?? 0))
+          ),
+          updatedAt: Date.now(),
+          cacheEngine: "v2",
+        }));
+        setRdError(
+          result.message ||
+          "Real-Debrid could not prepare this uncached torrent."
+        );
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || error?.name === "AbortError") return;
+
+        if (rdCacheEngineAbortRef.current === controller) {
+          rdCacheEngineAbortRef.current = null;
+          rdCacheEngineOwnsPollingRef.current = false;
+        }
+
+        /*
+         * An unexpected cache-engine exception is not proof that the selected
+         * torrent/hash is bad. Keep the uncached source selected and preserve
+         * its last torrent id in rdPreparation so Retry can reconnect instead
+         * of silently jumping to a different source.
+         */
+        setRdResolving(false);
+        setRdPolling(false);
+        setRdTorrentId(null);
+        setRdPreparation((current) => ({
+          ...(current || {}),
+          status: "stalled",
+          stallReason: "cache_engine_error",
+          updatedAt: Date.now(),
+          cacheEngine: "v2",
+        }));
+        const rdRateLimited =
+          Number(error?.response?.status || error?.status || 0) === 429 ||
+          /\b429\b/i.test(
+            String(error?.message || "")
+          );
+        // A transient account-side RD rate limit is not a bad VLC file.
+        // On automatic TV startup, prefer a source already known to be
+        // playable instead of pinning the first uncached candidate. Never
+        // auto-switch away from a source the viewer explicitly selected,
+        // and never start another uncached job during rate limiting.
+        if (
+          rdRateLimited &&
+          playbackMediaType === "tv" &&
+          !manualSourceLockActive()
+        ) {
+          const readyBackup = findNextPlayableSource(activeIdx, {
+            allowCaching: false,
+          });
+          if (
+            readyBackup >= 0 &&
+            switchToSource(readyBackup, {
+              preservePosition: true,
+              statusMessage: "Real-Debrid is rate limited. Trying a ready episode source…",
+            })
+          ) {
+            return;
+          }
+        }
+        setRdError(
+          rdRateLimited
+            ? "Playback lookup returned HTTP 429 (too many requests). This torrent is not ready to play. Please wait before retrying. Choose Sources to look for an already-ready file; VLC cannot play an uncached torrent."
+            : `${error?.message || "The Real-Debrid cache engine stopped unexpectedly."} The same uncached source has been kept selected; Retry will reconnect to it.`
+        );
+      });
+
+    return () => {
+      controller.abort();
+      if (rdCacheEngineAbortRef.current === controller) {
+        rdCacheEngineAbortRef.current = null;
+        rdCacheEngineOwnsPollingRef.current = false;
+      }
+    };
+  }, [
+    activeIdx,
+    activeResolutionKey,
+    rdMediaContextKey,
+    rdCacheEngineNonce,
+    isYoutube,
+    isProvider,
+    isDirectFile,
+    isLive,
+    isRdSource,
+    activeAioShouldYieldToAlternative,
+  ]);
+
+  /*
+   * MAIN PLAYBACK RESOLUTION
+   */
+  useEffect(
+    () => {
+      if (
+        !active ||
+        activeAioShouldYieldToAlternative
+      ) {
+        return;
+      }
+
+      if (
+        isYoutube ||
+        isProvider ||
+        isDirectFile ||
+        isLive
+      ) {
+        return;
+      }
+
+      if (
+        !isRdSource
+      ) {
+        return;
+      }
+
+      if (sourceNeedsCaching(active)) {
+        return;
+      }
+
+      let cancelled =
+        false;
+
+      setRdResolving(
+        true
+      );
+
+      setRdPolling(
+        false
+      );
+
+      setRdError(
+        ""
+      );
+
+      setRdOverride(
+        null
+      );
+
+      setRdTorrentId(
+        null
+      );
+
+      const run =
+        async () => {
+          let rdResolveStartedAt = 0;
+
+          try {
+            const richMagnet = String(
+              active?.richMagnet ||
+              ""
+            ).trim();
+
+            /*
+             * Generic magnet sources can arrive in several variants. Preserve
+             * the richest tracker-bearing form for Media God's direct RD path.
+             * Tracker-backed Comet uncached rows now use the same direct RD path;
+             * the legacy Comet playback trigger is only for a genuinely opaque
+             * Comet row with no usable torrent metadata at all.
+             */
+            const magnet =
+              richestSourceMagnet(active) ||
+              active?.src ||
+              active?.url ||
+              active?.magnet ||
+              active?.magnetLink ||
+              richMagnet ||
+              "";
+
+            if (
+              !magnet
+            ) {
+              throw new Error(
+                "This source did not provide a playable link."
+              );
+            }
+
+            if (
+              String(
+                magnet
+              )
+                .toLowerCase()
+                .startsWith(
+                  "http://"
+                ) ||
+              String(
+                magnet
+              )
+                .toLowerCase()
+                .startsWith(
+                  "https://"
+                )
+            ) {
+              if (
+                !cancelled
+              ) {
+                setRdOverride({
+                  src:
+                    magnet,
+
+                  label:
+                    active?.label ||
+                    "Stream",
+
+                  file:
+                    "",
+                });
+
+                setRdResolving(
+                  false
+                );
+              }
+
+              return;
+            }
+
+            const hash = magnetHash(magnet);
+
+            if (
+              hash &&
+              retryInactiveTorrentHashRef.current === hash
+            ) {
+              /*
+               * The user explicitly pressed Retry after Media God had already
+               * watched this exact torrent sit inactive for the full stall
+               * window. Ask the backend to clear that inactive same-hash RD job
+               * before adoption so Retry can genuinely restart it instead of
+               * reconnecting to the same dead partial download forever.
+               */
+              retryInactiveTorrentHashRef.current = "";
+
+              try {
+                await base44.functions.invoke(
+                  "realDebrid",
+                  {
+                    action: "reset_stale_hash",
+                    info_hash: hash,
+                    claim_for_playback: true,
+                    force_inactive_reset: true,
+                    title:
+                      source?.rdTitle ||
+                      source?.title ||
+                      "",
+                  }
+                );
+              } catch {
+                // Retry remains safe: adopt_hash below will preserve a job that
+                // has resumed activity and only a genuinely inactive job resets.
+              }
+
+              if (cancelled) return;
+            }
+
+            /*
+             * RD Library rows carry Real-Debrid's torrent ID, not a magnet or
+             * info hash. Passing that ID to resolve_best makes the library's
+             * Play button fail because resolve_best treats its input as a new
+             * torrent source. Resolve existing RD torrents directly instead.
+             */
+            const existingRdTorrentId = String(
+              active?.rdTorrentId ||
+                (active?.type === "rd_torrent" && !hash && !isMagnet(magnet)
+                  ? magnet
+                  : "")
+            ).trim();
+
+            if (existingRdTorrentId) {
+              rdResolveStartedAt = Date.now();
+
+              const existingResponse = await base44.functions.invoke(
+                "realDebrid",
+                {
+                  action: "torrent_info",
+                  torrent_id: existingRdTorrentId,
+                  prefer_browser_transcode: prefersBrowserRdCompatibility(),
+                  title:
+                    source?.rdTitle ||
+                    source?.title ||
+                    "",
+                  ...(source?.rdYear != null ? { year: source.rdYear } : {}),
+                  alternate_years:
+                    Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                      ? (source?.rdAlternateYears || source?.alternateYears)
+                      : [],
+                  alternate_titles:
+                    Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                      ? (source?.rdAlternateTitles || source?.alternateTitles)
+                      : [],
+                  ...(source?.rdSeason != null ? { season: source.rdSeason } : {}),
+                  ...(source?.rdEpisode != null ? { episode: source.rdEpisode } : {}),
+                  ...(active?.fileIdx != null && Number.isFinite(Number(active.fileIdx))
+                    ? { file_idx: Number(active.fileIdx) }
+                    : {}),
+                }
+              );
+
+              if (cancelled) return;
+
+              const existingData = existingResponse?.data || {};
+
+              if (existingData.status === "ready" && existingData.stream_url) {
+                recordDebridProviderResult("realdebrid", {
+                  success: true,
+                  latencyMs: Date.now() - rdResolveStartedAt,
+                });
+
+                if (
+                  rejectResolvedForeignAutoplay(
+                    existingData.media_info,
+                    {
+                      label:
+                        existingData.filename ||
+                        active?.label ||
+                        "This release",
+                    }
+                  )
+                ) {
+                  return;
+                }
+
+                setRdOverride({
+                  src: existingData.stream_url,
+                  label:
+                    existingData.filename ||
+                    active?.label ||
+                    "Real-Debrid Library",
+                  file: currentFilePath(existingData.files),
+                  audioRescue: existingData.audio_rescue || null,
+                  fallbackSrc: existingData.fallback_stream_url || "",
+                  videoRescue: existingData.video_rescue || null,
+                  mediaInfo: existingData.media_info || null,
+                  torrentId: existingData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+                });
+                setRdFiles(existingData.files || []);
+                setRdTorrentId(existingRdTorrentId);
+                setRdResolving(false);
+                setRdPreparation(null);
+                return;
+              }
+
+              if (
+                existingData.status === "preparing" ||
+                existingData.torrent_id
+              ) {
+                setRdPreparation({
+                  ...(existingData.torrent_progress || {}),
+                  status:
+                    existingData.torrent_progress?.status ||
+                    existingData.rd_status ||
+                    "preparing",
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                  attempts: 0,
+                });
+                setRdTorrentId(existingRdTorrentId);
+                setRdResolving(false);
+                return;
+              }
+
+              throw new Error(
+                existingData.error ||
+                  "Real-Debrid could not open this library torrent."
+              );
+            }
+
+            /*
+             * Do not silently replace one uncached torrent with another before
+             * trying it. The active source has already been enriched with every
+             * tracker Media God knows about. If it cannot start, keep it selected
+             * and show the real error so the user can Retry or manually choose a
+             * different torrent.
+             */
+
+            const explicitProvider = String(active?.debridProvider || "")
+              .toLowerCase()
+              .replace(/[^a-z]/g, "");
+            let debridProviders = explicitProvider ? [explicitProvider] : [];
+
+            const resolutionStrategy = sourceResolutionStrategy(active);
+            const knownUncached = sourceNeedsCaching(active);
+            const hasTorrentTrackers = debridTorrentHasMetadata({
+              ...active,
+              magnet,
+              src: magnet,
+            });
+            const hasAuthoritativeTorrentMetadata =
+              hasTorrentTrackers &&
+              active?.torrentMetadataSource !== "public_fallback";
+
+            /*
+             * Any uncached torrent with usable tracker metadata can be owned by
+             * Media God/Real-Debrid directly. For Comet this is the important
+             * distinction: Torrent Mode exposes the torrent's real Stremio
+             * `sources`, so we can safely submit the exact magnet ourselves
+             * instead of depending on Comet's partially-supported uncached RD
+             * playback path.
+             */
+            if (
+              hash &&
+              knownUncached &&
+              (
+                resolutionStrategy !== "comet_uncached" ||
+                hasAuthoritativeTorrentMetadata
+              ) &&
+              source?.hasRd !== false
+            ) {
+              /*
+               * Before checking whether RD has a free download slot, look for
+               * this exact hash in the user's RD account. A previous Media God
+               * attempt may already be downloading it. The old preflight ran
+               * first and, when RD reported all slots occupied, immediately
+               * jumped to another source. That meant Media God never adopted
+               * the already-active torrent and never reached the seeder/speed
+               * polling UI.
+               */
+              let adopted = {};
+
+              try {
+                const adoptResponse = await base44.functions.invoke(
+                  "realDebrid",
+                  {
+                    action: "adopt_hash",
+                    info_hash: hash,
+                    prefer_browser_transcode: prefersBrowserRdCompatibility(),
+                    title:
+                      source?.rdTitle ||
+                      source?.title ||
+                      "",
+                    ...(source?.rdYear != null
+                      ? { year: source.rdYear }
+                      : {}),
+                    alternate_years:
+                      Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                        ? (source?.rdAlternateYears || source?.alternateYears)
+                        : [],
+                    alternate_titles:
+                      Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                        ? (source?.rdAlternateTitles || source?.alternateTitles)
+                        : [],
+                    ...(source?.rdSeason != null
+                      ? { season: source.rdSeason }
+                      : {}),
+                    ...(source?.rdEpisode != null
+                      ? { episode: source.rdEpisode }
+                      : {}),
+                  }
+                );
+
+                adopted = adoptResponse?.data || {};
+              } catch {
+                adopted = {};
+              }
+
+              if (cancelled) return;
+
+              if (adopted.status === "ready" && adopted.stream_url) {
+                if (
+                  rejectResolvedForeignAutoplay(
+                    adopted.media_info,
+                    {
+                      label:
+                        adopted.filename ||
+                        active?.label ||
+                        "This release",
+                    }
+                  )
+                ) {
+                  return;
+                }
+
+                setRdOverride({
+                  src: adopted.stream_url,
+                  label:
+                    adopted.filename ||
+                    active?.label ||
+                    "Real-Debrid Stream",
+                  file: currentFilePath(adopted.files),
+                  audioRescue: adopted.audio_rescue || null,
+                  fallbackSrc: adopted.fallback_stream_url || "",
+                  videoRescue: adopted.video_rescue || null,
+                  mediaInfo: adopted.media_info || null,
+                  torrentId: adopted.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+                });
+                setRdFiles(adopted.files || []);
+                setRdResolving(false);
+                setRdPreparation(null);
+                return;
+              }
+
+              if (
+                adopted.status === "preparing" &&
+                adopted.torrent_id
+              ) {
+                setRdPreparation({
+                  ...(adopted.torrent_progress || {}),
+                  status:
+                    adopted.torrent_progress?.status ||
+                    adopted.rd_status ||
+                    "preparing",
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                  attempts: 0,
+                });
+                setRdTorrentId(String(adopted.torrent_id));
+                setRdResolving(false);
+                return;
+              }
+
+              if (adopted.status === "stale") {
+                try {
+                  await base44.functions.invoke(
+                    "realDebrid",
+                    {
+                      action: "reset_stale_hash",
+                      info_hash: hash,
+                      claim_for_playback: true,
+                      force_progress_reset: true,
+                      title:
+                        source?.rdTitle ||
+                        source?.title ||
+                        "",
+                    }
+                  );
+                } catch {
+                  // A stale-hash reset is best-effort; preflight will diagnose slots.
+                }
+              }
+
+              let preflight = {};
+
+              try {
+                const preflightResponse = await base44.functions.invoke(
+                  "realDebrid",
+                  {
+                    action: "uncached_preflight",
+                    keep_hash: hash,
+                  }
+                );
+
+                preflight = preflightResponse?.data || {};
+              } catch {
+                // Slot cleanup/diagnostics are best-effort.
+              }
+
+              if (preflight.saturated === true) {
+                const activeCount = Math.max(
+                  0,
+                  Number(preflight.active_count || 0)
+                );
+                const activeLimit = Math.max(
+                  0,
+                  Number(preflight.active_limit || 0)
+                );
+
+                /*
+                 * Do NOT hop through every uncached source here. All of them
+                 * share the same RD active-download limit, so switching hashes
+                 * cannot create a free slot and only makes the UI look as if
+                 * Media God is refusing to search for seeders.
+                 */
+                const slotError = new Error(
+                  activeLimit > 0
+                    ? `Real-Debrid has ${activeCount}/${activeLimit} active torrent slots in use. Finish or remove one active torrent, then retry this uncached source.`
+                    : "Real-Debrid has no free active torrent slot for an uncached download."
+                );
+                slotError.code = "RD_ACTIVE_SLOTS_FULL";
+                throw slotError;
+              }
+
+              if (adopted.status !== "stale") {
+                try {
+                  await base44.functions.invoke(
+                    "realDebrid",
+                    {
+                      action: "reset_stale_hash",
+                      info_hash: hash,
+                      claim_for_playback: true,
+                      title:
+                        source?.rdTitle ||
+                        source?.title ||
+                        "",
+                    }
+                  );
+                } catch {
+                  // Same-hash cleanup is best-effort; the fresh RD add still runs.
+                }
+              }
+
+              if (cancelled) return;
+            }
+
+            /*
+             * COMET LEGACY FALLBACK
+             *
+             * Current Comet can expose a direct torrent companion row containing
+             * Stremio `sources`. When those trackers were merged above, skip
+             * this entire block and continue to Media God's own Real-Debrid
+             * resolve_best path below. Only installations that did not return
+             * torrent metadata still need the Comet playback endpoint fallback.
+             */
+            const cometPlaybackUrl = String(
+              active?.cometPlaybackUrl || ""
+            ).trim();
+
+            if (
+              resolutionStrategy === "comet_uncached" &&
+              !hasAuthoritativeTorrentMetadata
+            ) {
+              if (
+                !hash ||
+                !/^https?:\/\//i.test(cometPlaybackUrl)
+              ) {
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation({
+                  status: "comet_start_failed",
+                  progress: 0,
+                  seeders: Math.max(0, Number(active?.reportedSeeders || 0)),
+                  speed_bps: 0,
+                  startedAt: Date.now(),
+                  updatedAt: Date.now(),
+                  attempts: 0,
+                });
+                setRdError(
+                  "Comet did not provide the playback metadata needed to start this uncached torrent. Retry the source or choose another source manually."
+                );
+                return;
+              }
+
+              setRdError("");
+              setRdPreparation((current) => ({
+                ...(current || {}),
+                status: "comet_starting",
+                progress: Number(current?.progress || 0),
+                seeders: Math.max(
+                  0,
+                  Number(
+                    current?.seeders ||
+                      active?.reportedSeeders ||
+                      0
+                  )
+                ),
+                speed_bps: Number(current?.speed_bps || 0),
+                startedAt: current?.startedAt || Date.now(),
+                updatedAt: Date.now(),
+                attempts: 0,
+              }));
+              setRdResolving(false);
+
+              /*
+               * Clean only an old terminal/long-stale copy of this exact hash
+               * before Comet starts. reset_stale_hash intentionally leaves a
+               * fresh active torrent alone, so Retry can safely reconnect to a
+               * healthy in-progress download instead of deleting it.
+               */
+              let legacyCometReset = {};
+
+              try {
+                const cleanupResponse = await base44.functions.invoke(
+                  "realDebrid",
+                  {
+                    action: "reset_stale_hash",
+                    info_hash: hash,
+                    claim_for_playback: true,
+                    title:
+                      source?.rdTitle ||
+                      source?.title ||
+                      "",
+                  }
+                );
+                legacyCometReset = cleanupResponse?.data || {};
+              } catch {
+                // Cleanup is best-effort; Comet still gets the start request.
+                legacyCometReset = {};
+              }
+
+              if (cancelled) return;
+
+              if (
+                legacyCometReset?.status === "failed" &&
+                legacyCometReset?.error
+              ) {
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation((current) => ({
+                  ...(current || {}),
+                  status: "stalled",
+                  stallReason: "stale_delete_not_confirmed",
+                  updatedAt: Date.now(),
+                }));
+                setRdError(
+                  `${legacyCometReset.error} Retry after a few seconds; Media God will not reattach to the same stale partial job.`
+                );
+                return;
+              }
+
+              const triggerController = new AbortController();
+              const triggerTimer = window.setTimeout(
+                () => triggerController.abort(),
+                65000
+              );
+
+              const triggerComet = () => {
+                void fetch(
+                  cometPlaybackUrl,
+                  {
+                    method: "GET",
+                    cache: "no-store",
+                    redirect: "manual",
+                    signal: triggerController.signal,
+                  }
+                )
+                  .then(async (triggerResponse) => {
+                    try {
+                      await triggerResponse.body?.cancel?.();
+                    } catch {
+                      // The request itself is what starts the Comet/RD job.
+                    }
+                  })
+                  .catch(() => {
+                    /*
+                     * Browsers can reject reading a cross-origin/manual-redirect
+                     * response even after Comet received the request. That is
+                     * expected: RD adoption below, not the HTTP response body,
+                     * tells us whether Comet started the torrent.
+                     */
+                  });
+              };
+
+              triggerComet();
+
+              let lastAdoptError = "";
+              const clearedLegacyProgress = Math.max(
+                0,
+                Math.min(100, Number(legacyCometReset?.cleared_progress || 0))
+              );
+              const clearedLegacyTorrentId = String(
+                legacyCometReset?.torrent_id || ""
+              ).trim();
+              let resumedLegacyPartialChecks = 0;
+
+              for (let adoptAttempt = 0; adoptAttempt < 48; adoptAttempt += 1) {
+                if (cancelled) {
+                  triggerController.abort();
+                  window.clearTimeout(triggerTimer);
+                  return;
+                }
+
+                if (adoptAttempt > 0) {
+                  await new Promise((resolve) =>
+                    window.setTimeout(resolve, 1250)
+                  );
+                }
+
+                try {
+                  const adoptResponse = await base44.functions.invoke(
+                    "realDebrid",
+                    {
+                      action: "adopt_hash",
+                      info_hash: hash,
+                      prefer_browser_transcode: prefersBrowserRdCompatibility(),
+                      title:
+                        source?.rdTitle ||
+                        source?.title ||
+                        "",
+                      ...(source?.rdYear != null
+                        ? { year: source.rdYear }
+                        : {}),
+                      alternate_years:
+                        Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                          ? (source?.rdAlternateYears || source?.alternateYears)
+                          : [],
+                      alternate_titles:
+                        Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                          ? (source?.rdAlternateTitles || source?.alternateTitles)
+                          : [],
+                      ...(source?.rdSeason != null
+                        ? { season: source.rdSeason }
+                        : {}),
+                      ...(source?.rdEpisode != null
+                        ? { episode: source.rdEpisode }
+                        : {}),
+                    }
+                  );
+
+                  if (cancelled) {
+                    triggerController.abort();
+                    window.clearTimeout(triggerTimer);
+                    return;
+                  }
+
+                  const adoptData = adoptResponse?.data || {};
+
+                  setRdPreparation((current) => ({
+                    ...(current || {}),
+                    ...(adoptData.torrent_progress || {}),
+                    status:
+                      adoptData.torrent_progress?.status ||
+                      adoptData.rd_status ||
+                      (adoptData.status === "not_found"
+                        ? "comet_starting"
+                        : current?.status || "comet_starting"),
+                    seeders: Math.max(
+                      0,
+                      Number(
+                        adoptData.torrent_progress?.seeders ??
+                          current?.seeders ??
+                          active?.reportedSeeders ??
+                          0
+                      )
+                    ),
+                    speed_bps: Math.max(
+                      0,
+                      Number(
+                        adoptData.torrent_progress?.speed_bps ??
+                          current?.speed_bps ??
+                          0
+                      )
+                    ),
+                    startedAt: current?.startedAt || Date.now(),
+                    updatedAt: Date.now(),
+                    attempts: adoptAttempt + 1,
+                  }));
+
+                  if (
+                    adoptData.status === "ready" &&
+                    adoptData.stream_url
+                  ) {
+                    triggerController.abort();
+                    window.clearTimeout(triggerTimer);
+
+                    if (
+                      rejectResolvedForeignAutoplay(
+                        adoptData.media_info,
+                        {
+                          label:
+                            adoptData.filename ||
+                            active?.label ||
+                            "This release",
+                        }
+                      )
+                    ) {
+                      return;
+                    }
+
+                    setRdOverride({
+                      src: adoptData.stream_url,
+                      label:
+                        adoptData.filename ||
+                        active?.label ||
+                        "Real-Debrid Stream",
+                      file: currentFilePath(adoptData.files),
+                      audioRescue: adoptData.audio_rescue || null,
+                      fallbackSrc:
+                        adoptData.fallback_stream_url || "",
+                      videoRescue: adoptData.video_rescue || null,
+                      mediaInfo: adoptData.media_info || null,
+                      torrentId: adoptData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+                    });
+                    setRdFiles(adoptData.files || []);
+                    setRdResolving(false);
+                    setRdPreparation(null);
+                    return;
+                  }
+
+                  if (
+                    adoptData.status === "preparing" &&
+                    adoptData.torrent_id
+                  ) {
+                    const adoptedProgress = Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        Number(adoptData.torrent_progress?.progress || 0)
+                      )
+                    );
+                    const adoptedTorrentId = String(adoptData.torrent_id).trim();
+                    const resumedDeletedPartial =
+                      clearedLegacyProgress > 0 &&
+                      clearedLegacyProgress < 100 &&
+                      adoptedTorrentId &&
+                      adoptedTorrentId !== clearedLegacyTorrentId &&
+                      Math.abs(adoptedProgress - clearedLegacyProgress) <= 0.001;
+
+                    if (resumedDeletedPartial) {
+                      resumedLegacyPartialChecks += 1;
+
+                      if (resumedLegacyPartialChecks < 5) {
+                        continue;
+                      }
+
+                      triggerController.abort();
+                      window.clearTimeout(triggerTimer);
+
+                      try {
+                        await base44.functions.invoke(
+                          "realDebrid",
+                          {
+                            action: "torrent_delete",
+                            torrent_id: adoptedTorrentId,
+                          }
+                        );
+                      } catch {
+                        // The source hash is being abandoned either way.
+                      }
+
+                      markSourceFailed(activeIdx);
+                      markTorrentHashFailed(active);
+                      const nextSource = findNextPlayableSource(activeIdx);
+
+                      if (nextSource !== -1) {
+                        setRdResolving(false);
+                        setRdPolling(false);
+                        setRdTorrentId(null);
+                        setRdPreparation(null);
+                        setRdError("");
+                        switchToSource(nextSource, {
+                          preservePosition: true,
+                          statusMessage:
+                            `Real-Debrid removed the old ${Math.round(clearedLegacyProgress)}% job, but Comet re-created the same hash at the same stuck percentage and it still did not move. Trying a different torrent hash for the same title…`,
+                        });
+                        return;
+                      }
+
+                      setRdResolving(false);
+                      setRdPolling(false);
+                      setRdTorrentId(null);
+                      setRdPreparation({
+                        ...(adoptData.torrent_progress || {}),
+                        status: "stalled",
+                        stallReason: "rd_partial_state_persisted",
+                        progress: adoptedProgress,
+                        updatedAt: Date.now(),
+                        attempts: adoptAttempt + 1,
+                      });
+                      setRdError(
+                        `Real-Debrid removed the old ${Math.round(clearedLegacyProgress)}% job, but the same torrent hash immediately resumed at ${Math.round(adoptedProgress)}% and still did not advance. No different torrent hash is currently available for this title.`
+                      );
+                      return;
+                    }
+
+                    triggerController.abort();
+                    window.clearTimeout(triggerTimer);
+                    setRdPreparation({
+                      ...(adoptData.torrent_progress || {}),
+                      status:
+                        adoptData.torrent_progress?.status ||
+                        adoptData.rd_status ||
+                        "preparing",
+                      seeders: Math.max(
+                        0,
+                        Number(
+                          adoptData.torrent_progress?.seeders ??
+                            active?.reportedSeeders ??
+                            0
+                        )
+                      ),
+                      startedAt: Date.now(),
+                      updatedAt: Date.now(),
+                      attempts: 0,
+                    });
+                    setRdTorrentId(adoptedTorrentId);
+                    setRdResolving(false);
+                    return;
+                  }
+
+                  if (adoptData.status === "stale") {
+                    const staleTorrentId = String(adoptData.torrent_id || "").trim();
+                    const repairMagnet = richestSourceMagnet(active);
+
+                    if (staleTorrentId && repairMagnet) {
+                      try {
+                        const restartResponse = await base44.functions.invoke(
+                          "realDebrid",
+                          {
+                            action: "restart_playback_torrent",
+                            torrent_id: staleTorrentId,
+                            info_hash: hash,
+                            magnet: repairMagnet,
+                            prefer_browser_transcode: prefersBrowserRdCompatibility(),
+                            title:
+                              source?.rdTitle ||
+                              source?.title ||
+                              "",
+                            ...(source?.rdYear != null
+                              ? { year: source.rdYear }
+                              : {}),
+                            ...(source?.rdSeason != null
+                              ? { season: source.rdSeason }
+                              : {}),
+                            ...(source?.rdEpisode != null
+                              ? { episode: source.rdEpisode }
+                              : {}),
+                            ...(active?.fileIdx != null &&
+                            Number.isFinite(Number(active.fileIdx))
+                              ? { file_idx: Number(active.fileIdx) }
+                              : {}),
+                          }
+                        );
+
+                        const restartData = restartResponse?.data || {};
+
+                        triggerController.abort();
+                        window.clearTimeout(triggerTimer);
+
+                        if (
+                          restartData.error_code ===
+                          "RD_RESTART_RESUMED_STALE_PARTIAL"
+                        ) {
+                          markSourceFailed(activeIdx);
+                          markTorrentHashFailed(active);
+                          const nextSource = findNextPlayableSource(activeIdx);
+
+                          if (nextSource !== -1) {
+                            setRdResolving(false);
+                            setRdPolling(false);
+                            setRdTorrentId(null);
+                            setRdPreparation(null);
+                            setRdError("");
+                            switchToSource(nextSource, {
+                              preservePosition: true,
+                              statusMessage:
+                                `Real-Debrid re-created this torrent at the same stuck ${Math.round(Number(restartData.previous_progress || 0))}% and it still did not move. Trying a different torrent hash for the same title…`,
+                            });
+                            return;
+                          }
+
+                          setRdResolving(false);
+                          setRdPolling(false);
+                          setRdTorrentId(null);
+                          setRdPreparation((current) => ({
+                            ...(current || {}),
+                            status: "stalled",
+                            stallReason: "rd_partial_state_persisted",
+                            progress: Number(restartData.fresh_progress || restartData.previous_progress || 0),
+                            updatedAt: Date.now(),
+                          }));
+                          setRdError(
+                            `${restartData.error || "Real-Debrid kept the same stalled partial state for this torrent hash."} No different torrent hash is currently available for this title.`
+                          );
+                          return;
+                        }
+
+                        if (restartData.status === "ready" && restartData.stream_url) {
+                          if (
+                            rejectResolvedForeignAutoplay(
+                              restartData.media_info,
+                              {
+                                label:
+                                  restartData.filename ||
+                                  active?.label ||
+                                  "This release",
+                              }
+                            )
+                          ) {
+                            return;
+                          }
+
+                          setRdOverride({
+                            src: restartData.stream_url,
+                            label:
+                              restartData.filename ||
+                              active?.label ||
+                              "Real-Debrid Stream",
+                            file: currentFilePath(restartData.files),
+                            audioRescue: restartData.audio_rescue || null,
+                            fallbackSrc: restartData.fallback_stream_url || "",
+                            videoRescue: restartData.video_rescue || null,
+                            mediaInfo: restartData.media_info || null,
+                            torrentId: restartData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+                          });
+                          setRdFiles(restartData.files || []);
+                          setRdResolving(false);
+                          setRdPreparation(null);
+                          return;
+                        }
+
+                        if (restartData.torrent_id) {
+                          setRdPreparation({
+                            ...(restartData.torrent_progress || {}),
+                            status:
+                              restartData.torrent_progress?.status ||
+                              restartData.rd_status ||
+                              "restarting",
+                            torrent_id: String(restartData.torrent_id),
+                            startedAt: Date.now(),
+                            updatedAt: Date.now(),
+                            attempts: 0,
+                          });
+                          setRdTorrentId(String(restartData.torrent_id));
+                          setRdResolving(false);
+                          return;
+                        }
+
+                        lastAdoptError =
+                          restartData.error ||
+                          "Real-Debrid did not return a fresh torrent after deleting the stale copy.";
+                      } catch (restartError) {
+                        lastAdoptError = String(
+                          restartError?.message ||
+                            "Real-Debrid could not restart the stale torrent."
+                        ).trim();
+                      }
+                    } else {
+                      lastAdoptError =
+                        "Real-Debrid still has an old stalled copy of this torrent.";
+                    }
+                  } else if (adoptData.status === "failed") {
+                    lastAdoptError = String(
+                      adoptData.error ||
+                        "Real-Debrid rejected the torrent Comet tried to start."
+                    ).trim();
+
+                    /*
+                     * This is now a genuine Comet-created RD failure, not a
+                     * reason to submit a second magnet ourselves. Stop here and
+                     * leave the selected source visible for Retry/manual choice.
+                     */
+                    triggerController.abort();
+                    window.clearTimeout(triggerTimer);
+                    setRdPolling(false);
+                    setRdTorrentId(null);
+                    setRdPreparation((current) => ({
+                      ...(current || {}),
+                      status:
+                        adoptData.rd_status ||
+                        "comet_start_failed",
+                      updatedAt: Date.now(),
+                      attempts: adoptAttempt + 1,
+                    }));
+                    setRdError(
+                      `${lastAdoptError} Retry this Comet source or choose another source manually.`
+                    );
+                    return;
+                  }
+                } catch (adoptError) {
+                  lastAdoptError = String(
+                    adoptError?.message ||
+                      "Could not check Real-Debrid for the Comet torrent."
+                  ).trim();
+                }
+              }
+
+              triggerController.abort();
+              window.clearTimeout(triggerTimer);
+              setRdResolving(false);
+              setRdPolling(false);
+              setRdTorrentId(null);
+              setRdPreparation((current) => ({
+                ...(current || {}),
+                status: "comet_start_failed",
+                updatedAt: Date.now(),
+                attempts: 48,
+              }));
+              setRdError(
+                lastAdoptError
+                  ? `Comet did not create an active Real-Debrid torrent within about a minute. ${lastAdoptError} Retry this source or choose another source manually.`
+                  : "Comet did not create an active Real-Debrid torrent within about a minute. Retry this source or choose another source manually."
+              );
+              return;
+            }
+
+            if (hash && source?.hasDebrid) {
+              try {
+                const cacheResponse = await base44.functions.invoke(
+                  "multiDebrid",
+                  {
+                    action: "check_cache",
+                    hashes: [hash],
+                    provider_scores: debridProviderScoreHints(),
+                  }
+                );
+
+                const cacheData = cacheResponse?.data || {};
+                const best = String(
+                  cacheData?.bestProviderByHash?.[hash] || ""
+                )
+                  .toLowerCase()
+                  .replace(/[^a-z]/g, "");
+                const ranked = Object.entries(
+                  cacheData?.providerScoresByHash?.[hash] || {}
+                )
+                  .sort((a, b) => Number(b?.[1] || 0) - Number(a?.[1] || 0))
+                  .map(([provider]) =>
+                    String(provider || "")
+                      .toLowerCase()
+                      .replace(/[^a-z]/g, "")
+                  )
+                  .filter(Boolean);
+
+                debridProviders = [
+                  explicitProvider,
+                  best,
+                  ...ranked,
+                ].filter(
+                  (provider, index, list) =>
+                    provider && list.indexOf(provider) === index
+                );
+              } catch {
+                // An explicit provider can still be tried when cache ranking fails.
+              }
+            }
+
+            let lastMultiError = null;
+            const alternateProviders = debridProviders.filter(
+              (provider) => provider !== "realdebrid"
+            );
+
+            for (const debridProvider of alternateProviders) {
+              const resolveStartedAt = Date.now();
+              try {
+                const multiResponse = await base44.functions.invoke(
+                  "multiDebrid",
+                  {
+                    action: "resolve",
+                    provider: debridProvider,
+                    provider_scores: debridProviderScoreHints(),
+                    source: magnet,
+                    ...(source?.rdSeason != null
+                      ? { season: source.rdSeason }
+                      : {}),
+                    ...(source?.rdEpisode != null
+                      ? { episode: source.rdEpisode }
+                      : {}),
+                  }
+                );
+
+                if (cancelled) return;
+
+                const multiData = multiResponse?.data || {};
+                if (!multiData?.url) {
+                  throw new Error(
+                    multiData?.error ||
+                      `${multiData?.providerName || "Debrid provider"} did not return a playable stream.`
+                  );
+                }
+
+                recordDebridProviderResult(
+                  multiData.provider || debridProvider,
+                  {
+                    success: true,
+                    latencyMs: Date.now() - resolveStartedAt,
+                  }
+                );
+                setRdOverride({
+                  src: multiData.url,
+                  label:
+                    multiData.filename ||
+                    multiData.providerName ||
+                    active?.label ||
+                    "Debrid Stream",
+                  file:
+                    multiData.selectedFile ||
+                    multiData.filename ||
+                    "",
+                  provider: multiData.provider || debridProvider,
+                  sourceUrl: magnet,
+                });
+                setRdFiles(
+                  Array.isArray(multiData.files)
+                    ? multiData.files
+                    : []
+                );
+                setRdResolving(false);
+                return;
+              } catch (multiError) {
+                lastMultiError = multiError;
+                recordDebridProviderResult(
+                  debridProvider,
+                  {
+                    success: false,
+                    latencyMs: Date.now() - resolveStartedAt,
+                  }
+                );
+              }
+            }
+
+            if (
+              !source?.hasRd &&
+              source?.hasDebrid &&
+              explicitProvider !== "realdebrid"
+            ) {
+              throw lastMultiError || new Error(
+                "No connected debrid provider could resolve this cached source."
+              );
+            }
+
+            rdResolveStartedAt = Date.now();
+            const res =
+              await base44.functions.invoke(
+                "realDebrid",
+                {
+                  action:
+                    "resolve_best",
+
+                  magnet,
+                  prefer_browser_transcode: prefersBrowserRdCompatibility(),
+
+                  title:
+                    source?.rdTitle ||
+                    source?.title ||
+                    "",
+
+                  ...(source?.rdYear !=
+                  null
+                    ? {
+                        year:
+                          source.rdYear,
+                      }
+                    : {}),
+
+                  alternate_years:
+                    Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                      ? (source?.rdAlternateYears || source?.alternateYears)
+                      : [],
+
+                  alternate_titles:
+                    Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                      ? (source?.rdAlternateTitles || source?.alternateTitles)
+                      : [],
+
+                  ...(source?.rdSeason !=
+                  null
+                    ? {
+                        season:
+                          source.rdSeason,
+                      }
+                    : {}),
+
+                  ...(source?.rdEpisode !=
+                  null
+                    ? {
+                        episode:
+                          source.rdEpisode,
+                      }
+                    : {}),
+
+                  ...(active?.fileIdx != null &&
+                  Number.isFinite(Number(active.fileIdx))
+                    ? {
+                        file_idx:
+                          Number(active.fileIdx),
+                      }
+                    : {}),
+                }
+              );
+
+            if (
+              cancelled
+            ) {
+              return;
+            }
+
+            const data =
+              res?.data ||
+              {};
+
+            if (
+              data.status ===
+                "ready" &&
+              data.stream_url
+            ) {
+              recordDebridProviderResult(
+                "realdebrid",
+                {
+                  success: true,
+                  latencyMs: Date.now() - rdResolveStartedAt,
+                }
+              );
+
+              if (
+                rejectResolvedForeignAutoplay(
+                  data.media_info,
+                  {
+                    label:
+                      data.filename ||
+                      active?.label ||
+                      "This release",
+                  }
+                )
+              ) {
+                return;
+              }
+
+              setRdOverride({
+                src:
+                  data.stream_url,
+
+                label:
+                  data.filename ||
+                  active?.label ||
+                  "Real-Debrid Stream",
+
+                file:
+                  currentFilePath(
+                    data.files
+                  ),
+
+                audioRescue:
+                  data.audio_rescue ||
+                  null,
+
+                fallbackSrc:
+                  data.fallback_stream_url ||
+                  "",
+
+                videoRescue:
+                  data.video_rescue ||
+                  null,
+
+                mediaInfo:
+                  data.media_info ||
+                  null,
+                torrentId: data.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+              });
+
+              setRdFiles(
+                data.files ||
+                  []
+              );
+
+              setRdResolving(
+                false
+              );
+
+              setRdPreparation(null);
+
+              return;
+            }
+
+            if (
+              data.torrent_id
+            ) {
+              setRdPreparation({
+                ...(data.torrent_progress || {}),
+                status:
+                  data.torrent_progress?.status ||
+                  data.rd_status ||
+                  "preparing",
+                startedAt: Date.now(),
+                updatedAt: Date.now(),
+                attempts: 0,
+              });
+
+              setRdTorrentId(
+                String(
+                  data.torrent_id
+                )
+              );
+
+              setRdResolving(
+                false
+              );
+
+              return;
+            }
+
+            const resolveError = new Error(
+              data.error ||
+                "Real-Debrid could not resolve this source."
+            );
+            resolveError.code = String(data.error_code || "").trim();
+            resolveError.rdStatus = String(data.rd_status || "").trim();
+            throw resolveError;
+          } catch (
+            error
+          ) {
+            if (rdResolveStartedAt > 0) {
+              recordDebridProviderResult(
+                "realdebrid",
+                {
+                  success: false,
+                  latencyMs: Date.now() - rdResolveStartedAt,
+                }
+              );
+            }
+
+            if (
+              !cancelled
+            ) {
+              const uncachedActive = sourceNeedsCaching(active);
+              const terminalRdResolveFailure =
+                uncachedActive &&
+                (
+                  /^RD_TORRENT_(?:MAGNET_ERROR|ERROR|DEAD|VIRUS)$/i.test(
+                    String(error?.code || "")
+                  ) ||
+                  /could not resolve this magnet into an active torrent/i.test(
+                    String(error?.message || "")
+                  )
+                );
+
+              if (
+                error?.code === "RD_NO_AUDIO_TRACKS" ||
+                error?.code === "RD_NO_ENGLISH_AUDIO"
+              ) {
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation(null);
+
+                /*
+                 * Legacy/backend-race safety: audio metadata is not sufficient
+                 * evidence to blacklist a torrent. A working file can expose
+                 * incomplete Real-Debrid language/audio metadata while Media3
+                 * or LibVLC still sees the real tracks. Keep this source
+                 * available instead of racing through and poisoning the list.
+                 */
+                setRdError(
+                  error?.code === "RD_NO_ENGLISH_AUDIO"
+                    ? "Real-Debrid did not label an English track for this file. Media God kept the source available instead of marking it bad; Retry lets the player inspect the real audio tracks."
+                    : "Real-Debrid did not report audio tracks for this file. Media God kept the source available instead of marking it bad; Retry lets the player verify audio at runtime."
+                );
+                return;
+              }
+
+              if (error?.code === "RD_IP_NOT_ALLOWED") {
+                /*
+                 * This is an account/network condition, not evidence that the
+                 * selected torrent is bad. Normal unrestrict is attempted first;
+                 * remote traffic is only used when RD explicitly requires it.
+                 */
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation(null);
+                setRdError(
+                  "Real-Debrid rejected the current playback network/IP. Media God did not mark this torrent bad; reconnect Real-Debrid or retry the connection."
+                );
+                return;
+              }
+
+              if (error?.code === "RD_REMOTE_TRAFFIC_EXHAUSTED") {
+                /*
+                 * Error 23 is account/traffic state, not a bad movie/episode
+                 * hash. Do not burn through the source list or blacklist files.
+                 */
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation(null);
+                setRdError(
+                  "Real-Debrid reports traffic exhausted. Media God now tries normal playback before remote mode, and this torrent has not been marked bad. Retry after the Real-Debrid traffic allowance is available."
+                );
+                return;
+              }
+
+              if (
+                error?.code === "RD_ACTIVE_SLOTS_FULL" ||
+                terminalRdResolveFailure
+              ) {
+                /*
+                 * Do not make an uncached cache attempt disappear by hopping
+                 * to another torrent. Slot exhaustion affects every candidate,
+                 * while a terminal magnet error needs the current source's
+                 * Comet/source metadata to be retried or inspected.
+                 */
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation((current) =>
+                  terminalRdResolveFailure
+                    ? {
+                        ...(current || {}),
+                        status: error?.rdStatus || "magnet_error",
+                        updatedAt: Date.now(),
+                      }
+                    : null
+                );
+                setRdError(
+                  error?.message ||
+                    (error?.code === "RD_ACTIVE_SLOTS_FULL"
+                      ? "Real-Debrid has no free active torrent slot."
+                      : "Real-Debrid could not start this uncached torrent.")
+                );
+                return;
+              }
+
+              tryNextSource(
+                error?.message ||
+                  "Unable to resolve this stream."
+              );
+            }
+          }
+        };
+
+      const queuedRun = rdResolutionQueueRef.current
+        .catch(() => {})
+        .then(() => {
+          if (cancelled) {
+            return undefined;
+          }
+
+          return run();
+        });
+
+      rdResolutionQueueRef.current = queuedRun.catch(() => {});
+
+      return () => {
+        cancelled =
+          true;
+
+        if (
+          pollRef.current
+        ) {
+          clearTimeout(
+            pollRef.current
+          );
+
+          pollRef.current =
+            null;
+        }
+      };
+    },
+    [
+      activeIdx,
+      activeResolutionKey,
+      activeUrl,
+      rdMediaContextKey,
+      isYoutube,
+      isProvider,
+      isDirectFile,
+      isLive,
+      isRdSource,
+    ]
+  );
+
+  /*
+   * Poll Real-Debrid while a newly submitted
+   * torrent is being prepared.
+   */
+  useEffect(
+    () => {
+      if (
+        rdCacheEngineOwnsPollingRef.current ||
+        !rdTorrentId ||
+        rdOverride
+      ) {
+        return;
+      }
+
+      let cancelled =
+        false;
+
+      let attempts =
+        0;
+
+      let latestProgress =
+        0;
+
+      let latestSeeders =
+        0;
+
+      let latestSpeed =
+        0;
+
+      let latestSizeBytes =
+        0;
+
+      let latestRdAdded =
+        "";
+
+      let lastProgressValue =
+        -1;
+
+      let lastProgressAdvanceAt =
+        Date.now();
+
+      let consecutivePollFailures =
+        0;
+
+      let finalizingSince = 0;
+
+      const scheduleTransientPollRetry =
+        (message) => {
+          consecutivePollFailures += 1;
+
+          setRdPreparation((current) => ({
+            ...(current || {}),
+            lastPollError: String(message || "Real-Debrid status check failed."),
+            updatedAt: Date.now(),
+            attempts,
+          }));
+
+          if (consecutivePollFailures > 4) {
+            return false;
+          }
+
+          const retryDelayMs = Math.min(
+            20000,
+            3000 * 2 ** Math.max(0, consecutivePollFailures - 1)
+          );
+
+          setRdPolling(true);
+          pollRef.current = window.setTimeout(tick, retryDelayMs);
+          return true;
+        };
+
+      setRdPolling(
+        true
+      );
+
+      const tick =
+        async () => {
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+          /*
+           * Android/Fire TV renders <select> as a native popup. The first RD
+           * torrent status poll runs about 2.5 seconds after a cache job starts;
+           * updating React state while that native popup is open makes WebView
+           * dismiss it. Pause polling completely while the user is choosing a
+           * source/torrent file, then resume as soon as the selector closes.
+           */
+          if (
+            sourceSelectorPinnedRef.current ||
+            rdFileSelectorPinnedRef.current
+          ) {
+            /*
+             * Some Android browsers do not emit blur/change when a native
+             * <select> popup is dismissed without changing the value. That can
+             * leave the selector "pinned" forever and, because polling pauses
+             * while pinned, freeze the Real-Debrid progress display at an old
+             * percentage. Treat a pin older than 12 seconds as abandoned and
+             * resume polling automatically.
+             */
+            const now = Date.now();
+            const sourcePinStale =
+              sourceSelectorPinnedRef.current &&
+              sourceSelectorPinnedAtRef.current > 0 &&
+              now - sourceSelectorPinnedAtRef.current > 12000;
+            const filePinStale =
+              rdFileSelectorPinnedRef.current &&
+              rdFileSelectorPinnedAtRef.current > 0 &&
+              now - rdFileSelectorPinnedAtRef.current > 12000;
+
+            if (sourcePinStale) releaseSourceSelector();
+            if (filePinStale) releaseRdFileSelector();
+
+            if (
+              sourceSelectorPinnedRef.current ||
+              rdFileSelectorPinnedRef.current
+            ) {
+              pollRef.current = window.setTimeout(
+                tick,
+                500
+              );
+              return;
+            }
+          }
+
+          attempts +=
+            1;
+
+          try {
+            const res =
+              await base44.functions.invoke(
+                "realDebrid",
+                {
+                  action:
+                    "torrent_info",
+
+                  torrent_id:
+                    rdTorrentId,
+                  prefer_browser_transcode: prefersBrowserRdCompatibility(),
+
+                  title:
+                    source?.rdTitle ||
+                    source?.title ||
+                    "",
+
+                  ...(source?.rdYear !=
+                  null
+                    ? {
+                        year:
+                          source.rdYear,
+                      }
+                    : {}),
+
+                  ...(source?.rdSeason !=
+                  null
+                    ? {
+                        season:
+                          source.rdSeason,
+                      }
+                    : {}),
+
+                  ...(source?.rdEpisode !=
+                  null
+                    ? {
+                        episode:
+                          source.rdEpisode,
+                      }
+                    : {}),
+
+                  ...(rdManualFileSelection
+                    ? {
+                        file_id: Number(rdManualFileSelection.fileId),
+                        file_path: rdManualFileSelection.path || "",
+                        manual_file_selection: true,
+                      }
+                    : active?.fileIdx != null &&
+                        Number.isFinite(Number(active.fileIdx))
+                      ? {
+                          file_idx: Number(active.fileIdx),
+                        }
+                      : {}),
+                }
+              );
+
+            if (
+              cancelled
+            ) {
+              return;
+            }
+
+            const data =
+              res?.data ||
+              {};
+
+            if (!data.error) {
+              consecutivePollFailures = 0;
+            }
+
+            const progressData =
+              data.torrent_progress ||
+              {};
+
+            latestRdAdded =
+              String(
+                progressData?.added ||
+                latestRdAdded ||
+                rdPreparation?.added ||
+                ""
+              );
+
+            latestProgress = Math.max(
+              0,
+              Math.min(
+                100,
+                Number(progressData.progress || 0)
+              )
+            );
+
+            latestSeeders = Math.max(
+              0,
+              Number(progressData.seeders || 0)
+            );
+
+            latestSpeed = Math.max(
+              0,
+              Number(progressData.speed_bps || 0)
+            );
+
+            latestSizeBytes = Math.max(
+              0,
+              Number(progressData.size_bytes || latestSizeBytes || 0)
+            );
+
+            if (
+              lastProgressValue < 0 ||
+              latestProgress > lastProgressValue + 0.001
+            ) {
+              lastProgressValue = latestProgress;
+              lastProgressAdvanceAt = Date.now();
+            }
+
+            setRdPreparation(
+              (current) => ({
+                ...progressData,
+                status:
+                  progressData.status ||
+                  data.rd_status ||
+                  current?.status ||
+                  "preparing",
+                startedAt:
+                  current?.startedAt ||
+                  Date.now(),
+                updatedAt:
+                  Date.now(),
+                attempts,
+                lastPollError: "",
+              })
+            );
+
+            const currentRdStatus = String(
+              progressData.status ||
+              data.rd_status ||
+              ""
+            ).toLowerCase();
+
+            if (latestProgress >= 100 || currentRdStatus === "downloaded") {
+              if (!finalizingSince) finalizingSince = Date.now();
+            } else {
+              finalizingSince = 0;
+            }
+
+            if (
+              /^(?:dead|error|magnet_error|virus)$/.test(
+                currentRdStatus
+              )
+            ) {
+              setRdPolling(false);
+              setRdTorrentId(null);
+
+              if (rdManualFileSelection) {
+                setRdError(
+                  `Real-Debrid stopped the selected extra: ${friendlyRdStatus(
+                    currentRdStatus
+                  )}. Choose the file again to retry it.`
+                );
+                setRdManualFileSelection(null);
+                return;
+              }
+
+              const uncachedActive = sourceNeedsCaching(active);
+
+              if (uncachedActive) {
+                /*
+                 * Keep the failed uncached torrent selected. Automatically
+                 * hopping here made the cache screen disappear on the very
+                 * first RD poll (normally about 2.5 seconds after creation),
+                 * which is exactly the behaviour seen on the phone screenshot.
+                 */
+                setRdPreparation((current) => ({
+                  ...(current || {}),
+                  status: currentRdStatus,
+                  updatedAt: Date.now(),
+                  attempts,
+                }));
+                setRdError(
+                  `Real-Debrid stopped this uncached torrent: ${friendlyRdStatus(
+                    currentRdStatus
+                  )}. Retry this source to start it again.`
+                );
+                return;
+              }
+
+              const moved = tryNextSource(
+                `Real-Debrid stopped preparing this torrent: ${friendlyRdStatus(
+                  currentRdStatus
+                )}. Trying another source.`,
+                {
+                  blacklistTorrentHash: true,
+                  immediate: true,
+                }
+              );
+
+              if (!moved) {
+                setRdError(
+                  `Real-Debrid stopped preparing this torrent: ${friendlyRdStatus(
+                    currentRdStatus
+                  )}. No other playable source is available.`
+                );
+              }
+
+              return;
+            }
+
+            if (
+              data.status ===
+                "ready" &&
+              data.stream_url
+            ) {
+              if (
+                !rdManualFileSelection &&
+                rejectResolvedForeignAutoplay(
+                  data.media_info,
+                  {
+                    label:
+                      data.filename ||
+                      active?.label ||
+                      "This release",
+                  }
+                )
+              ) {
+                return;
+              }
+
+              setRdOverride({
+                src:
+                  data.stream_url,
+
+                label:
+                  data.filename ||
+                  "Real-Debrid Stream",
+
+                file:
+                  currentFilePath(
+                    data.files
+                  ),
+
+                audioRescue:
+                  data.audio_rescue ||
+                  null,
+
+                fallbackSrc:
+                  data.fallback_stream_url ||
+                  "",
+
+                videoRescue:
+                  data.video_rescue ||
+                  null,
+
+                mediaInfo:
+                  data.media_info ||
+                  null,
+                torrentId: data.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+              });
+
+              setRdFiles((current) => {
+                const incoming = Array.isArray(data.files) ? data.files : [];
+
+                if (!rdManualFileSelection || current.length === 0) {
+                  return incoming;
+                }
+
+                const byPath = new Map(
+                  incoming.map((file) => [String(file?.path || ""), file])
+                );
+
+                return current.map((file) => {
+                  const replacement = byPath.get(String(file?.path || ""));
+                  return replacement && (replacement?.link || replacement?.selected)
+                    ? { ...file, ...replacement }
+                    : file;
+                });
+              });
+
+              setRdManualFileSelection(null);
+
+              setRdPolling(
+                false
+              );
+
+              setRdTorrentId(
+                null
+              );
+
+              setRdPreparation(null);
+
+              return;
+            }
+
+            if (
+              data.error
+            ) {
+              const rdErrorCode = String(
+                data.error_code || ""
+              ).trim();
+
+              if (
+                rdErrorCode === "RD_TORRENT_INFO_FAILED" &&
+                scheduleTransientPollRetry(data.error)
+              ) {
+                return;
+              }
+
+              setRdPolling(
+                false
+              );
+
+              setRdTorrentId(
+                null
+              );
+
+              if (rdManualFileSelection) {
+                setRdPreparation(null);
+                setRdError(
+                  `${data.error || "The selected extra could not be prepared."} Choose the file again to retry it.`
+                );
+                setRdManualFileSelection(null);
+                return;
+              }
+
+              if (
+                rdErrorCode ===
+                "RD_NO_VIDEO_FILE"
+              ) {
+                setRdPreparation(null);
+
+                const moved = tryNextSource(
+                  "Real-Debrid finished this torrent, but it contains no playable video file. Trying a different torrent.",
+                  {
+                    blacklistTorrentHash: true,
+                    immediate: true,
+                  }
+                );
+
+                if (!moved) {
+                  setRdError(
+                    "Real-Debrid finished this torrent, but it contains no playable video file and no different playable source is available."
+                  );
+                }
+
+                return;
+              }
+
+              if (
+                rdErrorCode === "RD_NO_AUDIO_TRACKS" ||
+                rdErrorCode === "RD_NO_ENGLISH_AUDIO"
+              ) {
+                setRdPreparation(null);
+
+                /*
+                 * Do not convert imperfect Real-Debrid mediaInfos into a
+                 * blacklist. Keep the source selected so a retry/runtime
+                 * decoder probe can prove the actual audio instead.
+                 */
+                setRdError(
+                  rdErrorCode === "RD_NO_ENGLISH_AUDIO"
+                    ? "Real-Debrid did not label an English track for this file. The source was kept available instead of being marked bad."
+                    : "Real-Debrid did not report audio tracks for this file. The source was kept available instead of being marked bad."
+                );
+                return;
+              }
+
+              if (rdErrorCode === "RD_TORRENT_INFO_FAILED") {
+                setRdPreparation((current) => ({
+                  ...(current || {}),
+                  status: sourceNeedsCaching(active)
+                    ? "stalled"
+                    : current?.status || "stalled",
+                  stallReason: "poll_failure",
+                  updatedAt: Date.now(),
+                  attempts,
+                }));
+              }
+
+              setRdError(
+                rdErrorCode === "RD_TORRENT_INFO_FAILED"
+                  ? `${data.error} Media God retried the status check several times. The Real-Debrid torrent was left untouched; Retry to reconnect.`
+                  : data.error
+              );
+
+              return;
+            }
+
+            if (finalizingSince && Date.now() - finalizingSince >= 120000) {
+              setRdPolling(false);
+              setRdTorrentId(null);
+              setRdPreparation((current) => ({
+                ...(current || {}),
+                status: "stalled",
+                stallReason: "playable_link_timeout",
+                progress: latestProgress,
+                updatedAt: Date.now(),
+                torrent_id: String(rdTorrentId || current?.torrent_id || ""),
+              }));
+              setRdError(
+                "The download finished, but Real-Debrid did not provide a playable link within two minutes. The torrent was kept. Tap Retry to check it again, or choose another source."
+              );
+              return;
+            }
+          } catch (
+            error
+          ) {
+            if (
+              !cancelled &&
+              scheduleTransientPollRetry(
+                error?.message || "Real-Debrid polling failed."
+              )
+            ) {
+              return;
+            }
+
+            if (
+              !cancelled
+            ) {
+              setRdPreparation((current) => ({
+                ...(current || {}),
+                status: sourceNeedsCaching(active)
+                  ? "stalled"
+                  : current?.status || "stalled",
+                stallReason: "poll_failure",
+                updatedAt: Date.now(),
+                attempts,
+              }));
+
+              setRdError(
+                `${error?.message || "Real-Debrid polling failed."} Media God retried the status check several times. The torrent was left untouched; Retry to reconnect.`
+              );
+
+              setRdPolling(
+                false
+              );
+
+              setRdTorrentId(
+                null
+              );
+            }
+
+            return;
+          }
+
+          const noProgressForMs =
+            Date.now() - lastProgressAdvanceAt;
+
+          const sourceReportedSeeders = Math.max(
+            0,
+            Number(active?.reportedSeeders || 0)
+          );
+
+          const activeOriginalTrackerMagnet = String(
+            active?.richMagnet || ""
+          ).trim();
+          const hasOriginalTrackerMagnet =
+            /^magnet:/i.test(activeOriginalTrackerMagnet) &&
+            /(?:[?&])tr=/i.test(activeOriginalTrackerMagnet);
+
+          /*
+           * Real-Debrid can keep reporting a non-zero seeder count/speed even
+           * when the torrent percentage has stopped moving. The RD website can
+           * therefore show (for example) 13 seeders and ~200 KB/s while the
+           * exact same percentage sits there for minutes. Seeder/speed numbers
+           * are useful diagnostics, but actual progress is the authority.
+           *
+           * Give a fresh torrent time to establish, then fail it if the RD
+           * percentage does not advance. A partial torrent gets a longer
+           * flatline window so short swarm pauses do not throw away a healthy
+           * download.
+           */
+          /*
+           * Real-Debrid reports torrent progress as a WHOLE percentage. On a
+           * large uncached movie, RD can genuinely download hundreds of MB at
+           * a healthy speed while progress still reads 0%. The old watchdog
+           * treated that as a dead torrent after 45-75 seconds and then
+           * deleted it during failover, which made healthy uncached downloads
+           * look as though they never started.
+           *
+           * Seeder/speed activity is therefore meaningful here. Give an
+           * actively moving swarm a long runway, and only use the short dead
+           * windows when RD is reporting no peer activity at all.
+           */
+          const activelyDownloading =
+            latestSpeed > 0;
+
+          /*
+           * RD's percentage is rounded, so a large slow torrent can sit on one
+           * whole percentage for a while. But a tiny file claiming several
+           * MB/s should not remain at exactly 43% for many minutes. Scale the
+           * active-download grace period from the time it should take to move
+           * roughly one percentage point, with sensible minimum/maximum bounds.
+           * This catches stale RD speed reports without punishing genuinely
+           * large/slow downloads.
+           */
+          const expectedOnePercentMs =
+            activelyDownloading && latestSizeBytes > 0
+              ? (latestSizeBytes / 100 / latestSpeed) * 1000
+              : 0;
+          const activeDownloadFlatlineMs =
+            expectedOnePercentMs > 0
+              ? Math.min(
+                  30 * 60 * 1000,
+                  Math.max(45 * 1000, expectedOnePercentMs * 8)
+                )
+              : 30 * 60 * 1000;
+
+          const stallAfterMs =
+            latestProgress <= 0.001
+              ? activelyDownloading
+                ? activeDownloadFlatlineMs
+                : latestSeeders > 0
+                  ? 15 * 60 * 1000
+                  : hasOriginalTrackerMagnet
+                    ? 3 * 60 * 1000
+                    : 2 * 60 * 1000
+              : activelyDownloading
+                ? activeDownloadFlatlineMs
+                : latestSeeders > 0
+                  ? 15 * 60 * 1000
+                  : 3 * 60 * 1000;
+
+          const rdAddedAt = Date.parse(
+            String(latestRdAdded || rdPreparation?.added || "")
+          );
+          const rdJobAgeMs = Number.isFinite(rdAddedAt)
+            ? Math.max(0, Date.now() - rdAddedAt)
+            : 0;
+          const expectedFullTransferMs =
+            activelyDownloading && latestSizeBytes > 0
+              ? (latestSizeBytes / latestSpeed) * 1000
+              : 0;
+          const staleByOriginalRdAge =
+            attempts >= 2 &&
+            latestProgress > 0 &&
+            latestProgress < 100 &&
+            expectedFullTransferMs > 0 &&
+            rdJobAgeMs >= Math.max(90 * 1000, expectedFullTransferMs * 6) &&
+            noProgressForMs >= 4000;
+
+          const looksCompletelyStalled =
+            latestProgress < 100 &&
+            (
+              noProgressForMs >= stallAfterMs ||
+              staleByOriginalRdAge
+            );
+          const flatlineMinutes = Math.max(
+            1,
+            Math.round(stallAfterMs / 60000)
+          );
+
+          if (looksCompletelyStalled) {
+            if (sourceNeedsCaching(active)) {
+              const activeHash = sourceTorrentHash(active);
+              const canRepairSameTorrent =
+                activeHash &&
+                !repairedStuckTorrentHashesRef.current.has(activeHash);
+
+              /*
+               * Repair the selected torrent itself before considering anything
+               * else. If RD's percentage has genuinely flat-lined, delete only
+               * the Media-God-owned RD job for this exact hash and re-submit the
+               * SAME tracker-rich magnet. This is a source repair, not failover.
+               */
+              if (canRepairSameTorrent) {
+                const repairMagnet = richestSourceMagnet(active);
+                const currentTorrentId = String(rdTorrentId || "").trim();
+
+                if (repairMagnet && currentTorrentId) {
+                  repairedStuckTorrentHashesRef.current.add(activeHash);
+
+                  try {
+                    setRdPreparation((current) => ({
+                      ...(current || {}),
+                      status: "restarting",
+                      progress: 0,
+                      seeders: 0,
+                      speed_bps: 0,
+                      size_bytes: latestSizeBytes,
+                      downloaded_bytes: 0,
+                      updatedAt: Date.now(),
+                      attempts,
+                    }));
+
+                    const restartResponse = await base44.functions.invoke(
+                      "realDebrid",
+                      {
+                        action: "restart_playback_torrent",
+                        torrent_id: currentTorrentId,
+                        info_hash: activeHash,
+                        magnet: repairMagnet,
+                        prefer_browser_transcode: prefersBrowserRdCompatibility(),
+                        title:
+                          source?.rdTitle ||
+                          source?.title ||
+                          "",
+                        ...(source?.rdYear != null
+                          ? { year: source.rdYear }
+                          : {}),
+                        ...(source?.rdSeason != null
+                          ? { season: source.rdSeason }
+                          : {}),
+                        ...(source?.rdEpisode != null
+                          ? { episode: source.rdEpisode }
+                          : {}),
+                        ...(active?.fileIdx != null &&
+                        Number.isFinite(Number(active.fileIdx))
+                          ? { file_idx: Number(active.fileIdx) }
+                          : {}),
+                      }
+                    );
+
+                    const restartData = restartResponse?.data || {};
+
+                    if (
+                      restartData.error_code ===
+                      "RD_RESTART_RESUMED_STALE_PARTIAL"
+                    ) {
+                      markSourceFailed(activeIdx);
+                      markTorrentHashFailed(active);
+                      const nextSource = findNextPlayableSource(activeIdx);
+
+                      if (nextSource !== -1) {
+                        setRdPolling(false);
+                        setRdTorrentId(null);
+                        setRdPreparation(null);
+                        setRdError("");
+                        switchToSource(nextSource, {
+                          preservePosition: true,
+                          statusMessage:
+                            `Real-Debrid re-created this torrent at the same stuck ${Math.round(Number(restartData.previous_progress || latestProgress || 0))}% and it still did not move. Trying a different torrent hash for the same title…`,
+                        });
+                        return;
+                      }
+
+                      setRdPolling(false);
+                      setRdTorrentId(null);
+                      setRdPreparation((current) => ({
+                        ...(current || {}),
+                        status: "stalled",
+                        stallReason: "rd_partial_state_persisted",
+                        progress: Number(restartData.fresh_progress || restartData.previous_progress || latestProgress || 0),
+                        updatedAt: Date.now(),
+                      }));
+                      setRdError(
+                        `${restartData.error || "Real-Debrid kept the same stalled partial state for this torrent hash."} No different torrent hash is currently available for this title.`
+                      );
+                      return;
+                    }
+
+                    if (restartData.status === "ready" && restartData.stream_url) {
+                      if (
+                        rejectResolvedForeignAutoplay(
+                          restartData.media_info,
+                          {
+                            label:
+                              restartData.filename ||
+                              active?.label ||
+                              "This release",
+                          }
+                        )
+                      ) {
+                        return;
+                      }
+
+                      setRdOverride({
+                        src: restartData.stream_url,
+                        label:
+                          restartData.filename ||
+                          active?.label ||
+                          "Real-Debrid Stream",
+                        file: currentFilePath(restartData.files),
+                        audioRescue: restartData.audio_rescue || null,
+                        fallbackSrc: restartData.fallback_stream_url || "",
+                        videoRescue: restartData.video_rescue || null,
+                        mediaInfo: restartData.media_info || null,
+                        torrentId: restartData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+                      });
+                      setRdFiles(restartData.files || []);
+                      setRdPolling(false);
+                      setRdTorrentId(null);
+                      setRdPreparation(null);
+                      setRdError("");
+                      return;
+                    }
+
+                    if (restartData.torrent_id) {
+                      setRdPolling(true);
+                      setRdTorrentId(String(restartData.torrent_id));
+                      setRdError("");
+                      setRdPreparation({
+                        ...(restartData.torrent_progress || {}),
+                        status:
+                          restartData.torrent_progress?.status ||
+                          restartData.rd_status ||
+                          "restarting",
+                        startedAt: Date.now(),
+                        updatedAt: Date.now(),
+                        attempts: 0,
+                      });
+
+                      window.dispatchEvent(
+                        new CustomEvent("mg:player-status", {
+                          detail: {
+                            message:
+                              `Real-Debrid stalled at ${latestProgress.toFixed(0)}% — the exact torrent job was deleted and re-created.`,
+                          },
+                        })
+                      );
+                      return;
+                    }
+
+                    throw new Error(
+                      restartData.error ||
+                        "Real-Debrid did not return a fresh torrent after the restart."
+                    );
+                  } catch (repairError) {
+                    setRdError(
+                      repairError?.message ||
+                        "Real-Debrid could not restart this exact torrent."
+                    );
+                  }
+                }
+              }
+
+              /*
+               * If the same-torrent repair was already attempted and this hash
+               * still cannot progress, keep it selected and report the real RD
+               * state. Do not disguise the fault by hopping to another source.
+               */
+              setRdPolling(false);
+              setRdTorrentId(null);
+              setRdPreparation((current) => ({
+                ...(current || {}),
+                status: "stalled",
+                stallReason: "no_progress",
+                torrent_id: String(rdTorrentId || current?.torrent_id || ""),
+                progress: latestProgress,
+                seeders: latestSeeders,
+                speed_bps: latestSpeed,
+                updatedAt: Date.now(),
+                attempts,
+              }));
+              setRdError(
+                latestProgress <= 0.001
+                  ? activelyDownloading
+                    ? `Real-Debrid is still reporting download speed, but the rounded percentage has not moved for about ${flatlineMinutes} minute${flatlineMinutes === 1 ? "" : "s"}. The torrent has been left in Real-Debrid; Retry to reconnect or choose another source manually.`
+                    : latestSeeders > 0
+                      ? "Real-Debrid still sees seeders but has reported no download speed for about 15 minutes. The torrent has been left in Real-Debrid; Retry to reconnect or choose another source manually."
+                      : sourceReportedSeeders > 0
+                        ? "The addon reported seeders, but Real-Debrid has found no live peer activity for several minutes. The torrent has been left in Real-Debrid; Retry or choose another source manually."
+                        : "Real-Debrid has found no live peer activity for this torrent for several minutes. The torrent has been left in Real-Debrid; Retry or choose another source manually."
+                  : activelyDownloading
+                    ? `Real-Debrid has remained at ${latestProgress.toFixed(2)}% for about ${flatlineMinutes} minute${flatlineMinutes === 1 ? "" : "s"} while still reporting download speed. The torrent has been left in Real-Debrid; Retry to reconnect or choose another source manually.`
+                    : latestSeeders > 0
+                      ? `Real-Debrid has remained at ${latestProgress.toFixed(2)}% with seeders but no download speed for about 15 minutes. The torrent has been left in Real-Debrid; Retry or choose another source manually.`
+                      : `Real-Debrid has remained at ${latestProgress.toFixed(2)}% with no peer activity for several minutes. The torrent has been left in Real-Debrid; Retry or choose another source manually.`
+              );
+              return;
+            }
+
+            const nextSource = findNextPlayableSource(activeIdx);
+
+            if (nextSource !== -1) {
+              const stalledTorrentId = String(rdTorrentId || "").trim();
+
+              if (stalledTorrentId) {
+                try {
+                  await base44.functions.invoke(
+                    "realDebrid",
+                    {
+                      action: "torrent_delete",
+                      torrent_id: stalledTorrentId,
+                    }
+                  );
+                } catch {
+                  // Cleanup is best-effort; source failover must still happen.
+                }
+              }
+
+              setRdPolling(false);
+              setRdTorrentId(null);
+              tryNextSource(
+                latestProgress <= 0.001
+                  ? activelyDownloading
+                    ? "Real-Debrid kept reporting download speed but the whole-percent progress value did not advance for about 30 minutes. Trying another torrent."
+                    : latestSeeders > 0
+                      ? "Real-Debrid still saw seeders but reported no download speed for about 15 minutes. Trying another torrent."
+                      : hasOriginalTrackerMagnet
+                        ? "Real-Debrid could not establish peer activity for this original tracker magnet after about 3 minutes. Trying another torrent."
+                        : sourceReportedSeeders > 0
+                          ? "The source reported seeders, but Real-Debrid still found no live peer activity after about 2 minutes. Trying another torrent."
+                          : "Real-Debrid found no peer activity after about 2 minutes. Trying another torrent."
+                  : activelyDownloading
+                    ? `Real-Debrid stayed at ${latestProgress.toFixed(2)}% for about 30 minutes despite continuing to report download speed. Trying another source.`
+                    : latestSeeders > 0
+                      ? `Real-Debrid stayed at ${latestProgress.toFixed(2)}% with seeders but no download speed for about 15 minutes. Trying another source.`
+                      : `Real-Debrid stayed at ${latestProgress.toFixed(2)}% with no peer activity for about 3 minutes. Trying another source.`,
+                {
+                  blacklistTorrentHash: true,
+                  immediate: true,
+                }
+              );
+              return;
+            }
+          }
+
+          if (
+            attempts <
+            1440
+          ) {
+            pollRef.current =
+              setTimeout(
+                tick,
+                latestProgress >= 100 ? 2000 : 5000
+              );
+          } else {
+            setRdPolling(
+              false
+            );
+
+            setRdTorrentId(
+              null
+            );
+
+            const stalledHint =
+              latestSeeders <= 0 && latestSpeed <= 0
+                ? " No active seeders or download speed were reported."
+                : "";
+
+            setRdPreparation((current) => ({
+              ...(current || {}),
+              status: "stalled",
+              stallReason: "monitoring_timeout",
+              progress: latestProgress,
+              seeders: latestSeeders,
+              speed_bps: latestSpeed,
+              updatedAt: Date.now(),
+              attempts,
+            }));
+
+            setRdError(
+              latestProgress > 0
+                ? `Media God monitored this Real-Debrid download for about 2 hours and it is still at ${Math.round(latestProgress)}%.${stalledHint} The torrent has been left in Real-Debrid; Retry to reconnect or choose another source.`
+                : `Media God monitored this Real-Debrid torrent for about 2 hours without usable progress.${stalledHint} The torrent has been left in Real-Debrid; Retry or choose another source.`
+            );
+          }
+        };
+
+      pollRef.current =
+        setTimeout(
+          tick,
+          2500
+        );
+
+      return () => {
+        cancelled =
+          true;
+
+        if (
+          pollRef.current
+        ) {
+          clearTimeout(
+            pollRef.current
+          );
+
+          pollRef.current =
+            null;
+        }
+      };
+    },
+    [
+      rdTorrentId,
+      rdOverride,
+      rdManualFileSelection,
+    ]
+  );
+
+  useEffect(
+    () => {
+      failedSourcesRef.current =
+        new Set();
+      failedTorrentHashesRef.current =
+        readPersistentFailedTorrentHashes();
+      repairedStuckTorrentHashesRef.current =
+        new Set();
+
+      setFailedSources(
+        new Set()
+      );
+    },
+    [
+      source?.title,
+      source?.id,
+      source?.rdSeason,
+      source?.rdEpisode,
+    ]
+  );
+
+  /*
+   * Failed-hash history is still useful when choosing an automatic backup for
+   * ordinary playback, but it must never auto-skip a source the user has just
+   * selected or retried. Uncached caching attempts now remain visible until
+   * they succeed, the user retries them, or the user manually chooses another
+   * source.
+   */
+
+  /*
+   * Keyboard / TV remote controls.
+   */
+  useEffect(
+    () => {
+      const onKey =
+        (
+          event
+        ) => {
+          const backKey =
+            event.key === "Escape" ||
+            event.key === "Backspace" ||
+            event.key === "BrowserBack" ||
+            event.key === "GoBack" ||
+            Number(event.keyCode || event.which || 0) === 4;
+
+          if (backKey) {
+            const stage =
+              stageRef.current;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (
+              stage?.dataset
+                ?.mgFullscreen ===
+              "true"
+            ) {
+              goFullscreen();
+
+              return;
+            }
+
+            const nativeFullscreenElement =
+              document.fullscreenElement ||
+              document.webkitFullscreenElement ||
+              null;
+
+            if (nativeFullscreenElement) {
+              goFullscreen();
+              return;
+            }
+
+            returnFromPlayback();
+            return;
+          }
+
+          /*
+           * FireTvRemote is the sole owner of D-pad/OK/media navigation while
+           * this player is running on Fire TV. The desktop keyboard shortcuts
+           * below must not also turn the same Arrow keys into seek/volume
+           * commands, otherwise one remote press has two competing meanings.
+           */
+          if (isFireTvRemoteRuntime()) {
+            const remoteCode = Number(event.keyCode || event.which || 0);
+            const remoteKey = String(event.key || event.code || "");
+            const fireTvNavigationKey =
+              remoteKey === "ArrowLeft" ||
+              remoteKey === "ArrowRight" ||
+              remoteKey === "ArrowUp" ||
+              remoteKey === "ArrowDown" ||
+              remoteKey === "Enter" ||
+              remoteKey === "NumpadEnter" ||
+              remoteKey === "Select" ||
+              remoteKey === "Accept" ||
+              remoteKey === "MediaPlayPause" ||
+              remoteKey === "MediaPlay" ||
+              remoteKey === "MediaPause" ||
+              remoteKey === "MediaRewind" ||
+              remoteKey === "MediaFastForward" ||
+              [13, 19, 20, 21, 22, 23, 66, 85, 89, 90, 126, 127, 179, 227, 228].includes(
+                remoteCode
+              );
+
+            if (fireTvNavigationKey) {
+              return;
+            }
+          }
+
+          const tag =
+            (
+              event.target
+                ?.tagName ||
+              ""
+            ).toLowerCase();
+
+          if (
+            tag === "input" ||
+            tag === "select" ||
+            tag === "button" ||
+            tag === "a" ||
+            tag === "textarea" ||
+            event.target?.isContentEditable
+          ) {
+            /*
+             * Let FireTvRemote / the native WebView own D-pad movement,
+             * Select and range/select adjustments while a real player control
+             * is focused. Without this guard VideoPlayer was turning every
+             * ArrowLeft/Right into a 10-second seek and every ArrowUp/Down
+             * into a volume change, so the remote could not move between the
+             * source, torrent, subtitle, audio and transport controls.
+             */
+            return;
+          }
+
+          const video =
+            stageRef.current
+              ?.querySelector(
+                "video"
+              );
+
+          if (
+            !video
+          ) {
+            return;
+          }
+
+          if (
+            event.key >=
+              "0" &&
+            event.key <=
+              "9" &&
+            video.duration
+          ) {
+            event.preventDefault();
+
+            safeSeek(video, video.duration * (parseInt(event.key, 10) / 10));
+
+            return;
+          }
+
+          switch (
+            event.key
+          ) {
+            case " ":
+            case "k":
+              event.preventDefault();
+
+              if (
+                video.paused
+              ) {
+                video
+                  .play()
+                  .catch(
+                    () => {}
+                  );
+              } else {
+                video.pause();
+              }
+
+              break;
+
+            case "ArrowLeft":
+            case "j":
+              event.preventDefault();
+
+              safeSeek(video, (video.currentTime || 0) - 10);
+
+              break;
+
+            case "ArrowRight":
+            case "l":
+              event.preventDefault();
+
+              safeSeek(video, (video.currentTime || 0) + 10);
+
+              break;
+
+            case "ArrowUp":
+              event.preventDefault();
+
+              video.volume =
+                Math.min(
+                  1,
+                  (
+                    video.volume ??
+                    1
+                  ) +
+                    0.1
+                );
+
+              break;
+
+            case "ArrowDown":
+              event.preventDefault();
+
+              video.volume =
+                Math.max(
+                  0,
+                  (
+                    video.volume ??
+                    1
+                  ) -
+                    0.1
+                );
+
+              break;
+
+            case "f":
+            case "F":
+              event.preventDefault();
+
+              goFullscreen();
+
+              break;
+
+            case "m":
+              event.preventDefault();
+
+              video.muted =
+                !video.muted;
+
+              break;
+
+            case "<":
+              event.preventDefault();
+
+              video.playbackRate =
+                Math.max(
+                  0.5,
+                  (
+                    video.playbackRate ||
+                    1
+                  ) -
+                    0.25
+                );
+
+              break;
+
+            case ">":
+              event.preventDefault();
+
+              video.playbackRate =
+                Math.min(
+                  2,
+                  (
+                    video.playbackRate ||
+                    1
+                  ) +
+                    0.25
+                );
+
+              break;
+
+            default:
+              break;
+          }
+        };
+
+      window.addEventListener(
+        "keydown",
+        onKey
+      );
+
+      document.body.style
+        .overflow =
+        "hidden";
+
+      return () => {
+        window.removeEventListener(
+          "keydown",
+          onKey
+        );
+
+        document.body.style
+          .overflow =
+          "";
+      };
+    },
+    [
+      onClose,
+    ]
+  );
+
+  /*
+   * Autoplay direct/RD video.
+   */
+  useEffect(
+    () => {
+      const video =
+        rdOverride?.src
+          ? videoRef.current
+          : liveVideoRef.current ||
+            videoRef.current;
+
+      const url =
+        rdOverride?.src ||
+        activeUrl;
+
+      if (
+        !video ||
+        !url
+      ) {
+        return;
+      }
+
+      if (
+        !rdOverride?.src &&
+        active?.type !==
+          "file" &&
+        active?.type !==
+          "url" &&
+        active?.type !==
+          "live"
+      ) {
+        return;
+      }
+
+      video.muted =
+        false;
+      video.volume =
+        1;
+
+      if (
+        video.dataset
+          ?.mgAutoplayMuted ===
+        "true"
+      ) {
+        delete video.dataset
+          .mgAutoplayMuted;
+      }
+
+      const startPlayback = () => {
+        video
+          .play()
+          .then(() => setAudioUnlockUrl((current) => current === url ? "" : current))
+          .catch(
+            (error) => {
+              if (
+                error?.name === "NotAllowedError" &&
+                video === stageRef.current?.querySelector("video")
+              ) {
+                setAudioUnlockUrl(String(url));
+              }
+
+              if (!isLive) return;
+
+              video.muted = true;
+              video.dataset.mgAutoplayMuted = "true";
+              video.play().catch(() => {});
+            }
+          );
+      };
+
+      if (video.readyState >= 2) {
+        startPlayback();
+      } else {
+        video.addEventListener(
+          "canplay",
+          startPlayback,
+          { once: true }
+        );
+
+        return () => {
+          video.removeEventListener(
+            "canplay",
+            startPlayback
+          );
+        };
+      }
+    },
+    [
+      active?.type,
+      activeUrl,
+      rdOverride?.src,
+      isLive,
+    ]
+  );
+
+  /*
+   * Continue Watching.
+   */
+  const lastSaveRef =
+    useRef(0);
+
+
+  const lastPosRef =
+    useRef({
+      t:
+        0,
+
+      d:
+        0,
+    });
+
+  const saveProgress =
+    (
+      time,
+      duration,
+      force =
+        false
+    ) => {
+      if (
+        isLive ||
+        !source?.title
+      ) {
+        return;
+      }
+
+      const url =
+        rdOverride?.src ||
+        active?.src ||
+        active?.url;
+
+      if (
+        !url
+      ) {
+        return;
+      }
+
+      const now =
+        Date.now();
+
+      if (
+        !force &&
+        now -
+          lastSaveRef.current <
+          10000
+      ) {
+        return;
+      }
+
+      lastSaveRef.current =
+        now;
+
+      // The canonical tracker is the only history writer. Pass the stable
+      // source descriptor as well as native progress; never replace it with
+      // a temporary debrid URL or mark a chosen torrent as a generic file.
+      window.dispatchEvent(new CustomEvent("mg:continue-watching-progress", {
+        detail: {
+          context: {
+            mediaType: playbackMediaType,
+            tmdbId: source.tmdbId ?? source.tmdb_id ?? source.id ?? "",
+            title: source.rdTitle || source.title,
+            year: source.rdYear || source.year || "",
+            season: source.rdSeason || source.season,
+            episode: source.rdEpisode || source.episode,
+            episodeName: source.episodeName || "",
+          },
+          source: active,
+          time,
+          duration,
+          url,
+          poster: source.poster || "",
+          force,
+        },
+      }));
+    };
+
+  const saveProgressRef =
+    useRef(
+      saveProgress
+    );
+
+  saveProgressRef.current =
+    saveProgress;
+
+  useEffect(
+    () => {
+      return () => {
+        const {
+          t,
+          d,
+        } =
+          lastPosRef.current;
+
+        if (
+          t >
+          5
+        ) {
+          saveProgressRef.current?.(
+            t,
+            d,
+            true
+          );
+        }
+      };
+    },
+    []
+  );
+
+  const handleLoadedMetadata =
+    (
+      event
+    ) => {
+      const video =
+        event.target;
+
+      /* A media element that loaded real metadata must not be discarded because
+       * its provider or file label happens to contain error-like words. Only
+       * an actual playback error or stopped progress can reject this URL. */
+
+      const recoveryTime = Number(
+        recoveryResumeRef.current || 0
+      );
+      const requestedStart = Number(
+        source?.startTime || 0
+      );
+      const resumeAt =
+        recoveryTime > 5
+          ? recoveryTime
+          : requestedStart > 5
+            ? requestedStart
+            : 0;
+
+      if (resumeAt > 5) {
+        try {
+          const duration = Number(video.duration || 0);
+          video.currentTime =
+            duration > 0
+              ? Math.min(resumeAt, Math.max(0, duration - 8))
+              : resumeAt;
+        } catch {
+          // Ignore.
+        }
+      }
+
+      if (recoveryTime > 0) {
+        recoveryResumeRef.current = 0;
+      }
+    };
+
+  const handleTimeUpdate =
+    (
+      event
+    ) => {
+      const video =
+        event.target;
+      const previousTime = Number(
+        lastPosRef.current?.t || 0
+      );
+      const currentTime = Number(
+        video.currentTime || 0
+      );
+
+      vodProgressRef.current = updateVodProgress(
+        vodProgressRef.current,
+        video,
+        currentTime
+      );
+
+      /*
+       * Real playback progress is stronger evidence than an old timeout/error
+       * from the source we just replaced. If a rescued stream is advancing,
+       * keep it. This prevents a stale 1.8-second torrent failover from
+       * abandoning a stream that has already started with working audio.
+       */
+      if (currentTime > previousTime + 0.15) {
+        confirmRecoveredSource(video);
+      }
+
+      if (currentTime > 0.25) {
+        setVodStartupNotice("");
+        if (!video.muted) {
+          setAudioUnlockUrl("");
+        }
+      }
+
+      lastPosRef.current =
+        {
+          t:
+            currentTime,
+
+          d:
+            video.duration ||
+            0,
+        };
+
+      saveProgress(
+        currentTime,
+
+        video.duration ||
+          0
+      );
+    };
+
+  useEffect(() => {
+    const overrideUrl = String(
+      rdOverride?.src || ""
+    ).trim();
+
+    if (!overrideUrl) {
+      return;
+    }
+
+    /*
+     * Any newly resolved Real-Debrid/compatibility URL starts a fresh playback
+     * attempt. Cancel delayed failure work from the source it replaced and
+     * allow the current source to prove itself instead of being switched out
+     * underneath the new stream.
+     */
+    cancelPendingTorrentFailover();
+
+    if (failedSourcesRef.current.has(activeIdx)) {
+      clearSourceFailed(activeIdx);
+    }
+
+    autoRecoveryRef.current.abandoned.delete(activeIdx);
+    autoRecoveryRef.current.lastProgressAt = Date.now();
+  }, [activeIdx, rdOverride?.src]);
+
+  useEffect(() => {
+    if (
+      !isLive ||
+      sources.length <= 1 ||
+      isNativeFireTvPlayerAvailable()
+    ) {
+      /*
+       * Do not run the browser startup/stall watchdog while Fire TV Media3 is
+       * playing Live TV. There is deliberately no HTMLVideoElement in native
+       * mode, so the old watchdog could time out a stream that was already
+       * playing and switch to another source/player behind it.
+       */
+      return undefined;
+    }
+
+    let video = null;
+    let attachTimer = null;
+    let startupTimer = null;
+    let stallTimer = null;
+    let switched = false;
+    const nativeLivePlayback = isNativeFireTvPlayerAvailable();
+    const startupGraceMs = nativeLivePlayback ? 16000 : 12000;
+    const stallGraceMs = nativeLivePlayback ? 10000 : 8000;
+
+    const clearStartup = () => {
+      if (startupTimer) {
+        window.clearTimeout(startupTimer);
+        startupTimer = null;
+      }
+    };
+
+    const clearStall = () => {
+      if (stallTimer) {
+        window.clearTimeout(stallTimer);
+        stallTimer = null;
+      }
+    };
+
+    const switchLiveSource = (
+      message,
+      { stalled = false } = {}
+    ) => {
+      if (switched) return;
+      switched = true;
+      clearStartup();
+      clearStall();
+
+      const url = String(activeUrl || "").trim();
+      if (/^https?:\/\//i.test(url)) {
+        recordLiveTvPlaybackResult(url, {
+          success: false,
+          stalled,
+        });
+      }
+
+      tryNextSource(message, {
+        liveFailureClass: stalled ? "stall" : "startup",
+      });
+    };
+
+    const armStallRecovery = () => {
+      if (switched) return;
+      clearStall();
+
+      const startedAt = Number(video?.currentTime || 0);
+
+      stallTimer = window.setTimeout(() => {
+        stallTimer = null;
+
+        const currentTime = Number(video?.currentTime || 0);
+        const recovered =
+          video instanceof HTMLVideoElement &&
+          !video.paused &&
+          !video.ended &&
+          !video.error &&
+          video.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+          (
+            currentTime > startedAt + 0.25 ||
+            video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+          );
+
+        if (recovered) {
+          return;
+        }
+
+        switchLiveSource(
+          "Live TV stopped responding.",
+          { stalled: true }
+        );
+      }, stallGraceMs);
+    };
+
+    const onPlaying = () => {
+      clearStartup();
+      clearStall();
+    };
+
+    const onWaiting = () => {
+      armStallRecovery();
+    };
+
+    const onStalled = () => {
+      armStallRecovery();
+    };
+
+    const attach = () => {
+      video = stageRef.current?.querySelector("video") || null;
+
+      if (!(video instanceof HTMLVideoElement)) {
+        attachTimer = window.setTimeout(attach, 120);
+        return;
+      }
+
+      video.addEventListener("playing", onPlaying);
+      video.addEventListener("canplay", onPlaying);
+      video.addEventListener("waiting", onWaiting);
+      video.addEventListener("stalled", onStalled);
+
+      if (!video.paused && video.readyState >= 2) {
+        onPlaying();
+      }
+    };
+
+    attach();
+
+    startupTimer = window.setTimeout(() => {
+      startupTimer = null;
+
+      const alreadyPlaying =
+        video instanceof HTMLVideoElement &&
+        !video.paused &&
+        !video.ended &&
+        !video.error &&
+        video.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        Number(video.currentTime || 0) > 0.1;
+
+      if (alreadyPlaying) {
+        return;
+      }
+
+      switchLiveSource(
+        "Live TV took too long to start."
+      );
+    }, startupGraceMs);
+
+    return () => {
+      clearStartup();
+      clearStall();
+
+      if (attachTimer) {
+        window.clearTimeout(attachTimer);
+      }
+
+      if (video instanceof HTMLVideoElement) {
+        video.removeEventListener("playing", onPlaying);
+        video.removeEventListener("canplay", onPlaying);
+        video.removeEventListener("waiting", onWaiting);
+        video.removeEventListener("stalled", onStalled);
+      }
+    };
+  }, [
+    activeIdx,
+    activeUrl,
+    isLive,
+    sources,
+  ]);
+
+  useEffect(() => {
+    if (isLive || sources.length <= 1) {
+      return undefined;
+    }
+
+    const state = autoRecoveryRef.current;
+    state.lastTime = 0;
+    state.lastProgressAt = Date.now();
+
+    const recover = (video) => {
+      if (vodPlaybackIsAdvancing(video)) {
+        state.lastTime = Number(video.currentTime || 0);
+        state.lastProgressAt = Date.now();
+        return false;
+      }
+
+      const preferences = readPlaybackPreferences();
+
+      if (!preferences.autoRecovery) {
+        return false;
+      }
+
+      /*
+       * An uncached torrent is an explicit Real-Debrid cache operation. Once
+       * that source has been chosen, a browser buffering watchdog must never
+       * silently abandon it and jump to another movie/torrent row. That direct
+       * switch used to bypass tryNextSource(), which already contains the
+       * correct protection for uncached sources. Keep the same RD source/job
+       * selected and let Retry reconnect to it instead.
+       */
+      if (sourceNeedsCaching(active)) {
+        state.lastProgressAt = Date.now();
+        setRdError(
+          rdOverride?.src
+            ? "The Real-Debrid stream stopped buffering. The same cached source has been kept selected; use Retry to reconnect instead of switching to another torrent."
+            : "This uncached torrent is still owned by Real-Debrid. Media God kept the same source selected; use Retry to reconnect to its download."
+        );
+        return false;
+      }
+
+      const now = Date.now();
+      const activeTorrentLike =
+        active?.type === "rd" ||
+        active?.type === "rd_torrent" ||
+        active?.type === "torrent" ||
+        active?.type === "magnet" ||
+        isMagnet(activeUrl) ||
+        Boolean(magnetHash(activeUrl)) ||
+        Boolean(sourceTorrentHash(active)) ||
+        sourceNeedsCaching(active);
+      const recoveryCooldownMs = activeTorrentLike
+        ? 30000
+        : 18000;
+
+      if (now - Number(state.lastSwitchAt || 0) < recoveryCooldownMs) {
+        return false;
+      }
+
+      state.abandoned.add(activeIdx);
+
+      const candidates = sources
+        .map((candidate, index) => {
+          const candidateUrl = getSourceUrl(candidate);
+          const torrentCandidate =
+            candidate?.type === "rd" ||
+            candidate?.type === "rd_torrent" ||
+            candidate?.type === "torrent" ||
+            candidate?.type === "magnet" ||
+            isMagnet(candidateUrl);
+
+          if (
+            index === activeIdx ||
+            state.abandoned.has(index) ||
+            failedSourcesRef.current.has(index) ||
+            candidate?.diagnostic ||
+            candidate?.type === "status" ||
+            candidate?.type === "provider" ||
+            candidate?.type === "youtube" ||
+            (!candidateUrl && !torrentCandidate)
+          ) {
+            return null;
+          }
+
+          return {
+            index,
+            score: recoverySourceScore(candidate, index),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score || a.index - b.index);
+
+      const nextIndex = candidates[0]?.index ?? -1;
+
+      if (nextIndex < 0) {
+        setRdError(
+          "Playback stalled and there is no unused backup source left to try."
+        );
+        return false;
+      }
+
+      const label = sourceDisplayLabel(active, activeIdx);
+
+      recordPlaybackReliability(label, "buffer");
+      markSourceFailed(activeIdx);
+
+      state.lastSwitchAt = now;
+      state.lastTime = 0;
+      state.lastProgressAt = now;
+
+      switchToSource(nextIndex, {
+        preservePosition: true,
+        statusMessage:
+          "Playback stalled — switching to the best learned backup…",
+      });
+
+      return true;
+    };
+
+    const timer = window.setInterval(() => {
+      if (
+        document.visibilityState === "hidden" ||
+        rdResolving ||
+        rdPolling ||
+        rdTorrentId ||
+        rdPreparation
+      ) {
+        state.lastProgressAt = Date.now();
+        return;
+      }
+
+      const video = stageRef.current?.querySelector("video");
+
+      if (
+        !(video instanceof HTMLVideoElement) ||
+        video.paused ||
+        video.ended ||
+        video.seeking
+      ) {
+        state.lastTime = Number(video?.currentTime || 0);
+        state.lastProgressAt = Date.now();
+        return;
+      }
+
+      const currentTime = Number(video.currentTime || 0);
+      const duration = Number(video.duration || 0);
+      const now = Date.now();
+
+      if (duration > 0 && duration - currentTime < 3) {
+        state.lastTime = currentTime;
+        state.lastProgressAt = now;
+        return;
+      }
+
+      if (Math.abs(currentTime - Number(state.lastTime || 0)) >= 0.35) {
+        state.lastTime = currentTime;
+        state.lastProgressAt = now;
+        return;
+      }
+
+      /*
+       * Do not abandon a source merely because currentTime did not move on a
+       * particular polling sample. If Chromium still reports buffered future
+       * media and no actual media error, the source is healthy enough to keep.
+       * Genuine network stalls naturally drain that buffer/readyState and can
+       * then fall through to recovery below.
+       */
+      let bufferedAhead = 0;
+      try {
+        for (let index = 0; index < video.buffered.length; index += 1) {
+          const start = Number(video.buffered.start(index) || 0);
+          const end = Number(video.buffered.end(index) || 0);
+          if (currentTime >= start - 0.25 && currentTime <= end + 0.25) {
+            bufferedAhead = Math.max(bufferedAhead, end - currentTime);
+          }
+        }
+      } catch {
+        bufferedAhead = 0;
+      }
+
+      const hasHealthyBuffer =
+        !video.error &&
+        video.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE &&
+        video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+        bufferedAhead > 1;
+
+      if (hasHealthyBuffer) {
+        state.lastProgressAt = now;
+        return;
+      }
+
+      const activeTorrentLike =
+        active?.type === "rd" ||
+        active?.type === "rd_torrent" ||
+        active?.type === "torrent" ||
+        active?.type === "magnet" ||
+        isMagnet(activeUrl) ||
+        Boolean(magnetHash(activeUrl)) ||
+        Boolean(sourceTorrentHash(active)) ||
+        sourceNeedsCaching(active);
+      const stallThresholdMs = activeTorrentLike
+        ? 40000
+        : 28000;
+
+      if (now - Number(state.lastProgressAt || now) >= stallThresholdMs) {
+        recover(video);
+      }
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    active,
+    activeIdx,
+    isLive,
+    rdOverride,
+    rdPolling,
+    rdResolving,
+    rdTorrentId,
+    rdPreparation,
+    sources,
+  ]);
+
+  /*
+   * Do not pre-resolve backup torrents in the background.
+   *
+   * A previous optimisation resolved another cached torrent a few seconds
+   * after playback began. On Fire TV this could create unnecessary debrid
+   * activity and make recovery feel as if the player was rapidly jumping
+   * between torrents. Backups are now resolved only when the current source
+   * genuinely fails or the user explicitly selects another source.
+   */
+
+  const pickFile =
+    async (
+      file
+    ) => {
+      const provider = String(rdOverride?.provider || "realdebrid")
+        .toLowerCase()
+        .replace(/[^a-z]/g, "");
+
+      if (
+        rdOverride?.file === file.path ||
+        rdOverride?.file === file.name
+      ) {
+        return;
+      }
+
+      const actionGeneration = ++streamActionGenerationRef.current;
+      const actionStillCurrent = () =>
+        streamActionGenerationRef.current === actionGeneration;
+
+      // The report is user initiated and contains only coarse compatibility
+      // categories. Never send the title, torrent hash, URL or account details.
+      try {
+        const traits = detectStreamTraits(active);
+        const profile = getPlaybackDeviceProfile();
+        base44.analytics.track({
+          eventName: "vod_no_sound_reported",
+          properties: {
+            media_type: playbackMediaType === "tv" ? "tv" : "movie",
+            device_family: profile.nativeFireTv ? "fire_tv" :
+              profile.nativeAndroidMobile ? "android_app" : "browser",
+            audio_codec: ["aac", "ac3", "eac3", "dts", "truehd", "opus", "flac", "mp3"]
+              .includes(traits.audio) ? traits.audio : "other_or_unknown",
+            container: ["mkv", "mp4", "hls", "webm", "ts"].includes(traits.container)
+              ? traits.container : "other_or_unknown",
+            audio_channels: traits.audioChannels > 2 ? "multichannel" :
+              traits.audioChannels > 0 ? "stereo_or_mono" : "unknown",
+          },
+        });
+      } catch {
+        // Reporting must never interrupt the user's manual recovery action.
+      }
+
+      if (provider !== "realdebrid") {
+        const sourceUrl = String(
+          rdOverride?.sourceUrl || getSourceUrl(active) || ""
+        ).trim();
+
+        if (!sourceUrl) {
+          setRdError("This debrid file no longer has its torrent source.");
+          return;
+        }
+
+        setFileSwitching(true);
+        setRdError("");
+
+        try {
+          const response = await base44.functions.invoke(
+            "multiDebrid",
+            {
+              action: "resolve",
+              provider,
+              provider_scores: debridProviderScoreHints(),
+              source: sourceUrl,
+              selected_file: {
+                id: file?.id,
+                index: file?.index,
+                path: file?.path,
+                name: file?.name,
+              },
+              ...(source?.rdSeason != null ? { season: source.rdSeason } : {}),
+              ...(source?.rdEpisode != null ? { episode: source.rdEpisode } : {}),
+            }
+          );
+
+          if (!actionStillCurrent()) {
+            return;
+          }
+
+          const data = response?.data || {};
+          if (!data?.url) {
+            throw new Error(
+              data?.error || "The selected debrid file did not return a playable stream."
+            );
+          }
+
+          setRdOverride({
+            src: data.url,
+            label:
+              data.filename ||
+              file?.path ||
+              file?.name ||
+              "Debrid File",
+            file:
+              data.selectedFile ||
+              file?.path ||
+              file?.name ||
+              "",
+            provider: data.provider || provider,
+            sourceUrl,
+          });
+          setRdFiles(
+            Array.isArray(data.files) ? data.files : rdFiles
+          );
+        } catch (error) {
+          if (actionStillCurrent()) {
+            setRdError(
+              error?.message || "Debrid file selection failed."
+            );
+          }
+        } finally {
+          if (actionStillCurrent()) {
+            setFileSwitching(false);
+          }
+        }
+
+        return;
+      }
+
+      if (
+        !file?.link
+      ) {
+        const parentTorrentId = String(
+          file?.torrent_id ||
+            file?.torrentId ||
+            rdPreparation?.torrent_id ||
+            rdTorrentId ||
+            active?.rdTorrentId ||
+            ""
+        ).trim();
+
+        if (!parentTorrentId) {
+          setRdError(
+            "This extra is not linked yet and Media God no longer has the parent Real-Debrid torrent id. Reopen the title and choose the extra again."
+          );
+          return;
+        }
+
+        setFileSwitching(true);
+        setRdError("");
+        setRdPreparation({
+          status: "starting",
+          phase: "starting",
+          progress: 0,
+          torrent_id: parentTorrentId,
+          selected_file_path: file?.path || "",
+          manual_file_selection: true,
+          startedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+
+        try {
+          const response = await base44.functions.invoke(
+            "realDebrid",
+            {
+              action: "select_torrent_file",
+              torrent_id: parentTorrentId,
+              file_id: file?.id,
+              file_path: file?.path || "",
+              magnet: richestSourceMagnet(active),
+              title: source?.rdTitle || source?.title || "",
+              ...(source?.rdYear != null ? { year: source.rdYear } : {}),
+              alternate_years:
+                Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                  ? (source?.rdAlternateYears || source?.alternateYears)
+                  : [],
+              alternate_titles:
+                Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                  ? (source?.rdAlternateTitles || source?.alternateTitles)
+                  : [],
+              ...(source?.rdSeason != null ? { season: source.rdSeason } : {}),
+              ...(source?.rdEpisode != null ? { episode: source.rdEpisode } : {}),
+              prefer_browser_transcode: prefersBrowserRdCompatibility(),
+            }
+          );
+
+          if (!actionStillCurrent()) {
+            return;
+          }
+
+          const data = response?.data || {};
+
+          if (data?.error || data?.status === "failed") {
+            throw new Error(
+              data?.error || "Real-Debrid could not prepare the selected extra."
+            );
+          }
+
+          if (data?.status === "ready" && data?.stream_url) {
+            setRdOverride({
+              src: data.stream_url,
+              label:
+                data.filename ||
+                file?.path ||
+                "Real-Debrid Extra",
+              file: file?.path || data.filename || "",
+              provider: "realdebrid",
+              audioRescue: data.audio_rescue || null,
+              fallbackSrc: data.fallback_stream_url || "",
+              videoRescue: data.video_rescue || null,
+              mediaInfo: data.media_info || null,
+              torrentId: data.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+            });
+
+            if (Array.isArray(data.files) && data.files.length > 0) {
+              setRdFiles((current) => {
+                const byPath = new Map(
+                  data.files.map((entry) => [String(entry?.path || ""), entry])
+                );
+                return current.length > 0
+                  ? current.map((entry) => {
+                      const replacement = byPath.get(String(entry?.path || ""));
+                      return replacement && (replacement?.link || replacement?.selected)
+                        ? { ...entry, ...replacement }
+                        : entry;
+                    })
+                  : data.files;
+              });
+            }
+
+            setRdManualFileSelection(null);
+            setRdTorrentId(null);
+            setRdPreparation(null);
+            setRdPolling(false);
+            return;
+          }
+
+          const selectedTorrentId = String(data?.torrent_id || "").trim();
+          if (!selectedTorrentId) {
+            throw new Error(
+              "Real-Debrid accepted the selected extra but did not return a torrent id to monitor."
+            );
+          }
+
+          const manualSelection = {
+            fileId: Number(data?.selected_file_id ?? file?.id),
+            path: String(data?.selected_file_path || file?.path || ""),
+            parentTorrentId,
+          };
+
+          setRdManualFileSelection(manualSelection);
+          setRdTorrentId(selectedTorrentId);
+          setRdPreparation({
+            ...(data?.torrent_progress || {}),
+            status:
+              data?.rd_status ||
+              data?.torrent_progress?.status ||
+              "preparing",
+            phase:
+              Number(data?.torrent_progress?.progress || 0) >= 100
+                ? "finalizing"
+                : "downloading",
+            torrent_id: selectedTorrentId,
+            parent_torrent_id: parentTorrentId,
+            selected_file_path: manualSelection.path,
+            manual_file_selection: true,
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+          setRdPolling(true);
+
+          if (Array.isArray(data.files) && data.files.length > 0) {
+            setRdFiles((current) => {
+              const byPath = new Map(
+                data.files.map((entry) => [String(entry?.path || ""), entry])
+              );
+              return current.length > 0
+                ? current.map((entry) => {
+                    const replacement = byPath.get(String(entry?.path || ""));
+                    return replacement && (replacement?.link || replacement?.selected)
+                      ? { ...entry, ...replacement }
+                      : entry;
+                  })
+                : data.files;
+            });
+          }
+        } catch (error) {
+          if (actionStillCurrent()) {
+            setRdManualFileSelection(null);
+            setRdTorrentId(null);
+            setRdPreparation(null);
+            setRdPolling(false);
+            setRdError(
+              error?.message || "Real-Debrid could not prepare the selected extra."
+            );
+          }
+        } finally {
+          if (actionStillCurrent()) {
+            setFileSwitching(false);
+          }
+        }
+
+        return;
+      }
+
+      setFileSwitching(
+        true
+      );
+
+      setRdError(
+        ""
+      );
+
+      try {
+        const res =
+          await base44.functions.invoke(
+            "realDebrid",
+            {
+              action:
+                "unrestrict_file",
+
+              link:
+                file.link,
+              prefer_browser_transcode: prefersBrowserRdCompatibility(),
+            }
+          );
+
+        if (!actionStillCurrent()) {
+          return;
+        }
+
+        const data =
+          res?.data ||
+          {};
+
+        if (
+          data.stream_url
+        ) {
+          setRdOverride({
+            src:
+              data.stream_url,
+
+            label:
+              data.filename ||
+              file.path ||
+              "Real-Debrid File",
+
+            file:
+              file.path ||
+              "",
+
+            audioRescue:
+              data.audio_rescue ||
+              null,
+
+            fallbackSrc:
+              data.fallback_stream_url ||
+              "",
+
+            videoRescue:
+              data.video_rescue ||
+              null,
+
+            mediaInfo:
+              data.media_info ||
+              null,
+            torrentId: data.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+          });
+        } else {
+          setRdError(
+            data.error ||
+              "Could not open this file."
+          );
+        }
+      } catch (
+        error
+      ) {
+        if (actionStillCurrent()) {
+          setRdError(
+            error?.message ||
+              "Real-Debrid request failed."
+          );
+        }
+      } finally {
+        if (actionStillCurrent()) {
+          setFileSwitching(
+            false
+          );
+        }
+      }
+    };
+
+  const retryResolution =
+    async () => {
+      streamActionGenerationRef.current += 1;
+      setFileSwitching(false);
+
+      if (sourceNeedsCaching(active)) {
+        retryExistingTorrentIdRef.current = String(
+          rdPreparation?.torrent_id ||
+            rdTorrentId ||
+            ""
+        ).trim();
+        rdCacheEngineAbortRef.current?.abort?.();
+        clearSourceFailed(activeIdx);
+        setRdOverride(null);
+        setRdFiles([]);
+        setRdTorrentId(null);
+        setRdPreparation(null);
+        setRdError("");
+        setRdPolling(false);
+        setRdResolving(true);
+        setRdCacheEngineNonce((value) => value + 1);
+        return;
+      }
+
+      const retryHash = sourceTorrentHash(active);
+      const retryMagnet = richestSourceMagnet(active);
+      const stalledNoProgress =
+        String(rdPreparation?.status || "").toLowerCase() === "stalled" &&
+        String(rdPreparation?.stallReason || "").toLowerCase() === "no_progress";
+      const retryTorrentId = String(
+        rdPreparation?.torrent_id ||
+          rdTorrentId ||
+          ""
+      ).trim();
+
+      if (
+        stalledNoProgress &&
+        retryHash &&
+        retryMagnet &&
+        retryTorrentId
+      ) {
+        setRdOverride(null);
+        setRdFiles([]);
+        setRdError("");
+        setRdResolving(true);
+        setRdPolling(false);
+        setRdPreparation((current) => ({
+          ...(current || {}),
+          status: "restarting",
+          progress: 0,
+          seeders: 0,
+          speed_bps: 0,
+          downloaded_bytes: 0,
+          updatedAt: Date.now(),
+        }));
+
+        try {
+          const restartResponse = await base44.functions.invoke(
+            "realDebrid",
+            {
+              action: "restart_playback_torrent",
+              torrent_id: retryTorrentId,
+              info_hash: retryHash,
+              magnet: retryMagnet,
+              prefer_browser_transcode: prefersBrowserRdCompatibility(),
+              title:
+                source?.rdTitle ||
+                source?.title ||
+                "",
+              ...(source?.rdYear != null ? { year: source.rdYear } : {}),
+              alternate_years:
+                Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                  ? (source?.rdAlternateYears || source?.alternateYears)
+                  : [],
+              alternate_titles:
+                Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                  ? (source?.rdAlternateTitles || source?.alternateTitles)
+                  : [],
+              ...(source?.rdSeason != null ? { season: source.rdSeason } : {}),
+              ...(source?.rdEpisode != null ? { episode: source.rdEpisode } : {}),
+              ...(active?.fileIdx != null && Number.isFinite(Number(active.fileIdx))
+                ? { file_idx: Number(active.fileIdx) }
+                : {}),
+            }
+          );
+
+          const restartData = restartResponse?.data || {};
+
+          if (
+            restartData.error_code ===
+            "RD_RESTART_RESUMED_STALE_PARTIAL"
+          ) {
+            markSourceFailed(activeIdx);
+            markTorrentHashFailed(active);
+            const nextSource = findNextPlayableSource(activeIdx);
+
+            if (nextSource !== -1) {
+              setRdResolving(false);
+              setRdPolling(false);
+              setRdTorrentId(null);
+              setRdPreparation(null);
+              setRdError("");
+              switchToSource(nextSource, {
+                preservePosition: true,
+                statusMessage:
+                  `Real-Debrid re-created this torrent at the same stuck ${Math.round(Number(restartData.previous_progress || 0))}% and it still did not move. Trying a different torrent hash for the same title…`,
+              });
+              return;
+            }
+
+            setRdResolving(false);
+            setRdPolling(false);
+            setRdTorrentId(null);
+            setRdPreparation((current) => ({
+              ...(current || {}),
+              status: "stalled",
+              stallReason: "rd_partial_state_persisted",
+              progress: Number(restartData.fresh_progress || restartData.previous_progress || 0),
+              updatedAt: Date.now(),
+            }));
+            setRdError(
+              `${restartData.error || "Real-Debrid kept the same stalled partial state for this torrent hash."} No different torrent hash is currently available for this title.`
+            );
+            return;
+          }
+
+          if (restartData.status === "ready" && restartData.stream_url) {
+            if (
+              rejectResolvedForeignAutoplay(
+                restartData.media_info,
+                {
+                  label:
+                    restartData.filename ||
+                    active?.label ||
+                    "This release",
+                }
+              )
+            ) {
+              return;
+            }
+
+            setRdOverride({
+              src: restartData.stream_url,
+              label:
+                restartData.filename ||
+                active?.label ||
+                "Real-Debrid Stream",
+              file: currentFilePath(restartData.files),
+              audioRescue: restartData.audio_rescue || null,
+              fallbackSrc: restartData.fallback_stream_url || "",
+              videoRescue: restartData.video_rescue || null,
+              mediaInfo: restartData.media_info || null,
+              torrentId: restartData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
+            });
+            setRdFiles(restartData.files || []);
+            setRdTorrentId(null);
+            setRdPreparation(null);
+            setRdResolving(false);
+            return;
+          }
+
+          if (restartData.torrent_id) {
+            setRdTorrentId(String(restartData.torrent_id));
+            setRdPreparation({
+              ...(restartData.torrent_progress || {}),
+              status:
+                restartData.torrent_progress?.status ||
+                restartData.rd_status ||
+                "restarting",
+              torrent_id: String(restartData.torrent_id),
+              startedAt: Date.now(),
+              updatedAt: Date.now(),
+              attempts: 0,
+            });
+            setRdPolling(true);
+            setRdResolving(false);
+            return;
+          }
+
+          throw new Error(
+            restartData.error ||
+              "Real-Debrid did not return a fresh torrent after the restart."
+          );
+        } catch (error) {
+          setRdResolving(false);
+          setRdPreparation((current) => ({
+            ...(current || {}),
+            status: "stalled",
+            stallReason: "no_progress",
+            torrent_id: retryTorrentId,
+            updatedAt: Date.now(),
+          }));
+          setRdError(
+            error?.message ||
+              "Real-Debrid could not restart this exact torrent."
+          );
+          return;
+        }
+      }
+
+      retryInactiveTorrentHashRef.current =
+        stalledNoProgress && retryHash
+          ? retryHash
+          : "";
+
+      setRdOverride(null);
+      setRdFiles([]);
+      setRdTorrentId(null);
+      setRdPreparation(null);
+      setRdError("");
+      setRdResolving(true);
+
+      const current = activeIdx;
+      setActiveIdx(-1);
+      setTimeout(() => {
+        setActiveIdx(current);
+      }, 0);
+    };
+
+  const rejectEpisodeAudioSource = (error) => {
+    if (playbackMediaType !== "tv" || !(
+      error?.code === "EPISODE_ENGLISH_UNAVAILABLE" ||
+      /no English main audio|(?:confirmed|usable) English main audio track|English main audio.*(?:missing|unavailable|not found)/i.test(String(error?.message || error || ""))
+    )) return false;
+    const position = Number(stageRef.current?.querySelector("video")?.currentTime || lastPosRef.current?.t || 0);
+    if (position > 5) recoveryResumeRef.current = position;
+    tryNextSource("This episode source has no English audio. Trying another source…", {
+      authoritativeSourceRejection: true, immediate: true,
+    });
+    return true;
+  };
+
+  const handleRdPlaybackError = (error) => {
+    if (rejectEpisodeAudioSource(error)) return;
+    if (vodPlaybackIsAdvancing(stageRef.current?.querySelector("video"))) {
+      return;
+    }
+
+    const fallback = String(rdOverride?.fallbackSrc || "").trim();
+
+    if (
+      fallback &&
+      fallback !== rdOverride?.src &&
+      rdOverride?.fallbackTried !== true
+    ) {
+      const video = stageRef.current?.querySelector("video");
+      const resumeAt = Math.max(
+        0,
+        Number(video?.currentTime || lastPosRef.current?.t || 0)
+      );
+
+      if (resumeAt > 5) {
+        recoveryResumeRef.current = resumeAt;
+      }
+
+      setRdOverride((current) => ({
+        ...(current || {}),
+        src: fallback,
+        label: `${current?.label || sourceDisplayLabel(active, activeIdx)} [Original fallback]`,
+        fallbackSrc: "",
+        fallbackTried: true,
+        audioRescue: {
+          ...(current?.audioRescue || {}),
+          used: false,
+          state: "original_stream_fallback_after_transcode_error",
+        },
+      }));
+
+      window.dispatchEvent(
+        new CustomEvent("mg:player-status", {
+          detail: {
+            message:
+              "Compatibility stream failed — trying the original torrent file…",
+          },
+        })
+      );
+
+      return;
+    }
+
+    tryNextSource(
+      "This stream failed during playback."
+    );
+  };
+
+  const handleDirectPlaybackError = (eventOrOptions = null) => {
+    if (rejectEpisodeAudioSource(eventOrOptions)) return;
+    if (
+      !isLive &&
+      vodPlaybackIsAdvancing(stageRef.current?.querySelector("video"))
+    ) {
+      return;
+    }
+
+    const reportedLiveErrorMessage =
+      eventOrOptions instanceof Error
+        ? String(eventOrOptions.message || "")
+        : "";
+    const explicitLiveFailureClass =
+      typeof eventOrOptions === "string"
+        ? eventOrOptions
+        : String(eventOrOptions?.liveFailureClass || "") ||
+          (reportedLiveErrorMessage
+            ? classifyLiveFailure(reportedLiveErrorMessage)
+            : "");
+
+    const fallback = String(
+      active?.fallbackSrc || active?.fallback_stream_url || ""
+    ).trim();
+
+    if (fallback && fallback !== activeUrl) {
+      const video = stageRef.current?.querySelector("video");
+      const resumeAt = Math.max(
+        0,
+        Number(video?.currentTime || lastPosRef.current?.t || 0)
+      );
+
+      if (resumeAt > 5) {
+        recoveryResumeRef.current = resumeAt;
+      }
+
+      setRdOverride({
+        src: fallback,
+        label: `${sourceDisplayLabel(active, activeIdx)} [Original fallback]`,
+        file: "",
+        fallbackSrc: "",
+        fallbackTried: true,
+        audioRescue: {
+          ...(active?.audioRescue || {}),
+          used: false,
+          state: "original_stream_fallback_after_transcode_error",
+        },
+        mediaInfo: active?.mediaInfo || active?.media_info || null,
+      });
+
+      window.dispatchEvent(
+        new CustomEvent("mg:player-status", {
+          detail: {
+            message:
+              "Compatibility stream failed — trying the original Real-Debrid file…",
+          },
+        })
+      );
+      return;
+    }
+
+    tryNextSource(
+      "This stream failed during playback.",
+      {
+        liveFailureClass:
+          explicitLiveFailureClass ||
+          (source?.type === "live" || active?.live || active?.type === "live"
+            ? mediaElementFailureClass()
+            : ""),
+      }
+    );
+  };
+
+  /*
+   * The installed Android Mobile and Fire TV builds expose
+   * MediaGodNative.play(). Once Media God has resolved a real HTTP media URL,
+   * hand that URL to Android Media3 instead of creating another WebView
+   * <video> decoder. A normal web browser does not expose the bridge and
+   * therefore keeps the existing LiveVideo path unchanged.
+   */
+  const nativeFireTvPlayer =
+    isNativeFireTvPlayerAvailable();
+
+  const nativePlaybackUrl =
+    nativeFireTvPlayer
+      ? String(
+          rdOverride?.src ||
+            (isDirectFile ? activeUrl : "") ||
+            ""
+        ).trim()
+      : "";
+
+  const nativePlaybackAvailable =
+    nativeFireTvPlayer &&
+    /^https?:\/\//i.test(nativePlaybackUrl) &&
+    nativeFallbackUrl !== nativePlaybackUrl;
+
+  /*
+   * A working MediaGodNative bridge—not the WebView user-agent or injected
+   * CSS classes—is the authority for native movie/episode playback. Those
+   * runtime markers can arrive late or be absent after a page navigation;
+   * previously this made a resolved TV torrent fall through to our older
+   * HTML player despite the installed APK supporting LibVLC.
+   *
+   * All resolved non-live VOD goes to the native bridge, whose Android
+   * PlaybackCompatibilityRouter defaults to LibVLC. The native fallback/paused
+   * selector still works via nativePlaybackAvailable. Live TV keeps its
+   * existing routing and ordinary Chrome/Base44 browsers have no bridge.
+   */
+  const useNativePlayback =
+    nativePlaybackAvailable;
+
+  const fireTvNativeSelectorMode =
+    nativeFireTvPlayer &&
+    !isLive &&
+    !forceNativePlayback &&
+    /^https?:\/\//i.test(nativePlaybackUrl) &&
+    nativeFallbackUrl === nativePlaybackUrl;
+
+  useProactiveCodecGuard({ active, activeIdx, activeUrl, rdOverride, isDirectFile, isLive, isYoutube, isProvider, useNativePlayback, nativeFireTvPlayer, rdResolving, rdPolling, rdTorrentId, rdPreparation, manualSourceLockActive, markSourceFailed, findNextPlayableSource, switchToSource, setForceNativePlayback, setNativeFallbackUrl, setRdError, sourceDisplayLabel });
+
+  /*
+   * VOD STARTUP WATCHDOG
+   *
+   * A source can resolve successfully yet leave Android WebView on a black
+   * surface at 0:00 without ever emitting a terminal media error. The ordinary
+   * stall watchdog only runs after playback has begun, so that state used to
+   * remain selected forever.
+   *
+   * Give automatic startup a grace period. If there is still no playback
+   * progress or buffered data, try the next READY explicit-English source
+   * without marking the current source bad. A timeout alone is not a media
+   * error: keep the video mounted when the viewer selected this source or
+   * automatic alternatives run out, so a slow stream can still start.
+   */
+  useEffect(() => {
+    setVodStartupNotice("");
+
+    if (
+      isLive ||
+      isYoutube ||
+      isProvider ||
+      useNativePlayback ||
+      rdResolving ||
+      rdPolling ||
+      rdTorrentId ||
+      rdPreparation ||
+      (!rdOverride?.src && !isDirectFile)
+    ) {
+      return undefined;
+    }
+
+    const STARTUP_GRACE_MS = 12000;
+    const MAX_AUTOMATIC_STARTUP_ATTEMPTS = playbackMediaType === "tv"
+      ? Math.max(3, sortedSourceEntries.length)
+      : 3;
+
+    const timer = window.setTimeout(() => {
+      const video = stageRef.current?.querySelector("video");
+      const realProgress =
+        video instanceof HTMLVideoElement &&
+        !video.ended &&
+        !video.error &&
+        Number(video.currentTime || 0) > 0.25;
+
+      if (realProgress) {
+        vodStartupAttemptedRef.current.clear();
+        return;
+      }
+
+      if (manualSourceLockActive()) {
+        setVodStartupNotice(
+          "Still connecting to your selected source. You can press Play or choose another source while it continues loading."
+        );
+        return;
+      }
+
+      const hasBufferedData =
+        video instanceof HTMLVideoElement &&
+        !video.error &&
+        (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA ||
+          video.buffered.length > 0);
+
+      if (hasBufferedData) {
+        setVodStartupNotice(
+          "This source has loaded video but has not started playing. Press Play to start it."
+        );
+        return;
+      }
+
+      vodStartupAttemptedRef.current.add(activeIdx);
+
+      if (
+        vodStartupAttemptedRef.current.size >=
+        MAX_AUTOMATIC_STARTUP_ATTEMPTS
+      ) {
+        setVodStartupNotice(
+          "Still connecting after trying ready sources. Choose another source if playback does not start."
+        );
+        return;
+      }
+
+      const nextEnglish = sortedSourceEntries.find((entry) => {
+        if (
+          entry?.index === activeIdx ||
+          vodStartupAttemptedRef.current.has(entry?.index) ||
+          !sourceIsUserSelectable(entry?.item) ||
+          sourceNeedsCaching(entry?.item)
+        ) {
+          return false;
+        }
+
+        return Boolean(
+          Number(entry?.languageRank ?? 3) <= 3 &&
+          autoplayEntryApproved(entry)
+        );
+      });
+
+      if (!nextEnglish) {
+        setVodStartupNotice(
+          "Still connecting to this source. No other ready source is available yet; you can choose another source manually."
+        );
+        return;
+      }
+
+      switchToSource(nextEnglish.index, {
+        preservePosition: false,
+        statusMessage:
+          "That English source did not start after 12 seconds — trying the next ready English source without blacklisting it…",
+      });
+    }, STARTUP_GRACE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeIdx,
+    activeUrl,
+    isDirectFile,
+    isLive,
+    isProvider,
+    isYoutube,
+    rdOverride?.src,
+    rdPolling,
+    rdPreparation,
+    rdResolving,
+    rdTorrentId,
+    useNativePlayback,
+  ]);
+
+  useEffect(() => {
+    if (!nativeFireTvPlayer) {
+      return undefined;
+    }
+
+    const onNativeResult = (event) => {
+      const detail = event?.detail || {};
+
+      const activeRequest = nativePlaybackRef.current;
+      const busyRequest = nativeBusyRequestRef.current;
+      const returnedRequestId = String(detail.requestId || "");
+
+      if (
+        busyRequest &&
+        !isLive &&
+        returnedRequestId &&
+        (!busyRequest.requestId || returnedRequestId === busyRequest.requestId)
+      ) {
+        // A previous Android activity has finished. Retry the new selection
+        // now that its native slot is free; never start WebView video underneath.
+        nativeBusyRequestRef.current = null;
+        nativePlaybackRef.current = {
+          requestId: "",
+          url: "",
+          playRequestId: null,
+        };
+        window.__MG_NATIVE_PLAYBACK_ACTIVE__ = false;
+        setNativeBusyRetryTick((value) => value + 1);
+        return;
+      }
+
+      if (!activeRequest.requestId || returnedRequestId !== activeRequest.requestId) {
+        return;
+      }
+
+      if (detail?.diagnostics) {
+        try {
+          const history = Array.isArray(window.__MG_NATIVE_PLAYBACK_DIAGNOSTICS__)
+            ? window.__MG_NATIVE_PLAYBACK_DIAGNOSTICS__
+            : [];
+          /** @type {Record<string, any>} */
+          const entry = {
+            ...sanitizeNativePlaybackDiagnostic(detail.diagnostics),
+            reason: String(detail.reason || ""),
+          };
+          if (!isLive) {
+            writePlaybackAudioDiagnostic(buildPlaybackAudioDiagnostic({
+              source: active, resolved: rdOverride, native: entry,
+            }));
+          }
+          const nextHistory = [...history.slice(-49), entry];
+          window.__MG_NATIVE_PLAYBACK_DIAGNOSTICS__ = nextHistory;
+          window.localStorage.setItem(
+            "mg:native-playback-diagnostics:v1",
+            JSON.stringify(nextHistory)
+          );
+          window.dispatchEvent(
+            new CustomEvent("mg:native-playback-diagnostic", { detail: entry })
+          );
+          console.info("[Media God native playback]", entry);
+
+          const diagnosticFailure =
+            Number(entry.compatibilityErrorCode || 0) > 0 ||
+            /decoder|codec|format|profile|unsupported/i.test(
+              `${entry.compatibilityError || ""} ${entry.compatibilityReason || ""} ${entry.message || ""}`
+            );
+          if (diagnosticFailure && String(detail.reason || "").toLowerCase() === "error") {
+            recordPlaybackReliability(
+              sourceDisplayLabel(active, activeIdx),
+              "failure"
+            );
+          }
+        } catch {
+          // Diagnostics must never interrupt playback.
+        }
+      }
+
+      window.__MG_NATIVE_PLAYBACK_ACTIVE__ = false;
+
+      const positionSeconds = Math.max(
+        0,
+        Number(detail.positionMs || 0) / 1000
+      );
+      const durationSeconds = Math.max(
+        0,
+        Number(detail.durationMs || 0) / 1000
+      );
+
+      if (positionSeconds > 0) {
+        lastPosRef.current = {
+          t: positionSeconds,
+          d: durationSeconds,
+        };
+
+        if (!isLive && positionSeconds > 5) {
+          saveProgress(
+            positionSeconds,
+            durationSeconds,
+            true
+          );
+        }
+      }
+
+      const reason = String(detail.reason || "back").toLowerCase();
+      // An advancing Media3 audio clock does not prove audible device output.
+      const audioTimelineAdvanced = detail?.diagnostics?.audioOutputConfirmed === true;
+      const selectedSourceIndex = Number(detail.selectedSourceIndex);
+      const currentPlayRequestId = source?.playRequestId ?? null;
+
+      if (
+        !isLive &&
+        reason !== "error" &&
+        (playbackMediaType !== "tv" || episodeAutoplayCanTrustSource(active)) &&
+        positionSeconds >= SUCCESSFUL_VOD_PLAYBACK_SECONDS &&
+        !hasRecentNoSoundHistory(activeExactReliabilityLabel())
+      ) {
+        const activeEntry = sortedSourceEntries.find(
+          (entry) => entry?.index === activeIdx
+        );
+
+        recordSuccessfulPlaybackSource(active, {
+          languageRank: Number(activeEntry?.languageRank ?? 3),
+        });
+        if (playbackMediaType === "tv") {
+          recordEpisodeSourceHealth(active, episodeHealthContext, "good", {
+            audioDecoded: audioTimelineAdvanced,
+          });
+        }
+        recordPlaybackReliability(
+          sourceDisplayLabel(active, activeIdx),
+          "good"
+        );
+        if (audioTimelineAdvanced) {
+          recordPlaybackReliability(
+            activeExactReliabilityLabel(),
+            "good"
+          );
+        }
+      }
+
+      /*
+       * IMPORTANT: native Media3 returns to the WebView before the async
+       * next-episode resolver has necessarily published the following source.
+       * If we clear the native ownership ref immediately, any render in that
+       * small gap can launch the just-finished URL again. Keep a handoff lock
+       * tied to this playRequestId until the next episode gets a new request.
+       * This is what prevents an ended episode (especially season-pack sources)
+       * from appearing to restart instead of advancing.
+       */
+      nativePlaybackRef.current =
+        !isLive && (reason === "ended" || reason === "next")
+          ? {
+              requestId: "__episode_handoff__",
+              url: nativePlaybackUrl,
+              playRequestId: currentPlayRequestId,
+            }
+          : {
+              requestId: "",
+              url: "",
+              playRequestId: null,
+            };
+
+      if (
+        reason === "source" &&
+        Number.isInteger(selectedSourceIndex) &&
+        selectedSourceIndex >= 0 &&
+        selectedSourceIndex < sources.length
+      ) {
+        if (positionSeconds > 5) {
+          recoveryResumeRef.current = positionSeconds;
+        }
+
+        setForceNativePlayback(false);
+        setNativeFallbackUrl("");
+
+        if (selectedSourceIndex !== activeIdx) {
+          switchToSource(selectedSourceIndex, {
+            preservePosition: true,
+            manualSelection: true,
+            statusMessage: "Switching source from the Fire TV player…",
+          });
+        } else {
+          setForceNativePlayback(true);
+        }
+
+        return;
+      }
+
+      if (reason === "browse_sources" && !isLive) {
+        // An older APK can still return this action, and discovery can finish
+        // after native playback starts. Keep the player mounted and return to
+        // the live WebView chooser so the viewer sees its newest complete pool
+        // instead of exiting to Home.
+        setForceNativePlayback(false);
+        setNativeFallbackUrl(nativePlaybackUrl);
+        window.setTimeout(() => {
+          sourceChooserRef.current?.scrollIntoView({ block: "center" });
+          sourceChooserRef.current?.focus({ preventScroll: true });
+        }, 0);
+        return;
+      }
+
+      if (reason === "startup_timeout" && !isLive) {
+        /*
+         * Android has already proved that this request never produced a video
+         * frame. A manual source choice stays authoritative while it is healthy,
+         * but it must not trap the viewer on a source the native player has
+         * rejected. Release only this failed manual lock; do not blacklist the
+         * torrent/hash, so Retry and manual selection still remain available.
+         */
+        setForceNativePlayback(false);
+        if (manualSourceLockActive()) {
+          manualSourceLockRef.current = {
+            sourceKey: "",
+            playRequestId: currentPlayRequestId,
+          };
+        }
+
+        const nextIndex = findNextPlayableSource(activeIdx, { allowCaching: false });
+
+        if (
+          nextIndex >= 0 &&
+          switchToSource(nextIndex, {
+            preservePosition: false,
+            statusMessage: "Android video did not start — trying another ready source…",
+          })
+        ) {
+          return;
+        }
+
+        setNativeFallbackUrl(nativePlaybackUrl);
+        setRdError(
+          "Android video did not start. This source remains available; choose another source or retry it."
+        );
+        return;
+      }
+
+      if (reason === "error") {
+        if (rejectEpisodeAudioSource(detail?.message)) return;
+        const nativeAudioFailure =
+          !isLive &&
+          /no usable audio track|audio decoder could not recover|audio (?:decoder|renderer|sink) (?:failed|stopped)/i.test(
+            String(detail?.message || "")
+          );
+
+        const lockedVodNativeFailure =
+          !isLive && manualSourceLockActive();
+
+        /*
+         * A deliberate manual source choice still prevents speculative or
+         * background source switching. A terminal Android decoder error is
+         * different: the device has proved that this source cannot continue.
+         * Release only this failed request's manual lock and let the existing
+         * recovery path try another ready source. The torrent/hash itself is
+         * not permanently blacklisted here.
+         */
+        if (lockedVodNativeFailure) {
+          if (positionSeconds > 5) {
+            recoveryResumeRef.current = positionSeconds;
+          }
+
+          manualSourceLockRef.current = {
+            sourceKey: "",
+            playRequestId: currentPlayRequestId,
+          };
+
+          window.dispatchEvent(
+            new CustomEvent("mg:player-status", {
+              detail: {
+                message: nativeAudioFailure
+                  ? "Selected source lost usable audio in Android — trying another ready source…"
+                  : "Selected source failed in Android — trying another ready source…",
+              },
+            })
+          );
+        }
+
+        if (nativeAudioFailure) {
+          recordPlaybackReliability(activeExactReliabilityLabel(), "no-sound");
+          if (playbackMediaType === "tv") {
+            recordEpisodeSourceHealth(active, episodeHealthContext, "no-sound");
+          }
+          if (positionSeconds > 5) {
+            recoveryResumeRef.current = positionSeconds;
+          }
+          setForceNativePlayback(false);
+          setNativeFallbackUrl("");
+          tryNextSource(
+            "The native and compatibility decoders found no usable audio on this source. Trying another source.",
+            { authoritativeSourceRejection: true, immediate: true }
+          );
+          return;
+        }
+
+        recordPlaybackReliability(
+          sourceDisplayLabel(active, activeIdx),
+          "failure"
+        );
+
+        if (positionSeconds > 5) {
+          recoveryResumeRef.current = positionSeconds;
+        }
+
+        setForceNativePlayback(false);
+
+        window.dispatchEvent(
+          new CustomEvent("mg:player-status", {
+            detail: {
+              message:
+                detail.message ||
+                "Native player could not play this source — trying a backup…",
+            },
+          })
+        );
+
+        if (isLive && /^https?:\/\//i.test(String(activeUrl || ""))) {
+          recordLiveTvPlaybackResult(String(activeUrl), {
+            success: false,
+            stalled: false,
+          });
+        }
+
+        if (rdOverride) {
+          handleRdPlaybackError();
+        } else {
+          handleDirectPlaybackError({ liveFailureClass: "native" });
+        }
+
+        return;
+      }
+
+      if (
+        reason === "next" &&
+        !isLive
+      ) {
+        recordPlaybackReliability(
+          sourceDisplayLabel(active, activeIdx),
+          "good"
+        );
+
+        window.dispatchEvent(
+          new CustomEvent("mg:play-next-episode")
+        );
+        return;
+      }
+
+      if (
+        reason === "ended" &&
+        !isLive
+      ) {
+        recordPlaybackReliability(
+          sourceDisplayLabel(active, activeIdx),
+          "good"
+        );
+
+        const playerContext =
+          typeof window !== "undefined"
+            ? window.__MG_PLAYER_CONTEXT__ || {}
+            : {};
+
+        if (
+          playerContext?.mediaType === "tv" &&
+          playerContext?.autoNext !== false
+        ) {
+          window.dispatchEvent(
+            new CustomEvent("mg:native-playback-ended", {
+              detail: {
+                positionSeconds,
+                durationSeconds,
+                autoNextCancelled: detail?.autoNextCancelled === true,
+              },
+            })
+          );
+          if (detail?.autoNextCancelled === true || playerContext?.nextEpisodeAvailable === false) {
+            returnFromPlayback();
+          }
+          return;
+        }
+      }
+
+      if (reason === "cast" && !isLive) {
+        // The phone's MainActivity receives the matching native cast request
+        // and opens the real Google Cast chooser after this VLC activity exits.
+        // Return the WebView to the correct movie/episode destination.
+        returnFromPlayback();
+        return;
+      }
+
+      if (reason === "back" && !isLive) {
+        // One predictable exit on phone and Fire TV: movies to Home, TV
+        // episodes to the show episode list. The Sources control is separate.
+        returnFromPlayback();
+        return;
+      }
+
+      onClose?.();
+    };
+
+    window.addEventListener(
+      "mg:native-player-result",
+      onNativeResult
+    );
+
+    return () => {
+      window.removeEventListener(
+        "mg:native-player-result",
+        onNativeResult
+      );
+    };
+  }, [
+    nativeFireTvPlayer,
+    isLive,
+    rdOverride,
+    forceNativePlayback,
+    onClose,
+    returnFromPlayback,
+    playbackMediaType,
+    activeIdx,
+    sources,
+  ]);
+
+  useEffect(() => {
+    const sourceDiscoveryPending =
+      !isLive &&
+      ["searching", "fast-start"].includes(
+        String(source?.sourceDiagnostics?.phase || "")
+      );
+
+    const activeStartupEntry = sortedSourceEntries.find(
+      (entry) => entry?.index === activeIdx
+    );
+    const activeStartupProven =
+      activeStartupEntry?.provenWorking === true ||
+      active?.launchQualified === true ||
+      active?.playbackVerified === true ||
+      active?.runtimePlaybackVerified === true;
+
+    /*
+     * NATIVE STARTUP ARBITRATION
+     *
+     * Release 1.0.46 / 1.4.60 keeps this arbitration in the hosted player so
+     * Android and Fire TV launch the same approved source the web UI selected.
+     *
+     * playNativeFireTv() marks Android playback ownership as soon as the native
+     * activity ACCEPTS a request. That is earlier than actual playback. If an
+     * unproven AIOStreams/direct row reaches this effect in the same React
+     * commit where English-first autoplay has requested a source switch, the
+     * old row can otherwise seize native ownership and cancel that switch on
+     * the following render.
+     *
+     * Do not launch the current unproven/non-English VOD into Android while a
+     * better explicit-English startup candidate is waiting. Let the earlier
+     * source-selection effect change activeIdx first; the next render may then
+     * launch only the chosen English source.
+     */
+    const approvedStartupTakeoverPending =
+      startupHandoffAvailable &&
+      !activeStartupProven &&
+      bestApprovedAutoplaySourceIndex >= 0 &&
+      bestApprovedAutoplaySourceIndex !== activeIdx;
+
+    const englishStartupTakeoverPending =
+      startupHandoffAvailable &&
+      !activeStartupProven &&
+      bestEnglishAutoplayCandidateIndex >= 0 &&
+      bestEnglishAutoplayCandidateIndex !== activeIdx;
+
+    const aioStreamsStartupTakeoverPending =
+      startupHandoffAvailable &&
+      sourceIsAioStreamsCandidate(active) &&
+      bestNonAioTorrentAutoplayCandidateIndex >= 0 &&
+      bestNonAioTorrentAutoplayCandidateIndex !== activeIdx;
+
+    if (
+      approvedStartupTakeoverPending ||
+      englishStartupTakeoverPending ||
+      aioStreamsStartupTakeoverPending
+    ) {
+      return;
+    }
+
+    // Native Sources reads the current web dropdown on demand. A qualified
+    // episode can therefore start while the remaining choices are discovered.
+    // Keep the existing complete-search behaviour for movies and unproven rows.
+    const episodeReadyForNative = !isLive && playbackMediaType === "tv" && (
+      activeStartupProven ||
+      (Boolean(rdOverride?.src) && !rdResolving && !rdPolling && !rdPreparation)
+    );
+    if (!useNativePlayback || !nativePlaybackUrl ||
+        (sourceDiscoveryPending && !episodeReadyForNative)) {
+      return;
+    }
+
+    // Skip markers arrive through updateNativeEpisodePlaybackContext. They
+    // must never delay Play; late updates also include the next-episode state.
+    const current = nativePlaybackRef.current;
+
+    const currentPlayRequestId = source?.playRequestId ?? null;
+
+    if (
+      current.url === nativePlaybackUrl &&
+      current.requestId &&
+      current.playRequestId === currentPlayRequestId
+    ) {
+      return;
+    }
+
+    const resumeSeconds = Math.max(
+      0,
+      Number(
+        recoveryResumeRef.current ||
+          lastPosRef.current?.t ||
+          source?.startTime ||
+          0
+      )
+    );
+
+    const requestId =
+      `mg-${Date.now()}-${activeIdx}-${Math.random().toString(36).slice(2, 8)}`;
+
+    nativePlaybackRef.current = {
+      requestId,
+      url: nativePlaybackUrl,
+      playRequestId: currentPlayRequestId,
+    };
+
+    const started = playNativeFireTv({
+      requestId,
+      url: nativePlaybackUrl,
+      title: source?.title || sourceDisplayLabel(active, activeIdx),
+      poster: source?.poster || "",
+      startPositionMs: Math.round(resumeSeconds * 1000),
+      live: isLive,
+      headers:
+        rdOverride?.headers ||
+        active?.headers ||
+        active?.requestHeaders ||
+        {},
+      mimeType:
+        rdOverride?.mimeType ||
+        active?.mimeType ||
+        active?.mime_type ||
+        "",
+      drm:
+        rdOverride?.drm ||
+        active?.drm ||
+        null,
+      audioLanguage: playbackMediaType === "tv" ? "en" : trackPreferences.audioLanguage,
+      subtitleLanguage: trackPreferences.subtitleLanguage,
+      subtitlesEnabled: trackPreferences.subtitlesEnabled,
+      preferForcedSubtitles: trackPreferences.preferForcedSubtitles,
+      strictEnglishPlayback: playbackMediaType === "tv",
+      subtitles: Array.isArray(active?.subtitles)
+        ? active.subtitles
+        : [],
+      sources: selectableSourceEntries
+        .map(({ item: candidate, index }) => {
+          /*
+           * The active torrent is often resolved to a Real-Debrid HTTP URL
+           * inside VideoPlayer after the source list was created. In that case
+           * rdOverride owns the real file inspection (mediaInfo/audioRescue)
+           * while candidate still contains only the original torrent metadata.
+           *
+           * Native playback must receive the resolved inspection metadata for
+           * the active URL, otherwise Media3/LibVLC cannot know which English
+           * track Real-Debrid actually proved and may accept the foreign default.
+           */
+          const effectiveCandidate =
+            index === activeIdx && rdOverride
+              ? {
+                  ...candidate,
+                  ...rdOverride,
+                  src: nativePlaybackUrl,
+                  url: nativePlaybackUrl,
+                }
+              : candidate;
+
+          const baseLabel = sourceDisplayLabel(effectiveCandidate, index);
+          const provider = String(effectiveCandidate?.sourceName || "").trim();
+          const visibleLabel =
+            provider && !baseLabel.toLowerCase().includes(provider.toLowerCase())
+              ? `${baseLabel} • ${provider}`
+              : baseLabel;
+
+          return {
+            ...effectiveCandidate,
+            label: failedSources.has(index)
+              ? `Unavailable • ${visibleLabel}`
+              : visibleLabel,
+            url:
+              index === activeIdx && /^https?:\/\//i.test(nativePlaybackUrl)
+                ? nativePlaybackUrl
+                : getSourceUrl(effectiveCandidate),
+            webIndex: index,
+          };
+        }),
+      activeSourceIndex: activeIdx,
+    });
+
+    if (!started) {
+      if (!isLive && window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true) {
+        nativePlaybackRef.current = current;
+        nativeBusyRequestRef.current = {
+          requestId: current.requestId || "",
+          url: nativePlaybackUrl,
+        };
+        window.dispatchEvent(
+          new CustomEvent("mg:player-status", {
+            detail: { message: "Android player is still open. Waiting to switch sources…" },
+          })
+        );
+        return;
+      }
+
+      window.__MG_NATIVE_PLAYBACK_ACTIVE__ = false;
+      nativeBusyRequestRef.current = null;
+      nativePlaybackRef.current = {
+        requestId: "",
+        url: "",
+        playRequestId: null,
+      };
+
+      /* A bridge that rejects the request without an active native owner can
+       * fall back safely because there is no Android player on screen. */
+      setForceNativePlayback(false);
+      setNativeFallbackUrl(nativePlaybackUrl);
+
+      window.dispatchEvent(
+        new CustomEvent("mg:player-status", {
+          detail: {
+            message:
+              "Android player could not open — using the fallback player.",
+          },
+        })
+      );
+      return;
+    }
+    nativeBusyRequestRef.current = null;
+
+    /*
+     * An accepted native request may still be running its network preflight.
+     * WebView timers continue during that check, so a web timeout cannot
+     * release native ownership or start an HTML video underneath Android.
+     * Android reports a preflight rejection or launch failure with requestId.
+     * Live TV already follows this same native-result ownership rule.
+     */
+  }, [
+    active,
+    activeIdx,
+    bestApprovedAutoplaySourceIndex,
+    bestEnglishAutoplayCandidateIndex,
+    bestNonAioTorrentAutoplayCandidateIndex,
+    isLive,
+    nativePlaybackUrl,
+    nativeBusyRetryTick,
+    playbackMediaType,
+    playerContextRevision,
+    rdOverride,
+    rdResolving,
+    rdPolling,
+    rdPreparation,
+    source,
+    startupHandoffAvailable,
+    useNativePlayback,
+  ]);
+
+  const handleNoSound =
+    async () => {
+      if (
+        typeof window !== "undefined" &&
+        window.__MG_NATIVE_PLAYBACK_ACTIVE__ === true
+      ) {
+        return;
+      }
+
+      /*
+       * The user has explicitly started an audio-recovery attempt. Any delayed
+       * failover that belongs to the previous silent stream is now stale.
+       */
+      cancelPendingTorrentFailover();
+
+      const actionGeneration = ++streamActionGenerationRef.current;
+      const actionStillCurrent = () =>
+        streamActionGenerationRef.current === actionGeneration;
+
+
+      const video =
+        stageRef.current
+          ?.querySelector(
+            "video"
+          );
+
+      const resumeAt = Math.max(
+        0,
+        Number(
+          video?.currentTime ||
+            lastPosRef.current?.t ||
+            0
+        )
+      );
+
+      const trackAttemptKey = [
+        source?.playRequestId || "",
+        activeIdx,
+        rdOverride?.src || activeUrl,
+      ].join("|");
+      if (reportedNoSoundTracksRef.current.key !== trackAttemptKey) {
+        reportedNoSoundTracksRef.current = {
+          key: trackAttemptKey,
+          tried: new Set(),
+          hlsTried: new Set(),
+        };
+      }
+      const triedTracks = reportedNoSoundTracksRef.current.tried;
+
+      if (video) {
+        video.muted = false;
+        video.volume = 1;
+
+        if (video.dataset?.mgAutoplayMuted === "true") {
+          delete video.dataset.mgAutoplayMuted;
+        }
+
+        const tracks = video.audioTracks;
+
+        if (
+          tracks &&
+          typeof tracks.length === "number" &&
+          tracks.length > 0
+        ) {
+          let currentAudio = -1;
+          const candidates = [];
+
+          for (let index = 0; index < tracks.length; index += 1) {
+            const track = tracks[index];
+
+            if (track?.enabled) {
+              currentAudio = index;
+            }
+
+            const text = `${track?.label || ""} ${track?.language || ""}`;
+            const commentary =
+              /commentary|audio description|descriptive|visually impaired/i.test(
+                text
+              );
+
+            candidates.push({
+              index,
+              track,
+              language: trackLanguage(track),
+              commentary,
+              score: audioTrackScore(
+                track,
+                trackPreferences.audioLanguage
+              ),
+            });
+          }
+
+          const englishMain = candidates
+            .filter(
+              (item) =>
+                item.language === "en" &&
+                !item.commentary
+            )
+            .sort(
+              (a, b) =>
+                b.score - a.score ||
+                a.index - b.index
+            );
+
+          if (currentAudio >= 0) triedTracks.add(currentAudio);
+
+          /* A no-sound report cannot be resolved by reselecting the same track. */
+          if (englishMain.length > 0) {
+            const wanted = englishMain.find((item) => !triedTracks.has(item.index));
+
+            if (wanted) {
+              try {
+                for (let index = 0; index < tracks.length; index += 1) {
+                  tracks[index].enabled = index === wanted.index;
+                }
+
+                if (tracks[wanted.index]?.enabled) {
+                  video.play().catch(() => {});
+                  setRdError("");
+
+                  window.dispatchEvent(
+                    new CustomEvent("mg:player-status", {
+                      detail: {
+                        message: `Trying another English track · ${tracks[wanted.index]?.label || tracks[wanted.index]?.language || `track ${wanted.index + 1}`}.`,
+                      },
+                    })
+                  );
+
+                  return;
+                }
+              } catch {
+                // Continue to the same-file fallback below.
+              }
+            }
+          }
+
+          /* Unlabelled audio may still be usable; try another track once. */
+          if (englishMain.length === 0 && tracks.length > 1) {
+            const wantedAudio = candidates.find(
+              (item) => !item.commentary && !triedTracks.has(item.index)
+            )?.index;
+
+            if (wantedAudio !== undefined) {
+              try {
+                for (let index = 0; index < tracks.length; index += 1) {
+                  tracks[index].enabled = index === wantedAudio;
+                }
+
+                if (tracks[wantedAudio]?.enabled) {
+                  video.play().catch(() => {});
+                  setRdError("");
+
+                  window.dispatchEvent(
+                    new CustomEvent("mg:player-status", {
+                      detail: {
+                        message:
+                          `Audio track changed within this file · ${tracks[wantedAudio]?.label || tracks[wantedAudio]?.language || `track ${wantedAudio + 1}`}.`,
+                      },
+                    })
+                  );
+
+                  return;
+                }
+              } catch {
+                // Continue to same-file rendition recovery.
+              }
+            }
+          }
+
+          // No different usable track: try the rendition and source fallback.
+        }
+
+        video.play().catch(() => {});
+      }
+
+      if (typeof window !== "undefined") {
+        const hlsResult = await new Promise((resolve) => {
+          const requestId = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          let timer = null;
+
+          const finish = (detail = {}) => {
+            if (timer) window.clearTimeout(timer);
+            window.removeEventListener("mg:audio-rescue-result", onResult);
+            resolve(detail);
+          };
+
+          const onResult = (event) => {
+            if (String(event?.detail?.requestId || "") !== requestId) return;
+            finish(event?.detail);
+          };
+
+          window.addEventListener("mg:audio-rescue-result", onResult);
+          window.dispatchEvent(
+            new CustomEvent("mg:audio-rescue-request", {
+              detail: {
+                requestId,
+                skipIndices: [...reportedNoSoundTracksRef.current.hlsTried],
+              },
+            })
+          );
+
+          timer = window.setTimeout(() => finish(), 350);
+        });
+
+        if (!actionStillCurrent()) {
+          return;
+        }
+
+        if (hlsResult?.handled === true) {
+          for (const index of [hlsResult.previousIndex, hlsResult.index]) {
+            if (Number.isInteger(index) && index >= 0) {
+              reportedNoSoundTracksRef.current.hlsTried.add(index);
+            }
+          }
+          setRdError("");
+          return;
+        }
+      }
+
+      if (!actionStillCurrent()) {
+        return;
+      }
+
+      if (
+        source?.hasRd
+      ) {
+        const selectedRdFile = rdFiles.find(
+          (file) =>
+            Boolean(rdOverride?.file) &&
+            String(file?.path || "") === String(rdOverride.file)
+        ) || rdFiles.find((file) => file?.selected === true);
+        const activeTorrentId = String(
+          rdOverride?.torrentId ||
+            active?.rdTorrentId ||
+            rdTorrentId ||
+            (active?.type === "rd_torrent" && !isMagnet(activeUrl)
+              ? activeUrl
+              : "")
+        ).trim();
+
+        const activeTorrentHash = sourceTorrentHash(active);
+        const activeMagnet =
+          active?.magnet ||
+          active?.magnetLink ||
+          (isMagnet(activeUrl) ? activeUrl : "") ||
+          (activeTorrentHash
+            ? `magnet:?xt=urn:btih:${activeTorrentHash}`
+            : "");
+
+        const rescueRequest =
+          selectedRdFile?.link
+            ? {
+                action: "unrestrict_file",
+                link: selectedRdFile.link,
+              }
+            : activeTorrentId && selectedRdFile?.path
+              ? {
+                  action: "select_torrent_file",
+                  torrent_id: activeTorrentId,
+                  file_path: selectedRdFile.path,
+                }
+            : activeTorrentId
+            ? {
+                action: "torrent_info",
+                torrent_id: activeTorrentId,
+              }
+            : activeMagnet
+              ? {
+                action: "resolve_best",
+                magnet: activeMagnet,
+                ...(selectedRdFile?.id != null
+                  ? { file_idx: selectedRdFile.id }
+                  : active?.fileIdx != null &&
+                      Number.isFinite(Number(active.fileIdx))
+                    ? { file_idx: Number(active.fileIdx) }
+                    : active?.file_idx != null &&
+                        Number.isFinite(Number(active.file_idx))
+                      ? { file_idx: Number(active.file_idx) }
+                      : {}),
+              }
+              : null;
+
+        if (rescueRequest) {
+          try {
+            setRdResolving(true);
+            setRdError("");
+
+            const response = await base44.functions.invoke(
+              "realDebrid",
+              {
+                ...rescueRequest,
+                title:
+                  source?.rdTitle ||
+                  source?.title ||
+                  "",
+                ...(source?.rdYear != null
+                  ? { year: source.rdYear }
+                  : {}),
+                alternate_years:
+                  Array.isArray(source?.rdAlternateYears || source?.alternateYears)
+                    ? (source?.rdAlternateYears || source?.alternateYears)
+                    : [],
+                alternate_titles:
+                  Array.isArray(source?.rdAlternateTitles || source?.alternateTitles)
+                    ? (source?.rdAlternateTitles || source?.alternateTitles)
+                    : [],
+                ...(source?.rdSeason != null
+                  ? { season: source.rdSeason }
+                  : {}),
+                ...(source?.rdEpisode != null
+                  ? { episode: source.rdEpisode }
+                  : {}),
+                force_audio_rescue: true,
+                allow_transcode: true,
+                prefer_english: true,
+                prefer_browser_transcode: prefersBrowserRdCompatibility(),
+              }
+            );
+
+            const data = response?.data || {};
+
+            if (!actionStillCurrent()) {
+              return;
+            }
+
+            if (
+              (data?.status === "ready" || rescueRequest.action === "unrestrict_file") &&
+              data?.stream_url &&
+              data?.audio_rescue?.used &&
+              String(data.stream_url) !== String(rdOverride?.src || activeUrl)
+            ) {
+              /*
+               * The compatibility rendition has been successfully created.
+               * The old source's delayed failure timer must not survive into it.
+               */
+              confirmRecoveredSource(video);
+
+              if (resumeAt > 5) {
+                recoveryResumeRef.current = resumeAt;
+              }
+
+              setRdOverride({
+                src: data.stream_url,
+                label:
+                  data.filename ||
+                  `${sourceDisplayLabel(active, activeIdx)} [Audio Rescue]`,
+                file: currentFilePath(data.files) || selectedRdFile?.path || rdOverride?.file || "",
+                torrentId: data.torrent_id || activeTorrentId,
+                audioRescue: data.audio_rescue,
+                fallbackSrc: data.fallback_stream_url || "",
+                fallbackTried: rdOverride?.fallbackTried === true,
+                videoRescue: data.video_rescue || null,
+                mediaInfo: data.media_info || null,
+              });
+
+              setRdFiles(data.files || rdFiles);
+              setRdTorrentId(null);
+              setRdPolling(false);
+              setRdResolving(false);
+
+              window.dispatchEvent(
+                new CustomEvent("mg:player-status", {
+                  detail: {
+                    message:
+                      resumeAt > 5
+                        ? "Audio Rescue loaded a compatible stream and kept your position."
+                        : "Audio Rescue loaded a compatible stream.",
+                  },
+                })
+              );
+
+              return;
+            }
+          } catch {
+            // Fall through to the next ranked source.
+          } finally {
+            if (actionStillCurrent()) {
+              setRdResolving(false);
+            }
+          }
+        }
+      }
+
+      if (!actionStillCurrent()) {
+        return;
+      }
+
+      /* The viewer confirmed silence and same-file repair was exhausted. */
+      forgetSuccessfulPlaybackSource(active);
+      if (playbackMediaType === "tv") {
+        recordEpisodeSourceHealth(active, episodeHealthContext, "no-sound");
+      }
+      window.dispatchEvent(new CustomEvent("mg:playback-no-sound", {
+        detail: { label: activeExactReliabilityLabel() },
+      }));
+      if (manualSourceLockActive()) {
+        window.dispatchEvent(new CustomEvent("mg:player-status", {
+          detail: { message: "Same-file audio repair was unavailable. Your selected source remains playing; Source lists the other ready files." },
+        }));
+        return;
+      }
+      video?.pause?.();
+      tryNextSource("No usable audio could be recovered from this source.", {
+        immediate: true,
+        allowCaching: false,
+        authoritativeSourceRejection: true,
+        userReportedNoSound: true,
+      });
+    };
+
+  // Automatic audio recovery acts only on hard decoder evidence (no decoded audio, no picture, or no English audio).
+  useSilentAudioGuard({ stageRef, enabled: !isLive && !isYoutube && !isProvider && !useNativePlayback && !rdResolving, streamKey: `${source?.playRequestId || ""}|${activeIdx}|${rdOverride?.src || activeUrl}`, onSilent: handleNoSound, onUnusable: (message) => { if (manualSourceLockActive()) return; forgetSuccessfulPlaybackSource(active); stageRef.current?.querySelector("video")?.pause?.(); tryNextSource(message, { immediate: true, allowCaching: false, authoritativeSourceRejection: true, userReportedNoSound: true }); } });
+
+  useEffect(() => {
+    const state = autoVideoRescueRef.current;
+
+    if (state.timer) {
+      window.clearTimeout(state.timer);
+      state.timer = null;
+    }
+
+    if (
+      isLive ||
+      isYoutube ||
+      isProvider ||
+      rdResolving ||
+      rdPolling ||
+      rdTorrentId ||
+      rdPreparation ||
+      sources.length <= 1 ||
+      readPlaybackPreferences().autoRecovery === false
+    ) {
+      return undefined;
+    }
+
+    const candidate = rdOverride
+      ? {
+          ...active,
+          src: rdOverride.src || activeUrl,
+          url: rdOverride.src || activeUrl,
+          label: rdOverride.label || active?.label,
+        }
+      : active;
+    const profile = getPlaybackDeviceProfile();
+    const label = sourceDisplayLabel(candidate, activeIdx);
+
+    if (!hasSevereVideoRisk(candidate, label, profile)) {
+      return undefined;
+    }
+
+    const key = [
+      source?.id || source?.tmdbId || source?.title || "media",
+      activeIdx,
+      rdOverride?.src || activeUrl,
+    ].join("|");
+
+    if (state.key === key) {
+      return undefined;
+    }
+
+    state.key = key;
+
+    const rescue = (remainingChecks = 4, previousTime = 0) => {
+      state.timer = null;
+
+      /*
+       * Manual source selection owns the player while its native selector is
+       * open. Do not let the compatibility watchdog update state or switch
+       * sources underneath the Android/Fire TV selection dialog.
+       */
+      if (
+        sourceSelectorPinnedRef.current ||
+        rdFileSelectorPinnedRef.current
+      ) {
+        state.timer = window.setTimeout(
+          () => rescue(remainingChecks, previousTime),
+          750
+        );
+        return;
+      }
+
+      const video = stageRef.current?.querySelector("video");
+      const currentTime = Number(video?.currentTime || 0);
+      const clearlyPlaying =
+        video instanceof HTMLVideoElement &&
+        !video.paused &&
+        !video.ended &&
+        video.readyState >= 2 &&
+        remainingChecks < 4 &&
+        currentTime > previousTime + 0.2;
+      const hardFailure =
+        video instanceof HTMLVideoElement &&
+        (Boolean(video.error) || video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE);
+
+      if (clearlyPlaying) {
+        return;
+      }
+
+      if (remainingChecks > 0) {
+        state.timer = window.setTimeout(
+          () => rescue(remainingChecks - 1, currentTime),
+          1500
+        );
+        return;
+      }
+
+      /*
+       * A slow start is not proof of incompatibility. Only switch here after
+       * the browser reports a real decode/source failure. The normal stall
+       * recovery remains responsible for genuine buffering stalls.
+       */
+      if (!hardFailure) {
+        return;
+      }
+
+      const alternatives = sources
+        .map((item, index) => {
+          if (
+            index === activeIdx ||
+            failedSourcesRef.current.has(index) ||
+            item?.diagnostic ||
+            item?.type === "status" ||
+            item?.type === "provider" ||
+            item?.type === "youtube"
+          ) {
+            return null;
+          }
+
+          const url = getSourceUrl(item);
+          const playable =
+            Boolean(url) ||
+            item?.type === "rd" ||
+            item?.type === "rd_torrent" ||
+            item?.type === "torrent" ||
+            item?.type === "magnet";
+
+          if (!playable) return null;
+
+          return {
+            index,
+            severe: hasSevereVideoRisk(
+              item,
+              sourceDisplayLabel(item, index),
+              profile
+            ),
+            score: recoverySourceScore(item, index),
+          };
+        })
+        .filter(Boolean)
+        .sort(
+          (a, b) =>
+            Number(a.severe) - Number(b.severe) ||
+            b.score - a.score ||
+            a.index - b.index
+        );
+
+      const nextIndex = alternatives.find((item) => !item.severe)?.index ?? -1;
+      if (nextIndex < 0) {
+        return;
+      }
+
+      const resumeAt = Math.max(
+        0,
+        Number(video?.currentTime || lastPosRef.current?.t || 0)
+      );
+
+      if (resumeAt > 5) {
+        recoveryResumeRef.current = resumeAt;
+      }
+
+      recordPlaybackReliability(label, "failure");
+      markSourceFailed(activeIdx);
+
+      switchToSource(nextIndex, {
+        preservePosition: true,
+        statusMessage:
+          "Video compatibility rescue · switching to a safer source…",
+      });
+    };
+
+    state.timer = window.setTimeout(
+      () => rescue(4, 0),
+      3200
+    );
+
+    return () => {
+      if (state.timer) {
+        window.clearTimeout(state.timer);
+        state.timer = null;
+      }
+    };
+  }, [
+    active,
+    activeIdx,
+    activeUrl,
+    isLive,
+    isProvider,
+    isYoutube,
+    rdOverride,
+    rdPolling,
+    rdResolving,
+    rdTorrentId,
+    rdPreparation,
+    source,
+    sources,
+  ]);
+
+  const rdPreparationStatus = String(
+    rdPreparation?.status || ""
+  ).toLowerCase();
+  const rdPreparationTerminal =
+    /^(?:comet_start_failed|stalled|dead|error|magnet_error|virus)$/.test(
+      rdPreparationStatus
+    );
+
+  const busy =
+    rdResolving ||
+    rdPolling ||
+    !!rdTorrentId ||
+    (!!rdPreparation && !rdPreparationTerminal);
+
+  const displayedError =
+    rdError ||
+    "";
+
+  // All discovered exact-episode torrents require caching. This is a
+  // normal availability state, not a broken VLC decoder. Do not show an
+  // endless spinner or submit another torrent automatically.
+  const noReadyEpisodeFile =
+    playbackMediaType === "tv" &&
+    source?.sourceDiagnostics?.noReadyEpisodeFile === true &&
+    (active?.diagnostic === true || active?.type === "status") &&
+    !rdOverride && !busy && !displayedError;
+
+  const friendlyError =
+    friendlyPlaybackError(
+      displayedError
+    );
+
+  const sourceCacheStateLabel = (item, index) => {
+    const base = concisePlaybackSourceLabel(item, index);
+    const hash = sourceTorrentHash(item);
+    const runtimeReady = Boolean(
+      hash && runtimeReadyTorrentHashes.has(hash)
+    );
+    const trustedCached =
+      runtimeReady ||
+      sortedSourceEntries.find((entry) => entry.index === index)?.trustedCached === true;
+
+    if (runtimeReady || sourceHasAuthoritativeCachedSignal(item)) {
+      return trustedCached
+        ? `Trusted Cached • ${base}`
+        : `Cached / Ready • ${base}`;
+    }
+
+    if (sourceNeedsCaching(item)) {
+      return `Uncached • ${base}`;
+    }
+
+    if (playbackMediaType === "tv" && isUnverifiedHostedEpisodeStream(item)) {
+      return `Unverified • ${base}`;
+    }
+
+    return base;
+  };
+
+  const activeSourceLabel =
+    sourceCacheStateLabel(
+      active,
+      activeIdx
+    );
+
+  const activeLiveSourcePosition = isLive
+    ? liveSourcePosition(activeIdx)
+    : { current: 0, total: 0 };
+
+  /*
+   * READY MUST MATCH THE CHOOSER
+   *
+   * selectableSourceEntries is the exact list rendered into Source / quality.
+   * Do not apply a second type filter here. Cached torrent rows returned through
+   * an addon/provider wrapper can still be real selectable sources when they
+   * carry authoritative cache state and a usable torrent identity. Filtering
+   * provider-labelled rows only from the counter made the UI report "6 ready"
+   * while the chooser had a much larger cached/selectable set.
+   */
+  const selectableSourceCount = selectableSourceEntries.length;
+  const showSourceChooser = () => {
+    sourceChooserRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    sourceChooserRef.current?.focus({ preventScroll: true });
+    try {
+      sourceChooserRef.current?.showPicker?.();
+    } catch {
+      // Some Android WebViews only open the native list after a direct tap.
+    }
+  };
+  const noPlayableVodSources =
+    !isLive &&
+    Boolean(source?.sourceDiagnostics?.diagnosticLabel) &&
+    selectableSourceCount === 0 &&
+    !rdOverride;
+
+  const failedSourceCount =
+    Array.from(
+      failedSources
+    ).filter(
+      (index) =>
+        Number.isInteger(
+          Number(index)
+        )
+    ).length;
+
+  const audioNeedsAttention =
+    hasRecentNoSoundHistory(
+      activeExactReliabilityLabel()
+    );
+
+  const cacheProgress = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        Number(rdPreparation?.progress || 0)
+      )
+    )
+  );
+
+  const cachePhase = cachePhaseDetails(rdPreparation || {});
+  const cacheStatusLabel = cachePhase.label;
+
+  const cacheSeeders = Math.max(
+    0,
+    Number(rdPreparation?.seeders || 0)
+  );
+
+  const sourceReportedSeeders = Math.max(
+    0,
+    Number(active?.reportedSeeders || 0)
+  );
+
+  const cacheSpeedBps = Math.max(
+    0,
+    Number(rdPreparation?.speed_bps || 0)
+  );
+
+  const cacheSizeBytes = Math.max(
+    0,
+    Number(rdPreparation?.size_bytes || 0)
+  );
+
+  const cacheDownloadedBytes = Math.max(
+    0,
+    Number(
+      rdPreparation?.downloaded_bytes ||
+      (cacheSizeBytes * cacheProgress) / 100 ||
+      0
+    )
+  );
+
+  const cacheElapsedSeconds =
+    rdPreparation?.startedAt
+      ? Math.max(
+          0,
+          (Date.now() - Number(rdPreparation.startedAt)) / 1000
+        )
+      : 0;
+
+  const cacheEtaSeconds =
+    cacheSpeedBps > 0 &&
+    cacheSizeBytes > cacheDownloadedBytes
+      ? (cacheSizeBytes - cacheDownloadedBytes) / cacheSpeedBps
+      : 0;
+
+  const cacheStats = [
+    cacheSeeders > 0
+      ? `${cacheSeeders} active ${cacheSeeders === 1 ? "seeder" : "seeders"}`
+      : sourceReportedSeeders > 0
+        ? `RD 0 active · Comet found ${sourceReportedSeeders}`
+        : "RD 0 active seeders",
+    cacheSpeedBps > 0
+      ? formatCacheSpeed(cacheSpeedBps)
+      : "0 B/s",
+    cacheSizeBytes > 0
+      ? `${formatCacheBytes(cacheDownloadedBytes)} of ${formatCacheBytes(cacheSizeBytes)}`
+      : "",
+    cacheElapsedSeconds > 0
+      ? `${formatCacheDuration(cacheElapsedSeconds)} elapsed`
+      : "",
+    cacheEtaSeconds > 0 && cacheEtaSeconds < 86400
+      ? `~${formatCacheDuration(cacheEtaSeconds)} left`
+      : "",
+  ].filter(Boolean);
+
+  const cachePollWarning = String(
+    rdPreparation?.lastPollError || ""
+  ).trim();
+
+  const cacheHint =
+    cachePollWarning && rdPolling
+      ? "Real-Debrid's status check was interrupted. Media God is retrying the check without cancelling the torrent download."
+      : cachePhase.key === "finalizing" || cacheProgress >= 100
+      ? "Download is complete. Real-Debrid is preparing the playable link. Playback will begin automatically."
+      : cacheSeeders <= 0 &&
+          cacheSpeedBps <= 0 &&
+          cacheElapsedSeconds >= 30
+        ? sourceReportedSeeders > 0
+          ? `Comet found ${sourceReportedSeeders} seeder${sourceReportedSeeders === 1 ? "" : "s"}, but Real-Debrid currently reports no active peers. Media God will keep this source selected while it checks.`
+          : "Real-Debrid reports no active seeders. Media God will keep this source selected rather than silently switching torrents."
+        : cacheSpeedBps <= 0 &&
+            cacheProgress > 0 &&
+            cacheElapsedSeconds >= 30
+          ? "Download is paused right now. Media God will keep checking automatically."
+          : "Playback will start automatically as soon as Real-Debrid reports the file ready.";
+
+  const copyPreparationReport = async () => {
+    const safe = (value) => String(value || "")
+      .replace(/(?:https?:\/\/|magnet:)\S+/gi, "[redacted]")
+      .replace(/(?:bearer|token|api[_-]?key|password)\s*[:= ]\s*\S+/gi, "[redacted]")
+      .replace(/[\r\n]+/g, " ").slice(0, 120);
+    const report = [
+      "Media God preparation report",
+      `Title: ${safe(source?.title || source?.rdTitle)}`,
+      `Source: ${safe(activeSourceLabel)}`,
+      `Stage: ${safe(cacheStatusLabel)}`,
+      `RD status: ${safe(rdPreparation?.status)}`,
+      `Progress: ${cacheProgress}%`,
+      `Elapsed: ${Math.round(cacheElapsedSeconds)} seconds`,
+      `Seeders: ${cacheSeeders}; speed: ${cacheSpeedBps} B/s`,
+      `Failure: ${safe(rdPreparation?.stallReason || rdError || rdPreparation?.lastPollError)}`,
+      `Device: ${getPlaybackDeviceProfile().nativeFireTv ? "Fire TV" : getPlaybackDeviceProfile().nativeAndroidMobile ? "Android app" : "browser"}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(report);
+      window.alert("Preparation report copied. Paste it into your message.");
+    } catch {
+      window.prompt("Copy this preparation report:", report);
+    }
+  };
+
+  const playerUiStatus =
+    displayedError && !busy
+      ? "Source issue"
+      : noPlayableVodSources && !busy
+        ? "No sources"
+      : activeIsUnverifiedHostedEpisode && !busy
+        ? "Unverified"
+      : rdResolving
+        ? "Resolving"
+        : rdPolling || rdTorrentId
+          ? rdPreparation
+            ? cachePhase.key === "downloading"
+              ? `${cacheStatusLabel} ${cacheProgress}%`
+              : cacheStatusLabel
+            : "Preparing"
+          : fireTvNativeSelectorMode
+            ? "Choose source"
+            : useNativePlayback
+              ? "Opening player"
+              : vodStartupNotice
+                ? "Connecting"
+              : rdOverride || isDirectFile
+                ? "Ready"
+                : isLive
+                  ? "Live"
+                  : "Loading";
+
+  const audioUnlockRequired =
+    Boolean(audioUnlockUrl) &&
+    audioUnlockUrl === String(rdOverride?.src || activeUrl || "");
+
+  return (
+    <div
+      data-mg-player-root="true"
+      data-mg-player-fullscreen={isAppFullscreen ? "true" : "false"}
+      data-mg-native-selector-mode={fireTvNativeSelectorMode ? "true" : "false"}
+      data-mg-rd-cache-source={sourceNeedsCaching(active) ? "true" : "false"}
+      className="fixed inset-0 z-[2147483646] bg-black/95 flex items-center justify-center p-2 sm:p-3 md:p-4"
+      onClick={
+        returnFromPlayback
+      }
+    >
+      <div
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[1600px] flex-col sm:max-h-[calc(100dvh-1.5rem)]"
+        onClick={(
+          event
+        ) =>
+          event.stopPropagation()
+        }
+      >
+        <div data-mg-player-topbar="true" className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/70 px-2.5 py-2 shadow-lg backdrop-blur-md sm:px-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              type="button"
+              data-mg-player-exit="true"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                returnFromPlayback();
+              }}
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-semibold text-white transition hover:border-mg-green/40 hover:bg-white/10 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-mg-green sm:min-h-10"
+              aria-label="Exit player"
+              title="Exit player"
+            >
+              <ArrowLeft className="w-4 h-4" />
+
+              <span>
+                Exit
+              </span>
+            </button>
+
+            {isLive && (
+              <span className="flex items-center gap-1 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+
+                LIVE
+              </span>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-sm font-semibold text-white sm:text-base">
+                {
+                  source?.title
+                }
+              </h3>
+
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-white/45 sm:text-[11px]">
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold ${
+                    playerUiStatus === "Source issue" || playerUiStatus === "No sources"
+                      ? "bg-red-500/15 text-red-300"
+                      : playerUiStatus === "Ready" || playerUiStatus === "Live"
+                        ? "bg-mg-green/15 text-mg-green"
+                        : "bg-white/10 text-white/60"
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    playerUiStatus === "Source issue" || playerUiStatus === "No sources"
+                      ? "bg-red-400"
+                      : playerUiStatus === "Ready" || playerUiStatus === "Live"
+                        ? "bg-mg-green"
+                        : "bg-white/50"
+                  }`} />
+                  {playerUiStatus}
+                </span>
+
+                {isLive && activeLiveSourcePosition.total > 0 ? (
+                  <span className="shrink-0 font-semibold text-white/60">
+                    Source {activeLiveSourcePosition.current || 1}/{activeLiveSourcePosition.total}
+                  </span>
+                ) : selectableSourceCount > 0 ? (
+                  <span className="shrink-0">
+                    {selectableSourceCount} {selectableSourceCount === 1 ? "source" : "sources"}
+                  </span>
+                ) : null}
+
+                {failedSourceCount > 0 && (
+                  <span className="shrink-0 text-white/30">
+                    · {failedSourceCount} unavailable
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {!isLive && (
+              <button
+                type="button"
+                data-mg-open-in-player-sources="true"
+                onClick={() => setInPlayerSourcesOpen(true)}
+                aria-label="Sources inside player"
+                title="Choose another video source without leaving the player"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-mg-green/40 bg-mg-green/10 px-3 text-xs font-bold text-mg-green hover:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green sm:min-h-10"
+              >
+                <ListVideo className="h-4 w-4" />
+                Sources
+              </button>
+            )}
+            {(isDirectFile ||
+              isLive ||
+              rdOverride) && (
+                <button
+                  type="button"
+                  onClick={
+                    goFullscreen
+                  }
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 transition hover:border-mg-green/30 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-mg-green sm:min-h-10 sm:min-w-10"
+                  aria-label="Fullscreen"
+                  title="Fullscreen"
+                >
+                  <Maximize className="w-4 h-4" />
+                </button>
+            )}
+
+                <CastButton
+                  url={
+                    rdOverride?.src ||
+                    active?.src ||
+                    active?.url
+                  }
+                  title={
+                    source?.title
+                  }
+                  poster={
+                    source?.poster
+                  }
+                  contentType={
+                    active?.mimeType ||
+                    (active?.format === "hls"
+                      ? "application/x-mpegURL"
+                      : active?.format === "dash"
+                        ? "application/dash+xml"
+                        : active?.format || (isLive ? "application/x-mpegURL" : "video/mp4"))
+                  }
+                  source={{ ...active, live: isLive, headers: rdOverride?.headers || active?.headers || active?.requestHeaders || {}, drm: rdOverride?.drm || active?.drm }}
+                  media={{
+                    tmdbId: source?.tmdbId || source?.tmdb_id || source?.id || "",
+                    title: source?.rdTitle || source?.title || "",
+                    poster: source?.poster || "",
+                    year: source?.rdYear || source?.year || "",
+                    mediaType: isLive ? "live" : playbackMediaType === "tv" ? "tv" : "movie",
+                    season: source?.rdSeason || source?.season || 0,
+                    episode: source?.rdEpisode || source?.episode || 0,
+                    startTime: Number(videoRef.current?.currentTime || source?.startTime || 0),
+                  }}
+                />
+          </div>
+        </div>
+
+        {inPlayerSourcesOpen && (
+          <InPlayerSourceDrawer
+            title={source?.title}
+            entries={selectableSourceEntries}
+            activeIdx={activeIdx}
+            failedSources={failedSources}
+            sourceLabel={sourceCacheStateLabel}
+            discovering={["searching", "fast-start", "verifying", "preparing"].includes(String(source?.sourceDiagnostics?.phase || ""))}
+            onClose={() => setInPlayerSourcesOpen(false)}
+            onSelect={(index, item) => {
+              selectSource(index, item);
+              setInPlayerSourcesOpen(false);
+            }}
+          />
+        )}
+
+        <div
+          data-mg-player-stage="true"
+          ref={
+            stageRef
+          }
+          onDoubleClick={(event) => {
+            if (!isDesktopFullscreenBrowser()) return;
+            event.preventDefault();
+            event.stopPropagation();
+            goFullscreen();
+          }}
+          className="relative flex min-h-[34vh] w-full items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl sm:min-h-0 sm:aspect-video"
+        >
+          {busy ? (
+            <div className="flex w-full max-w-lg flex-col items-center gap-3 p-5 text-center sm:p-6">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-mg-green/20 bg-mg-green/5">
+                <Loader2 className="h-7 w-7 animate-spin text-mg-green" />
+              </div>
+
+              <div className="w-full">
+                <p className="text-sm font-semibold text-white/85 sm:text-base">
+                  {rdPreparation ? "Caching to Real-Debrid" : playerUiStatus}
+                </p>
+
+                <p className="mt-1 line-clamp-2 text-xs text-white/45">
+                  {activeSourceLabel || "Finding the best available source…"}
+                </p>
+
+                {rdPreparation && (
+                  <div className="mt-4 w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold text-white/75">
+                        Step {cachePhase.step}/5 · {cacheStatusLabel}
+                      </span>
+
+                      <span className="text-sm font-bold tabular-nums text-mg-green">
+                        {cacheProgress}%
+                      </span>
+                    </div>
+
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-mg-green transition-[width] duration-500"
+                        style={{ width: `${cacheProgress}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/50 sm:text-xs">
+                      {cacheStats.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+
+                    <p className="mt-2 text-[10px] leading-relaxed text-white/40 sm:text-xs">
+                      {cacheHint}
+                    </p>
+                    <button type="button" onClick={copyPreparationReport}
+                      className="mt-3 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white">
+                      Copy preparation report
+                    </button>
+                    {selectableSourceCount > 1 && (
+                      <button type="button" onClick={showSourceChooser}
+                        className="ml-2 mt-3 rounded-lg border border-mg-green/60 px-3 py-2 text-xs font-bold text-mg-green">
+                        Choose another source
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : displayedError ? (
+            <div className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-400/20 bg-amber-400/10 text-amber-200">
+                <VolumeX className="h-6 w-6" />
+              </div>
+
+              <p className="text-sm font-semibold text-white/85 sm:text-base">
+                {sourceNeedsCaching(active)
+                  ? "This torrent needs attention"
+                  : "This source is unavailable"}
+              </p>
+
+              <p className="max-w-md text-xs leading-relaxed text-white/50 sm:text-sm">
+                {friendlyError || "Media God rejected an error/status stream instead of playing it as video."}
+              </p>
+
+              {selectableSourceCount > 1 && (
+                <button type="button" onClick={showSourceChooser}
+                  className="min-h-11 rounded-lg bg-mg-green px-4 text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-white/70">
+                  Choose another source ({selectableSourceCount})
+                </button>
+              )}
+
+              {vidSrcEmbedUrl && (
+                <button
+                  type="button"
+                  data-mg-vidsrc-open="true"
+                  onClick={() => onOpenVidSrc?.(playbackMediaType)}
+                  className="min-h-11 rounded-lg border border-white/20 px-4 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-mg-green"
+                >
+                  Try VidSrc web player
+                </button>
+              )}
+
+              {isRdSource && (
+                <button
+                  type="button"
+                  onClick={retryResolution}
+                  className="mt-1 flex min-h-10 items-center gap-2 rounded-lg bg-mg-green px-4 text-xs font-bold text-black hover:bg-mg-green-dim focus:outline-none focus:ring-2 focus:ring-white/70"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry this source
+                </button>
+              )}
+              {rdPreparation?.stallReason === "playable_link_timeout" && (
+                <button type="button" onClick={copyPreparationReport}
+                  className="rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white">
+                  Copy preparation report
+                </button>
+              )}
+            </div>
+          ) : noReadyEpisodeFile ? (
+            <div
+              role="status"
+              data-mg-no-ready-episode-file="true"
+              className="flex max-w-lg flex-col items-center gap-3 p-6 text-center"
+            >
+              <p className="text-base font-semibold text-white">
+                No ready episode torrent found
+              </p>
+              <p className="max-w-md text-sm leading-relaxed text-white/65">
+                Media God found {Number(source?.sourceDiagnostics?.cacheCandidateCount || 0)} torrent candidates,
+                but verified cached files: 0. An uncached torrent must finish caching before
+                VLC can play it. Media God will not repeatedly submit it during HTTP 429 errors.
+              </p>
+              {selectableSourceCount > 0 && (
+                <button type="button" onClick={showSourceChooser}
+                  className="min-h-11 rounded-lg bg-mg-green px-4 text-sm font-bold text-black">
+                  Choose a torrent to cache ({selectableSourceCount} sources)
+                </button>
+              )}
+              {vidSrcEmbedUrl && (
+                <button type="button" data-mg-vidsrc-open="true"
+                  onClick={() => onOpenVidSrc?.(playbackMediaType)}
+                  className="min-h-11 rounded-lg border border-white/20 px-4 text-sm font-semibold text-white">
+                  Try VidSrc web player
+                </button>
+              )}
+            </div>
+          ) : noPlayableVodSources ? (
+            <div
+              role="alert"
+              data-mg-no-playback-sources="true"
+              className="flex max-w-lg flex-col items-center gap-3 p-6 text-center"
+            >
+              <p className="text-sm font-semibold text-white/85 sm:text-base">
+                No video sources found
+              </p>
+              <p className="max-w-md text-xs leading-relaxed text-white/50 sm:text-sm">
+                {emptyPlaybackSourceMessage(source?.sourceDiagnostics)}
+              </p>
+              {vidSrcEmbedUrl && (
+                <button
+                  type="button"
+                  data-mg-vidsrc-open="true"
+                  onClick={() => onOpenVidSrc?.(playbackMediaType)}
+                  className="min-h-11 rounded-lg border border-white/20 px-4 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-mg-green"
+                >
+                  Try VidSrc web player
+                </button>
+              )}
+            </div>
+          ) : activeIsUnverifiedHostedEpisode ? (
+            <div
+              role="alert"
+              data-mg-unverified-episode-source="true"
+              className="flex max-w-lg flex-col items-center gap-3 p-6 text-center"
+            >
+              <p className="text-sm font-semibold text-white/85 sm:text-base">
+                This episode source is not verified
+              </p>
+              <p className="max-w-md text-xs leading-relaxed text-white/50 sm:text-sm">
+                MediaFusion may return a playable “Stream not found” error clip.
+                Media God will not autoplay it as the episode. Other sources
+                remain available in Sources.
+              </p>
+              <button
+                type="button"
+                onClick={showSourceChooser}
+                className="min-h-11 rounded-lg border border-white/20 px-4 text-sm font-semibold text-white"
+              >
+                Check available sources
+              </button>
+            </div>
+          ) : fireTvNativeSelectorMode ? (
+            <div
+              data-mg-native-fire-tv-selector="true"
+              className="flex flex-col items-center gap-3 p-6 text-center"
+            >
+              <Tv className="h-9 w-9 text-mg-green" />
+
+              <p className="text-white/85 text-sm font-semibold">
+                Native playback paused
+              </p>
+
+              <p className="max-w-md text-white/50 text-xs">
+                Resume to return to the Fire TV player. Source selection is now available inside the native player.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setNativeFallbackUrl("");
+                  setForceNativePlayback(true);
+                }}
+                className="mt-1 min-h-10 rounded-lg bg-mg-green px-4 text-xs font-bold text-black focus:outline-none focus:ring-2 focus:ring-white/70"
+              >
+                Resume native playback
+              </button>
+            </div>
+          ) : useNativePlayback ? (
+            <div
+              data-mg-native-fire-tv-player="true"
+              className="flex flex-col items-center gap-3 p-6 text-center"
+            >
+              <Loader2 className="w-8 h-8 text-mg-green animate-spin" />
+
+              <p className="text-white/80 text-sm font-semibold">
+                Opening native player…
+              </p>
+
+              <p className="max-w-md text-white/45 text-xs">
+                Media God is handing this stream to the Android native video engine.
+              </p>
+            </div>
+          ) : rdOverride ? (
+            <>
+              <LiveVideo
+                key={
+                  rdOverride.src
+                }
+                ref={
+                  videoRef
+                }
+                showCastButton={false}
+                src={
+                  rdOverride.src
+                }
+                sourceLabel={
+                  rdOverride?.label ||
+                  active?.label ||
+                  "Real-Debrid Stream"
+                }
+                isLive={isLive}
+                allowMutedAutoplay={isLive}
+                requireEnglishAudio={playbackMediaType === "tv"}
+                onAutoplayBlocked={() => setAudioUnlockUrl(String(rdOverride?.src || activeUrl))}
+                headers={
+                  rdOverride?.headers ||
+                  active?.headers ||
+                  active?.requestHeaders ||
+                  {}
+                }
+                drm={rdOverride?.drm || active?.drm || null}
+                poster={
+                  source?.poster
+                }
+                controls={
+                  false
+                }
+                subtitles={
+                  Array.isArray(active?.subtitles)
+                    ? active.subtitles
+                    : []
+                }
+                subtitlesEnabled={
+                  trackPreferences.subtitlesEnabled
+                }
+                preferredSubtitleLanguage={
+                  trackPreferences.subtitleLanguage
+                }
+                preferredAudioLanguage={
+                  playbackMediaType === "tv" ? "en" : trackPreferences.audioLanguage
+                }
+                onLoadedMetadata={
+                  handleLoadedMetadata
+                }
+                onTimeUpdate={
+                  handleTimeUpdate
+                }
+                onError={
+                  handleRdPlaybackError
+                }
+                className={isLive ? "absolute inset-0 h-full w-full flex-none object-contain bg-black" : "absolute inset-0 h-full w-full flex-none object-contain bg-black"}
+              />
+
+              <PlayerControls
+                key={
+                  rdOverride.src
+                }
+                videoRef={
+                  videoRef
+                }
+                stageRef={
+                  stageRef
+                }
+                isLive={
+                  isLive
+                }
+                mediaType={playbackMediaType}
+                onFullscreen={
+                  goFullscreen
+                }
+                isAppFullscreen={
+                  isAppFullscreen
+                }
+                onBack={
+                  returnFromPlayback
+                }
+                title={
+                  source?.title ||
+                  ""
+                }
+                sources={
+                  sourcesForSelector
+                }
+                activeIdx={
+                  activeIdx
+                }
+                failedSources={
+                  failedSources
+                }
+                onSelectSource={
+                  selectSource
+                }
+                onNoSound={
+                  handleNoSound
+                }
+              />
+            </>
+          ) : !isLive && (isYoutube || isProvider || active?.type === "external") ? (
+            <div className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
+              <p className="text-sm font-semibold text-white/85 sm:text-base">
+                This link opens a website instead of a video
+              </p>
+              <p className="max-w-md text-xs leading-relaxed text-white/50 sm:text-sm">
+                Choose another movie or episode source above to keep playback in Media God.
+              </p>
+            </div>
+          ) : isYoutube ? (
+            <iframe
+              src={
+                active.src
+              }
+              title={
+                source?.title ||
+                "Video"
+              }
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          ) : isProvider ? (
+            <div
+              data-mg-embedded-remote-player="true"
+              className="absolute inset-0"
+            >
+              <iframe
+                data-mg-embed-iframe="true"
+                src={active.src}
+                title={source?.title || "Provider"}
+                className="h-full w-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+              {isLive && <OnlyFlixRemotePointer />}
+            </div>
+          ) : isDirectFile ? (
+            <>
+              <LiveVideo
+                ref={
+                  liveVideoRef
+                }
+                showCastButton={false}
+                key={
+                  active.src
+                }
+                src={
+                  active.src
+                }
+                sourceLabel={
+                  active?.format ||
+                  active?.mimeType ||
+                  active?.label ||
+                  "Direct Stream"
+                }
+                isLive={isLive}
+                allowMutedAutoplay={isLive}
+                requireEnglishAudio={playbackMediaType === "tv"}
+                onAutoplayBlocked={() => setAudioUnlockUrl(String(activeUrl))}
+                headers={active?.headers || active?.requestHeaders || {}}
+                drm={active?.drm || null}
+                poster={
+                  source?.poster
+                }
+                controls={
+                  false
+                }
+                subtitles={
+                  Array.isArray(active?.subtitles)
+                    ? active.subtitles
+                    : []
+                }
+                subtitlesEnabled={
+                  trackPreferences.subtitlesEnabled
+                }
+                preferredSubtitleLanguage={
+                  trackPreferences.subtitleLanguage
+                }
+                preferredAudioLanguage={
+                  playbackMediaType === "tv" ? "en" : trackPreferences.audioLanguage
+                }
+                className={isLive ? "absolute inset-0 h-full w-full flex-none object-contain bg-black" : "absolute inset-0 h-full w-full flex-none object-contain bg-black"}
+                onLoadedMetadata={
+                  handleLoadedMetadata
+                }
+                onTimeUpdate={
+                  handleTimeUpdate
+                }
+                onError={
+                  handleDirectPlaybackError
+                }
+              />
+
+              <PlayerControls
+                key={
+                  active.src
+                }
+                videoRef={
+                  liveVideoRef
+                }
+                stageRef={
+                  stageRef
+                }
+                isLive={
+                  isLive
+                }
+                mediaType={playbackMediaType}
+                onFullscreen={
+                  goFullscreen
+                }
+                isAppFullscreen={
+                  isAppFullscreen
+                }
+                onBack={
+                  returnFromPlayback
+                }
+                title={
+                  source?.title ||
+                  ""
+                }
+                sources={
+                  sourcesForSelector
+                }
+                activeIdx={
+                  activeIdx
+                }
+                failedSources={
+                  failedSources
+                }
+                onSelectSource={
+                  selectSource
+                }
+                onNoSound={
+                  handleNoSound
+                }
+              />
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3 p-6 text-center">
+              <Loader2 className="w-8 h-8 text-mg-green animate-spin" />
+              {isRdSource && (
+                <button type="button" onClick={retryResolution} className="flex items-center gap-2 px-3 py-2 rounded-md bg-mg-green text-black text-xs font-semibold hover:bg-mg-green-dim">
+                  <RefreshCw className="w-3.5 h-3.5" /> Try Again
+                </button>
+              )}
+              <button type="button" onClick={returnFromPlayback} className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-white/10 text-white text-xs font-semibold hover:bg-white/20">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to sources
+              </button>
+            </div>
+          )}
+
+          {isLive && liveRecoveryNotice?.message && (
+            <div
+              data-mg-live-recovery-notice="true"
+              className={`pointer-events-none absolute left-1/2 top-3 z-50 max-w-[calc(100%-1.5rem)] -translate-x-1/2 rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold shadow-xl backdrop-blur-md sm:text-xs ${
+                liveRecoveryNotice.kind === "error"
+                  ? "border-red-400/30 bg-red-950/85 text-red-100"
+                  : liveRecoveryNotice.kind === "connected"
+                    ? "border-mg-green/30 bg-black/80 text-mg-green"
+                    : "border-amber-300/25 bg-black/85 text-amber-100"
+              }`}
+            >
+              {liveRecoveryNotice.message}
+            </div>
+          )}
+
+          {audioUnlockRequired && !busy && !displayedError && (
+              <div
+                data-mg-audio-unlock="true"
+                className="absolute inset-0 z-[70] flex items-center justify-center bg-black/65 p-4 text-center"
+              >
+                <div className="rounded-xl border border-white/20 bg-black/85 p-4 text-white shadow-xl">
+                  <p className="mb-3 text-sm">Your browser needs a tap to play this video with sound.</p>
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-lg bg-mg-green px-4 font-semibold text-black"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const video = stageRef.current?.querySelector("video");
+                      if (!(video instanceof HTMLVideoElement)) return;
+                      video.muted = false;
+                      video.volume = 1;
+                      delete video.dataset.mgAutoplayMuted;
+                      video.play().then(() => setAudioUnlockUrl("")).catch(() => {});
+                    }}
+                  >
+                    Play with sound
+                  </button>
+                </div>
+              </div>
+            )}
+
+          {isAppFullscreen &&
+            !rdOverride &&
+            !isDirectFile && (
+              <div data-mg-player-loading-topbar="true" className="absolute left-0 right-0 top-0 z-40 flex items-center gap-2 bg-gradient-to-b from-black/90 via-black/55 to-transparent px-3 pb-8 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5">
+                <button
+                  type="button"
+                  onClick={
+                    returnFromPlayback
+                  }
+                  className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-mg-green/50"
+                  aria-label="Back to main menu"
+                  title="Back to main menu"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+
+                  <span className="hidden sm:inline">
+                    Back
+                  </span>
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-white sm:text-base">
+                    {
+                      source?.title
+                    }
+                  </p>
+                </div>
+
+                {selectableSourceCount >
+                  1 && (
+                  <div className="relative min-w-[9rem] max-w-[46vw] sm:min-w-[14rem] sm:max-w-sm">
+                    <select
+                      value={
+                        visibleSourceSelectorValue
+                      }
+                      onPointerDown={pinSourceSelector}
+                      onKeyDown={(event) => {
+                        if (selectorOpenKey(event)) pinSourceSelector();
+                      }}
+                      onBlur={releaseSourceSelector}
+                      onChange={(
+                        event
+                      ) => {
+                        const value = event.target.value;
+                        const selectedEntry = visibleSourceSelectorEntries.find(
+                          (entry) => String(entry.index) === String(value)
+                        );
+                        releaseSourceSelector();
+                        selectSource(value, selectedEntry?.item || null);
+                      }}
+                      className="min-h-11 w-full appearance-none rounded-lg border border-white/15 bg-black/60 py-2.5 pl-3 pr-9 text-xs font-medium text-white outline-none backdrop-blur transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
+                      aria-label="Choose source or quality while loading"
+                    >
+                      {visibleSourceSelectorValue === "" ? (
+                        <option value="" disabled>
+                          Preparing uncached sources…
+                        </option>
+                      ) : null}
+                      {visibleSourceSelectorEntries.map(
+                        ({
+                          item,
+                          index,
+                        }) => {
+                          const failed =
+                            failedSources.has(
+                              index
+                            );
+
+                          const rawLabel = sourceDisplayLabel(item, index);
+                          const label = sourceCacheStateLabel(item, index);
+
+                          return (
+                            <option
+                              key={`loading-${index}-${rawLabel}`}
+                              value={
+                                index
+                              }
+                              data-mg-source-label={rawLabel}
+                            >
+                              {failed
+                                ? "Unavailable • "
+                                : index === activeIdx
+                                  ? "Selected • "
+                                  : ""}
+
+                              {
+                                label
+                              }
+                            </option>
+                          );
+                        }
+                      )}
+                    </select>
+
+                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-white/60">
+                      <Tv className="h-4 w-4" />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={
+                    goFullscreen
+                  }
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/45 text-white backdrop-blur hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-mg-green/50"
+                  aria-label="Exit fullscreen"
+                  title="Exit fullscreen"
+                >
+                  <Minimize className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+        </div>
+
+        <div
+          data-mg-player-options-panel="true"
+          className="mt-2 flex flex-wrap items-end gap-2 rounded-xl border border-white/10 bg-black/65 p-2.5 shadow-lg backdrop-blur-md sm:p-3"
+        >
+          <div className="flex w-full min-w-0 items-center justify-between gap-2 border-b border-white/5 pb-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-mg-green/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-mg-green">
+                <span className="h-1.5 w-1.5 rounded-full bg-mg-green" />
+                Current
+              </span>
+
+              <span
+                className="truncate text-xs font-medium text-white/75 sm:text-sm"
+                title={sourceDisplayLabel(active, activeIdx)}
+              >
+                {activeSourceLabel}
+              </span>
+            </div>
+
+            {selectableSourceCount > 0 && (
+              <span className="shrink-0 text-[10px] font-medium text-white/35 sm:text-xs">
+                {selectableSourceCount} {selectableSourceCount === 1 ? "source" : "sources"}
+              </span>
+            )}
+          </div>
+
+          <div
+            data-mg-source-health="true"
+            className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/5 bg-white/[0.025] px-2.5 py-1.5 text-[10px] font-medium text-white/40 sm:text-xs"
+          >
+            <span className="font-bold uppercase tracking-[0.12em] text-mg-green/80">
+              Source health
+            </span>
+            <span>
+              Found {Math.max(Number(source?.sourceDiagnostics?.combinedSourceCount || 0), sources.length)}
+            </span>
+            <span>
+              Torrent candidates {Number(source?.sourceDiagnostics?.cacheCandidateCount || 0)}
+            </span>
+            <span>
+              Verified cached {Number(source?.sourceDiagnostics?.cachedSourceCount || 0)}
+            </span>
+            {Number(source?.sourceDiagnostics?.pendingSourceCount || 0) > 0 && (
+              <span>
+                Pending/uncached {Number(source?.sourceDiagnostics?.pendingSourceCount || 0)}
+              </span>
+            )}
+            <span>
+              Shown {selectableSourceCount}
+            </span>
+            {smartUpgradeNotice?.available === true && (
+              <span className="rounded-full bg-mg-green/10 px-2 py-0.5 font-bold text-mg-green">
+                New version available
+                {smartUpgradeNotice?.next?.releaseTierLabel &&
+                smartUpgradeNotice.next.releaseTierLabel !== "Unknown"
+                  ? ` • ${smartUpgradeNotice.next.releaseTierLabel}`
+                  : ""}
+                {Number(smartUpgradeNotice?.next?.resolution || 0) > 0
+                  ? ` • ${smartUpgradeNotice.next.resolution}p`
+                  : ""}
+              </span>
+            )}
+          </div>
+
+          {availableSortOptions.length > 1 && (
+            <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                {playbackMediaType === "tv"
+                  ? "Available quality"
+                  : "Available filters / editions"}
+              </span>
+
+              <select
+                value={sourceSortMode}
+                onChange={(event) => {
+                  const next = writeSourceSortMode(event.target.value);
+                  setSourceSortMode(next);
+
+                  if (next === "4k" || next === "1080p") {
+                    const match = sortSourceEntries(
+                      sourcesForSelector,
+                      next,
+                      { mediaType: playbackMediaType }
+                    ).find(
+                      (entry) => {
+                        if (!sourceIsUserSelectable(entry.item)) return false;
+
+                        return next === "4k"
+                          ? Number(entry.resolution || 0) >= 2000
+                          : Number(entry.resolution || 0) >= 900 &&
+                              Number(entry.resolution || 0) < 2000;
+                      }
+                    );
+
+                    if (match && match.index !== activeIdx) {
+                      selectSource(match.index, match.item);
+                    }
+                  } else if (next.startsWith("edition:")) {
+                    const edition = next.slice("edition:".length);
+                    const match = sortSourceEntries(
+                      sourcesForSelector,
+                      next,
+                      { mediaType: playbackMediaType }
+                    ).find(
+                      (entry) =>
+                        sourceIsUserSelectable(entry.item) &&
+                        sourceHasEdition(entry.item, edition)
+                    );
+
+                    if (match && match.index !== activeIdx) {
+                      selectSource(match.index, match.item);
+                    }
+                  }
+                }}
+                className="min-h-11 w-full rounded-lg border border-white/10 bg-mg-card px-2 py-2.5 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
+                aria-label="Sort playback sources"
+              >
+                {availableSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {selectableSourceCount > 0 && (
+            <label className="min-w-[12rem] flex-1 basis-[16rem]">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                All sources / quality
+              </span>
+
+              <div className="relative">
+                <select
+                  ref={sourceChooserRef}
+                  value={visibleSourceSelectorValue}
+                  onPointerDown={pinSourceSelector}
+                  onKeyDown={(event) => {
+                    if (selectorOpenKey(event)) pinSourceSelector();
+                  }}
+                  onBlur={releaseSourceSelector}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const selectedEntry = visibleSourceSelectorEntries.find(
+                      (entry) => String(entry.index) === String(value)
+                    );
+                    releaseSourceSelector();
+                    selectSource(value, selectedEntry?.item || null);
+                  }}
+                  className="min-h-11 w-full appearance-none rounded-lg border border-white/10 bg-mg-card py-2.5 pl-3 pr-9 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
+                  aria-label="Choose from all playback sources"
+                >
+                  {visibleSourceSelectorValue === "" ? (
+                    <option value="" disabled>
+                      Preparing uncached sources…
+                    </option>
+                  ) : null}
+                  {visibleSourceSelectorEntries.map(
+                    ({ item, index }) => {
+                      const failed =
+                        failedSources.has(
+                          index
+                        );
+
+                      const rawLabel = sourceDisplayLabel(item, index);
+                      const label = sourceCacheStateLabel(item, index);
+
+                      return (
+                        <option
+                          key={`${index}-${rawLabel}`}
+                          value={index}
+                          data-mg-source-label={rawLabel}
+                        >
+                          {failed
+                            ? "Unavailable • "
+                            : index === activeIdx
+                              ? "Selected • "
+                              : ""}
+                          {label}
+                        </option>
+                      );
+                    }
+                  )}
+                </select>
+
+                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-white/50">
+                  <Tv className="h-4 w-4" />
+                </div>
+              </div>
+            </label>
+          )}
+
+          {vidSrcEmbedUrl && (
+            <button
+              type="button"
+              data-mg-vidsrc-open="true"
+              onClick={() => onOpenVidSrc?.(playbackMediaType)}
+              className="min-h-11 shrink-0 rounded-lg border border-white/20 bg-mg-card px-3 text-xs font-semibold text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-mg-green"
+              aria-label="Open VidSrc web player"
+            >
+              VidSrc web player
+            </button>
+          )}
+
+          {rdOverride &&
+            visibleRdFileSelectorFiles.length > 1 && (
+              <label className="min-w-[12rem] flex-1 basis-[18rem]">
+                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                  Torrent file
+                </span>
+
+                <select
+                  value={visibleRdFileSelectorValue}
+                  onPointerDown={pinRdFileSelector}
+                  onKeyDown={(event) => {
+                    if (selectorOpenKey(event)) pinRdFileSelector();
+                  }}
+                  onBlur={releaseRdFileSelector}
+                  onChange={(event) => {
+                    const file =
+                      visibleRdFileSelectorFiles.find(
+                        (item) =>
+                          String(item.id) ===
+                          String(
+                            event.target.value
+                          )
+                      );
+
+                    releaseRdFileSelector();
+
+                    if (file) {
+                      pickFile(file);
+                    }
+                  }}
+                  disabled={fileSwitching}
+                  className="min-h-11 w-full rounded-lg border border-white/10 bg-mg-card px-3 py-2.5 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 disabled:opacity-60 sm:min-h-10 sm:text-sm"
+                  aria-label="Choose torrent file"
+                >
+                  {visibleRdFileSelectorFiles.map(
+                    (file, index) => (
+                      <option
+                        key={file.id}
+                        value={file.id}
+                        title={file.path || ""}
+                      >
+                        {torrentFileLabel(file, index)}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+            )}
+
+          {nativePlaybackAvailable &&
+            !isLive &&
+            !forceNativePlayback && (
+              <button
+                type="button"
+                data-mg-native-decoder="true"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setForceNativePlayback(true);
+                }}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-mg-card px-3 text-xs font-semibold text-white transition hover:border-mg-green/40 hover:bg-white/10 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-mg-green sm:min-h-10"
+                aria-label="Open native decoder"
+                title="Use Media3 for difficult video or audio codecs"
+              >
+                <Tv className="h-4 w-4" />
+                <span>Native decoder</span>
+              </button>
+            )}
+
+          <button
+            type="button"
+            data-mg-no-sound="true"
+            disabled={busy || fileSwitching}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleNoSound();
+            }}
+            className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-mg-green disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-10 ${
+              audioNeedsAttention
+                ? "border-amber-400/35 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
+                : "border-white/10 bg-mg-card text-white/75 hover:border-mg-green/35 hover:bg-white/10 hover:text-white"
+            }`}
+            aria-label="No sound"
+            title="Report no sound and try another audio track or source"
+          >
+            <VolumeX className="h-4 w-4" />
+            <span className="hidden sm:inline">Fix audio</span>
+          </button>
+
+        </div>
+
+        {displayedError &&
+          !busy && (
+            <div
+              className="mt-2 flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2.5 shadow-sm"
+              title={displayedError}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full bg-amber-300/80" />
+
+              <p className="min-w-0 flex-1 text-xs font-medium leading-relaxed text-amber-100/80 sm:text-sm">
+                {
+                  friendlyError
+                }
+              </p>
+
+              {isLive &&
+                (source?.officialUrl || active?.officialUrl) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openExternalPlaybackFallback(
+                        source?.officialUrl || active?.officialUrl
+                      )
+                    }
+                    className="min-h-9 shrink-0 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                  >
+                    {source?.officialLabel || active?.officialLabel || "Open official"}
+                  </button>
+                )}
+
+              {isRdSource && (
+                <button
+                  type="button"
+                  onClick={
+                    retryResolution
+                  }
+                  className="min-h-9 shrink-0 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-mg-green"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+
+        {vodStartupNotice && !displayedError && !busy &&
+          (rdOverride || isDirectFile) && (
+            <div
+              data-mg-vod-startup-notice="true"
+              role="status"
+              className="mt-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2.5 text-xs font-medium leading-relaxed text-amber-100/80 sm:text-sm"
+            >
+              {vodStartupNotice}
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}

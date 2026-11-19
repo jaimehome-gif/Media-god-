@@ -1,0 +1,814 @@
+import { readFile } from "node:fs/promises";
+
+const root = process.cwd();
+
+const read = async (path) => readFile(`${root}/${path}`, "utf8");
+
+const expect = (condition, message) => {
+  if (!condition) {
+    throw new Error(message);
+  }
+};
+
+const home = await read("src/pages/Home.jsx");
+const navbar = await read("src/components/mg/Navbar.jsx");
+const searchDialog = await read("src/components/mg/SearchDialog.jsx");
+const roadmap = await read("src/components/mg/RoadmapView.jsx");
+const movies = await read("src/components/mg/MoviesView.jsx");
+const tvShows = await read("src/components/mg/TvShowsView.jsx");
+const homeDashboard = await read("src/components/mg/HomeDashboard.jsx");
+const newEpisodesRow = await read("src/components/mg/NewEpisodesRow.jsx");
+const streamingServiceRows = await read("src/components/mg/StreamingServiceRows.jsx");
+const streamingServices = await read("src/components/mg/streamingServices.js");
+const streamingRegion = await read("src/components/mg/streamingRegion.js");
+const countryOptions = await read("src/components/mg/countryOptions.js");
+const tmdbBackend = await read("base44/functions/getTmdbMovies/entry.ts");
+const watchlist = await read("src/components/mg/WatchlistView.jsx");
+const watchlistSchema = await read("base44/entities/WatchlistItem.jsonc");
+const favorites = await read("src/components/mg/FavoritesView.jsx");
+const downloads = await read("src/components/mg/DebridDashboard.jsx");
+const rdLibrary = await read("src/components/mg/RdLibraryView.jsx");
+const realDebridBackend = await read("base44/functions/realDebrid/entry.ts");
+const addonStreamsBackend = await read("base44/functions/fetchAddonStreams/entry.ts");
+const addonBrowserFallback = await read("src/components/mg/addonBrowserFallback.js");
+const videoPlayer = await read("src/components/mg/VideoPlayer.jsx");
+const continueWatchingRow = await read("src/components/mg/ContinueWatchingRow.jsx");
+const continueWatchingAssist = await read("src/components/mg/ContinueWatchingAssist.jsx");
+const realDebridCacheEngine = await read("src/components/mg/realDebridCacheEngine.js");
+const mediaCompatibility = await read("src/components/mg/mediaCompatibility.js");
+const playbackReliabilityCore = await read("src/components/mg/playbackReliability.js");
+const playerProvider = await read("src/components/mg/PlayerProvider.jsx");
+const coreMediaPlayerProvider = await read("src/components/mg/MediaPlayerProvider.jsx");
+const watchlistActions = await read("src/components/mg/watchlistActions.js");
+const mediaPlayerControls = await read("src/components/mg/MediaPlayerControls.jsx");
+const mediaGodV2Assist = await read("src/components/mg/MediaGodV2Assist.jsx");
+const seamlessNextCss = await read("src/fire-tv-seamless-next.css");
+const nativeFireTvBridge = await read("src/components/mg/nativeFireTvBridge.js");
+const fireTvMainActivity = await read(
+  "firetv-android/app/src/main/java/com/mediagod/firetv/MainActivity.kt"
+);
+const fireTvPlayerActivity = await read(
+  "firetv-android/app/src/main/java/com/mediagod/firetv/PlayerActivity.kt"
+);
+const fireTvAppUpdater = await read(
+  "firetv-android/app/src/main/java/com/mediagod/firetv/AppUpdater.kt"
+);
+const androidPlayerActivity = await read(
+  "android-mobile/app/src/main/java/com/mediagod/mobile/PlayerActivity.kt"
+);
+const addons = await read("src/components/mg/AddonsView.jsx");
+const watchParty = await read("src/components/mg/WatchPartyView.jsx");
+const watchPartySchema = await read("base44/entities/WatchParty.jsonc");
+const watchPartyPresenceSchema = await read("base44/entities/WatchPartyPresence.jsonc");
+const remoteTv = await read("src/components/mg/PlayerQrRemote.jsx");
+const remotePhone = await read("src/pages/PlayerRemote.jsx");
+const remoteSchema = await read("base44/entities/PlayerRemoteSession.jsonc");
+const liveTv = await read("src/components/mg/LiveTVView.jsx");
+const evSports = await read("src/components/mg/evSportsScraper.js");
+const freeTv = await read("src/components/mg/freeTvPlaylist.js");
+const sourcesView = await read("src/components/mg/SourcesView.jsx");
+const mediaCard = await read("src/components/mg/MediaCard.jsx");
+const moviesView = await read("src/components/mg/MoviesView.jsx");
+const tvShowsView = await read("src/components/mg/TvShowsView.jsx");
+const reeznCardAction = await read("src/components/mg/ReeznCardAction.jsx");
+const settings = await read("src/components/mg/SettingsView.jsx");
+const uxPreferences = await read("src/components/mg/uxPreferences.js");
+const settingsTools = await read("src/components/mg/SettingsTools.jsx");
+const fireTvUpdateNotice = await read("src/components/mg/FireTvAppUpdateNotice.jsx");
+const androidUpdateNotice = await read("src/components/mg/AndroidMobileAppUpdateNotice.jsx");
+const nativeReleaseInfo = await read("src/components/mg/nativeReleaseInfo.js");
+const pageErrorBoundary = await read("src/components/mg/PageErrorBoundary.jsx");
+const fireTvRelease = await read("public/firetv-update.json");
+const fireTvReleaseData = JSON.parse(fireTvRelease);
+const fireTvGradle = await read("firetv-android/app/build.gradle.kts");
+const fireTvGradleVersionCode = Number(fireTvGradle.match(/versionCode\s*=\s*(\d+)/)?.[1] || 0);
+const fireTvGradleVersionName = fireTvGradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1] || "";
+
+expect(
+  freeTv.includes('id: "reezn-tv"') &&
+    freeTv.includes('name: "Reezn"') &&
+    freeTv.includes('connectionType: "external-app"') &&
+    settingsTools.includes('id: "reezn"') &&
+    settingsTools.includes('target: "sources"') &&
+    settingsTools.includes('featured: true') &&
+    sourcesView.includes('Reezn & external providers') &&
+    sourcesView.includes('source.id === "reezn-tv"') &&
+    sourcesView.includes('Featured') &&
+    sourcesView.includes('source.connectionType === "sky-sport-now"') &&
+    sourcesView.includes('source.actionLabel || "Open source"'),
+  "Reezn is prominent in Settings and remains isolated from Sky login controls"
+);
+
+
+expect(
+  reeznCardAction.includes('data-mg-reezn-card-action="true"') &&
+    reeznCardAction.includes('aria-label="Open Reezn"') &&
+    mediaCard.includes('<ReeznCardAction') &&
+    moviesView.includes('<ReeznCardAction') &&
+    tvShowsView.includes('<ReeznCardAction'),
+  "Reezn action remains visible on home, movie and TV browse cards"
+);
+
+const requiredViews = [
+  ["home", "Home"],
+  ["movies", "Movies"],
+  ["tv", "TV Shows"],
+  ["live", "Live TV"],
+  ["watchparty", "Watch Party"],
+  ["watchlist", "Watchlist"],
+  ["favorites", "Favorites"],
+  ["downloads", "Downloads"],
+  ["addons", "Addons"],
+  ["settings", "Settings"],
+];
+
+for (const [id, label] of requiredViews) {
+  expect(
+    navbar.includes(`id: "${id}"`) && navbar.includes(`label: "${label}"`),
+    `Navbar is missing ${label}`
+  );
+
+  expect(
+    home.includes(`"${id}" && (`),
+    `Home does not render the ${label} view`
+  );
+}
+
+for (const hiddenLabel of [
+  "RD Library",
+  "Phone Remote",
+  "Sources",
+  "Roadmap",
+  "Updates",
+]) {
+  expect(
+    !navbar.includes(`label: "${hiddenLabel}"`),
+    `Consumer navbar should not expose ${hiddenLabel}`
+  );
+}
+
+expect(
+  navbar.includes("onSearch") &&
+    navbar.includes("Sign out") &&
+    navbar.includes("Exit app"),
+  "Consumer navbar lost Search, sign-out or native exit controls"
+);
+expect(
+  searchDialog.includes("getFreeTvChannels") &&
+    searchDialog.includes('media_type: "live"') &&
+    searchDialog.includes("liveChannelSearchText") &&
+    searchDialog.includes("Search movies, TV shows, live TV channels") &&
+    home.includes('rawItem?.media_type === "live"'),
+  "Global search no longer includes Live TV channels"
+);
+
+expect(
+  home.includes("<RoadmapView onBack={goBack} />"),
+  "Roadmap is not wired into the global back routine"
+);
+
+for (const [source, name] of [
+  [watchlist, "Watchlist"],
+  [favorites, "Favorites"],
+]) {
+  expect(source.includes(`placeholder="Search ${name}…"`), `${name} search is missing`);
+  expect(source.includes(`aria-label="Sort ${name}"`), `${name} sorting is missing`);
+  expect(source.includes('value="title"'), `${name} title sorting is missing`);
+  expect(source.includes('value="year"'), `${name} year sorting is missing`);
+  expect(source.includes("clearAll"), `${name} bulk clear action is missing`);
+  expect(source.includes("Clear all"), `${name} bulk clear control is missing`);
+  expect(source.includes("DetailModal"), `${name} TV details fallback is missing`);
+  expect(
+    source.includes('mediaType="tv"') ||
+      (name === "Watchlist" && source.includes("mediaType={resolveCatalogMediaType(selected)}")),
+    `${name} media type must open the correct film or TV details`
+  );
+  expect(source.includes("mediaFilter"), `${name} movie/TV filter is missing`);
+  expect(source.includes('["tv", "TV Shows"]'), `${name} TV filter control is missing`);
+}
+expect(
+  watchlistSchema.includes('"media_type"'),
+  "Watchlist schema no longer stores movie/TV media type"
+);
+expect(
+  movies.includes("addToWatchlistItem(movie)") &&
+    watchlistActions.includes("WatchlistItem.filter") &&
+    watchlistActions.includes('reason: "duplicate"') &&
+    watchlistActions.includes("media_type: mediaType"),
+  "Movies can create duplicate Watchlist rows again"
+);
+expect(
+  roadmap.includes("onClick={() => onBack?.()}"),
+  "Roadmap back button is not interactive"
+);
+
+expect(
+  roadmap.includes('category: "tv_upcoming"') &&
+    roadmap.includes('media_type: "tv"') &&
+    roadmap.includes('setInterval(() => load(true), 30 * 60 * 1000)') &&
+    roadmap.includes('window.addEventListener("focus", refreshWhenVisible)') &&
+    roadmap.includes('document.addEventListener("visibilitychange", refreshWhenVisible)') &&
+    roadmap.includes('time < today') &&
+    roadmap.includes('TV shows (') &&
+    tmdbBackend.includes("first_air_date.gte") &&
+    tmdbBackend.includes("first_air_date.asc") &&
+    tmdbBackend.includes("category === 'upcoming' || category === 'tv_upcoming'"),
+  "Release calendar must discover upcoming TV, exclude dates before today, and refresh automatically"
+);
+
+expect(
+  homeDashboard.includes("StreamingServiceRows") &&
+    homeDashboard.includes('mediaType="mixed"') &&
+    homeDashboard.includes("onOpenTvService"),
+  "Home streaming-service rows are missing"
+);
+
+expect(
+  homeDashboard.includes("<HeroSlider") &&
+    homeDashboard.includes('(uxPreferences.homeOrder || []).filter((id) => id !== "continue-watching").map((sectionId) =>') &&
+    homeDashboard.includes('data-mg-home-second="continue-watching"') &&
+    homeDashboard.indexOf('<HeroSlider') < homeDashboard.indexOf('data-mg-home-second="continue-watching"') &&
+    !homeDashboard.includes('!hiddenHomeSections.has("continue-watching")') &&
+    homeDashboard.includes("renderHomeSection(sectionId)") &&
+    homeDashboard.includes('case "new-films"') &&
+    homeDashboard.includes('case "new-tv"') &&
+    homeDashboard.includes('case "new-episodes"') &&
+    homeDashboard.includes('case "because-you-watched"') &&
+    homeDashboard.includes('case "favorites"') &&
+    homeDashboard.includes('case "trending"') &&
+    homeDashboard.includes('case "popular-movies"') &&
+    homeDashboard.includes('case "popular-tv"') &&
+    homeDashboard.includes('case "top-rated"') &&
+    uxPreferences.includes("HOME_SECONDARY_SECTIONS") &&
+    uxPreferences.includes("homeHidden") &&
+    uxPreferences.includes("homeOrder") &&
+    settings.includes("Home screen") &&
+    settings.includes("moveHome") &&
+    settings.includes("toggleHomeSection"),
+  "Home no longer keeps featured first, Continue Watching second, and the remaining configurable rows."
+);
+expect(
+  newEpisodesRow.includes('data-mg-new-episodes-row="true"') &&
+    newEpisodesRow.includes("New & Upcoming Episodes from Your Shows") &&
+    newEpisodesRow.includes('media_type: "tv"') &&
+    newEpisodesRow.includes("season_number") &&
+    newEpisodesRow.includes("rdSeason") &&
+    newEpisodesRow.includes("rdEpisode") &&
+    newEpisodesRow.includes("disabled={upcoming}"),
+  "New/upcoming episodes row is missing watched-show discovery or safe episode playback"
+);
+expect(
+  tvShows.includes("StreamingServiceRows") &&
+    tvShows.includes("activeProvider") &&
+    tvShows.includes("provider_pages: 10") &&
+    tvShows.includes("TV by Streaming Service"),
+  "TV streaming-service rows or full provider catalogue are missing"
+);
+expect(
+  streamingServiceRows.includes("provider_catalog") &&
+    streamingServiceRows.includes("provider_ids") &&
+    streamingServiceRows.includes("See all TV"),
+  "Streaming-service row loader is incomplete"
+);
+expect(
+  streamingServices.includes("Netflix") &&
+    streamingServices.includes("Prime Video") &&
+    streamingServices.includes("BBC iPlayer") &&
+    streamingServices.includes("JioHotstar") &&
+    streamingServices.includes("Stan") &&
+    streamingServices.includes("Crave") &&
+    streamingServices.includes("Showmax") &&
+    streamingServices.includes("provider-${providerId}"),
+  "Global or regional streaming services are missing from the provider catalogue"
+);
+expect(
+  streamingRegion.includes("detectStreamingRegion") &&
+    streamingRegion.includes("navigator.languages") &&
+    streamingRegion.includes("detectStreamingTimezone") &&
+    streamingRegion.includes("getStreamingRegionOverride") &&
+    streamingRegion.includes("setStreamingRegionOverride") &&
+    streamingServiceRows.includes("activeRegionName") &&
+    !streamingServiceRows.includes("available from each service in the UK") &&
+    tvShows.includes("streamingRegion") &&
+    tvShows.includes("COUNTRY_OPTIONS") &&
+    tvShows.includes("setStreamingRegionOverride(nextCountry)") &&
+    homeDashboard.includes("streamingTimezone"),
+  "Streaming-service discovery is no longer region/timezone aware"
+);
+expect(
+  countryOptions.includes("ISO_ALPHA_2_CODES") &&
+    countryOptions.includes('label: "All Countries"') &&
+    countryOptions.includes("Intl.DisplayNames") &&
+    movies.includes("COUNTRY_OPTIONS") &&
+    movies.includes("setStreamingRegionOverride(nextCountry)") &&
+    movies.includes('country: ""') &&
+    tvShows.includes('country: ""'),
+  "Global country dropdown no longer drives movies/TV viewing region independently of title origin"
+);
+expect(
+  movies.includes("include_global_releases: true") &&
+    homeDashboard.includes("include_global_releases: true") &&
+    roadmap.includes("include_global_releases: true") &&
+    roadmap.includes("Released elsewhere") &&
+    tmdbBackend.includes("includeGlobalReleases") &&
+    tmdbBackend.includes("globalReleasedDates") &&
+    tmdbBackend.includes("/movie/now_playing?") &&
+    tmdbBackend.includes("global_release_available"),
+  "Worldwide cinema-release overlay is missing or local cinema dates can hide already-released titles again"
+);
+expect(
+  tmdbBackend.includes("provider_catalog") &&
+    tmdbBackend.includes("with_watch_providers") &&
+    tmdbBackend.includes("with_watch_monetization_types") &&
+    tmdbBackend.includes("watch_region") &&
+    tmdbBackend.includes("requestRegion(req)") &&
+    !tmdbBackend.includes("data?.results?.GB ||"),
+  "TMDB provider discovery support is missing"
+);
+expect(
+  home.includes("tvProviderRequest") &&
+    home.includes("openTvStreamingService") &&
+    home.includes("handleTvProviderChange"),
+  "Streaming-service navigation between Home and TV is missing"
+);
+
+for (const marker of [
+  'data-mg-downloads-view="true"',
+  '["active", "Active"]',
+  '["ready", "Ready"]',
+  '["errors", "Errors"]',
+  '["all", "All"]',
+  'skipAddonLookup: true',
+  'skipRdLookup: true',
+  "retryFailed",
+  "retryAllErrors",
+  'action: "retry_torrent"',
+  "clearReady",
+  "Clear completed",
+  "Retry errors",
+  "formatEta",
+]) {
+  expect(downloads.includes(marker), `Downloads regression marker missing: ${marker}`);
+}
+
+for (const marker of [
+  'data-mg-rd-library-view="true"',
+  'useState("ready")',
+  'placeholder="Search your Real-Debrid library…"',
+  'skipAddonLookup: true',
+  'skipRdLookup: true',
+  "timerRef",
+  "retryFailed",
+  "retryAllErrors",
+  "clearReady",
+  "Clear completed",
+  "Retry errors",
+  "formatEta",
+]) {
+  expect(rdLibrary.includes(marker), `RD Library regression marker missing: ${marker}`);
+}
+
+for (const marker of [
+  'action === "retry_torrent"',
+  "original_filename:",
+  "hash:",
+  "seeders:",
+  "speed:",
+  "added:",
+  'stream.error_code === "RD_TORRENT_INFO_FAILED"',
+  'status: "preparing"',
+  'warning: stream.error',
+  "torrentSelectionMetadataPending(info)",
+  "metadata_pending: true",
+]) {
+  expect(
+    realDebridBackend.includes(marker),
+    `Real-Debrid download metadata regression marker missing: ${marker}`
+  );
+}
+
+for (const [source, label] of [
+  [addonStreamsBackend, "server addon lookup"],
+  [addonBrowserFallback, "browser addon fallback"],
+]) {
+  expect(
+    source.includes("effectiveTrackers") &&
+      source.includes("PUBLIC_FALLBACK_TRACKERS") &&
+      source.includes('torrentMetadataSource') &&
+      source.includes('"public_fallback"') &&
+      source.includes("cometPlaybackUrl") &&
+      source.includes('providedTrackers.length > 0 ? "rd_magnet" : "comet_uncached"'),
+    `Uncached Comet fallback routing is missing from ${label}`
+  );
+  expect(
+    !source.includes('reason: "comet_uncached_missing_torrent_metadata"'),
+    `Opaque Comet uncached rows can still be discarded by ${label}`
+  );
+}
+expect(
+  addonStreamsBackend.includes("uncachedRowsMissingTorrentSources"),
+  "Comet Torrent Mode metadata recovery no longer targets incomplete uncached rows"
+);
+expect(
+  videoPlayer.includes("chooseDebridResolutionStrategy") &&
+    videoPlayer.includes("debridTorrentHasMetadata") &&
+    videoPlayer.includes("const hasTorrentTrackers = debridTorrentHasMetadata") &&
+    videoPlayer.includes("const hasAuthoritativeTorrentMetadata =") &&
+    videoPlayer.includes('active?.torrentMetadataSource !== "public_fallback"') &&
+    videoPlayer.includes('resolutionStrategy === "comet_uncached" &&') &&
+    videoPlayer.includes("!hasAuthoritativeTorrentMetadata"),
+  "Uncached sources can no longer distinguish exact torrent metadata from synthetic public fallback trackers"
+);
+expect(
+  playerProvider.includes('window.addEventListener(\n      "mg:native-playback-ended"') &&
+    playerProvider.includes("advanceToNext(false);") &&
+    videoPlayer.includes('reason === "ended"') &&
+    videoPlayer.includes('new CustomEvent("mg:native-playback-ended"'),
+  "Native Android/Fire TV episode completion no longer feeds the TV auto-next pipeline"
+);
+expect(
+  mediaPlayerControls.includes("const scheduleHide = (delay = 2400) =>") &&
+    mediaPlayerControls.includes("scheduleHide(2400);") &&
+    mediaPlayerControls.includes("revealControls(2600);") &&
+    mediaPlayerControls.includes("scheduleHide(isLive ? 1800 : 2800)") &&
+    !mediaPlayerControls.includes("selectPinsControls") &&
+    videoPlayer.includes("isLive={\n                  isLive\n                }") &&
+    fireTvPlayerActivity.includes("controllerShowTimeoutMs = 2500") &&
+    fireTvPlayerActivity.includes("sourceSpinner.postDelayed(hideSourceSelectorRunnable, 2500L)") &&
+    fireTvPlayerActivity.includes("hideControllerNow()") &&
+    androidPlayerActivity.includes("controllerShowTimeoutMs = 2500"),
+  "Player buttons/source chrome, including Live TV and the Fire TV source selector, can remain pinned instead of auto-hiding after a couple of seconds"
+);
+expect(
+  fireTvPlayerActivity.includes('payload.optBoolean("canChooseEpisode", false)') &&
+    fireTvPlayerActivity.includes("choose season") &&
+    fireTvPlayerActivity.includes("choose episode") &&
+    fireTvPlayerActivity.includes('finishWithResult(reason = "episode")') &&
+    nativeFireTvBridge.includes("canChooseEpisode") &&
+    nativeFireTvBridge.includes("window.__MG_PLAYER_CONTEXT__") &&
+    fireTvMainActivity.includes("mg:choose-episode") &&
+    fireTvMainActivity.includes("__MG_NATIVE_EPISODE_PICKER_KEY__"),
+  "Fire TV TV playback no longer exposes the existing season/episode picker from the native source menu"
+);
+
+expect(
+  videoPlayer.includes("sourceSelectorPinnedRef = useRef(false)") &&
+    videoPlayer.includes("rdFileSelectorPinnedRef = useRef(false)") &&
+    videoPlayer.includes("Pause polling completely while the user is choosing a") &&
+    videoPlayer.includes("sourceSelectorPinnedAtRef = useRef(0)") &&
+    videoPlayer.includes("now - sourceSelectorPinnedAtRef.current > 12000") &&
+    videoPlayer.includes("expectedOnePercentMs") &&
+    videoPlayer.includes("activeDownloadFlatlineMs") &&
+    videoPlayer.includes("staleByOriginalRdAge") &&
+    videoPlayer.includes("expectedFullTransferMs") &&
+    videoPlayer.includes("repairedStuckTorrentHashesRef = useRef(new Set())") &&
+    videoPlayer.includes('action: "restart_playback_torrent"') &&
+    videoPlayer.includes("richestSourceMagnet(active)") &&
+    videoPlayer.includes("the exact torrent job was deleted and re-created") &&
+    realDebridBackend.includes('action === "restart_playback_torrent"') &&
+    realDebridBackend.includes("waitForTorrentDeletion") &&
+    realDebridBackend.includes("chooseSameHashTorrent") &&
+    realDebridBackend.includes("restart_verified: true") &&
+    realDebridBackend.includes("explicitProgressReset") &&
+    realDebridBackend.includes("rdPartialTorrentLooksStale") &&
+    realDebridBackend.includes("nominalFullTransferMs") &&
+    realDebridBackend.includes("progress < 100") &&
+    realDebridBackend.includes("RD_RESTART_RESUMED_STALE_PARTIAL") &&
+    realDebridBackend.includes("freshTorrentId === torrentId") &&
+    realDebridBackend.includes("deletionConfirmed = await waitForTorrentDeletion") &&
+    videoPlayer.includes("rd_partial_state_persisted") &&
+    videoPlayer.includes("clearedLegacyProgress") &&
+    videoPlayer.includes("resumedLegacyPartialChecks") &&
+    videoPlayer.includes("Trying a different torrent hash for the same title") &&
+    videoPlayer.includes("UNCACHED REAL-DEBRID CACHE ENGINE") &&
+    videoPlayer.includes("!sourceNeedsCaching(active)") &&
+    videoPlayer.includes("rdCacheEngineOwnsPollingRef.current") &&
+    videoPlayer.includes("runRealDebridCacheSession") &&
+    realDebridCacheEngine.includes("export async function runRealDebridCacheSession") &&
+    realDebridCacheEngine.includes("restartExactTorrent") &&
+    realDebridCacheEngine.includes("monitorTorrent") &&
+    realDebridCacheEngine.includes("RD_COMET_RESUMED_STALE_PARTIAL") &&
+    realDebridCacheEngine.includes("RD_CACHE_RESTART_STALLED") &&
+    realDebridCacheEngine.includes("directOwnAccountStrategy") &&
+    realDebridCacheEngine.includes("SAME Real-Debrid") &&
+    !realDebridCacheEngine.includes("const useCometStart =") &&
+    realDebridCacheEngine.includes("isPermanentRdHashFailure") &&
+    realDebridCacheEngine.includes("upstreamCode === 35") &&
+    realDebridCacheEngine.includes("upstreamCode === 28") &&
+    !videoPlayer.includes("buildAlternateEmbedFallback") &&
+    !videoPlayer.includes('data-mg-alternate-embed-fallback="true"') &&
+    videoPlayer.includes('!isLive && (isYoutube || isProvider || active?.type === "external")') &&
+    addonStreamsBackend.includes('action === "trigger_comet_playback"') &&
+    addonStreamsBackend.includes("configuredCometPlaybackTarget") &&
+    addonStreamsBackend.includes('redirect: "manual"') &&
+    realDebridBackend.includes("rdFailureDetails") &&
+    realDebridBackend.includes("upstream_error_code") &&
+    coreMediaPlayerProvider.includes("Manual source visibility has no readiness/cache eligibility gate") &&
+    coreMediaPlayerProvider.includes("const completePlaybackSourcePool") &&
+    coreMediaPlayerProvider.includes("sources: publishedSources") &&
+    videoPlayer.includes("const activeResolutionKey =") &&
+    videoPlayer.includes("stablePlaybackSourceKey(active, activeIdx)") &&
+    videoPlayer.includes("rdMediaContextKey") &&
+    /\[\s*rdTorrentId,\s*rdOverride,\s*(?:rdManualFileSelection,\s*)?\]\s*\n\s*\);/.test(videoPlayer) &&
+    !/\[\s*rdTorrentId,\s*rdOverride,\s*source,\s*\]\s*\n\s*\);/.test(videoPlayer) &&
+    videoPlayer.includes("Never move the active source underneath an open native selector") &&
+    !videoPlayer.includes("setSourceSelectorPinned(") &&
+    !videoPlayer.includes("setRdFileSelectorPinned(") &&
+    !videoPlayer.includes("onFocus={pinSourceSelector}") &&
+    !videoPlayer.includes("onFocus={pinRdFileSelector}") &&
+    videoPlayer.includes("const selectorOpenKey = (event) =>") &&
+    videoPlayer.includes("if (selectorOpenKey(event)) pinSourceSelector();") &&
+    videoPlayer.includes("if (selectorOpenKey(event)) pinRdFileSelector();") &&
+    videoPlayer.includes("const sourceSelectionKey = (item, fallbackIndex = -1) =>") &&
+    videoPlayer.includes("manualSelection: !selectingLive") &&
+    videoPlayer.includes("selectSource(value, selectedEntry?.item || null);") &&
+    videoPlayer.includes('data-mg-rd-cache-source={sourceNeedsCaching(active) ? "true" : "false"}'),
+  "Torrent/source selectors can replay, reject a refreshed manual choice, or Android can mistake a real uncached RD job for Comet placeholder media"
+);
+
+expect(
+  addons.includes("autoHealthCheckedRef") && addons.includes("testActiveAddons();"),
+  "Addons no longer run their automatic first-load health check"
+);
+
+for (const marker of [
+  'data-mg-watch-party-view="true"',
+  'data-mg-watch-party-room="true"',
+  "validWatchUrl",
+  "refreshRoom",
+  "endRoom",
+  "navigator.share",
+  "WatchPartyPresence",
+  "activeParticipants",
+  "Live presence",
+  "recoverRoom",
+  "messageEndRef",
+  "networkOnline",
+  'addEventListener("offline"',
+  "formatChatTime",
+  "transferHost",
+  "Make host",
+  "host_user_id",
+]) {
+  expect(watchParty.includes(marker), `Watch Party regression marker missing: ${marker}`);
+}
+expect(
+  watchPartyPresenceSchema.includes('"room_code"') &&
+    watchPartyPresenceSchema.includes('"user_id"') &&
+    watchPartyPresenceSchema.includes('"last_seen_at"'),
+  "Watch Party presence schema is incomplete"
+);
+expect(
+  watchPartySchema.includes('"host_user_id"') &&
+    watchPartySchema.includes('"data.host_user_id"'),
+  "Watch Party host transfer schema/RLS is incomplete"
+);
+
+for (const marker of [
+  "remote_last_seen_at",
+  "Phone connected",
+  "Waiting for phone",
+  "Copy remote link",
+  "shouldRenewExpiry",
+]) {
+  expect(remoteTv.includes(marker), `TV remote status regression marker missing: ${marker}`);
+}
+expect(
+  remotePhone.includes("heartbeatTimer") &&
+    remotePhone.includes("refreshTimer") &&
+    remotePhone.includes("remote_last_seen_at") &&
+    remotePhone.includes("Reconnecting…"),
+  "Phone remote heartbeat/reconnect fallback is missing"
+);
+expect(
+  remoteSchema.includes('"remote_last_seen_at"'),
+  "Phone remote heartbeat schema field is missing"
+);
+
+expect(
+  evSports.includes("EV_SPORTS_SOURCE_PRIORITY = 220"),
+  "EV SPORTS priority changed from the locked value"
+);
+expect(
+  liveTv.includes("const evSportsFallback = evSportsDestinationForChannel"),
+  "EV SPORTS matching fallback is no longer active"
+);
+expect(
+  liveTv.includes("!evSportsFallback && channelUsesAntSportsFallback(channel)"),
+  "ANT SPORTS can bypass the EV SPORTS priority rule"
+);
+expect(
+  freeTv.includes('sourceName === "BBC CDN Direct"') &&
+    freeTv.includes('sourceName === "ITVX Official"'),
+  "BBC/ITV locked primary rules are missing"
+);
+expect(
+  freeTv.includes('name: "IPTV-org Video Channels"') &&
+    freeTv.includes('category: "Video Channels"') &&
+    freeTv.includes('tags.add("Video Channels")') &&
+    liveTv.includes('"Video Channels": 0') &&
+    liveTv.includes('id: "Video Channels"') &&
+    liveTv.includes('label: "Video Channels"') &&
+    liveTv.includes('id: "Radio"') &&
+    liveTv.includes('label: "Radio"') &&
+    searchDialog.includes('(channel?.tags || []).join(" ")'),
+  "Live TV video channels are no longer separated from radio or searchable by their Video Channels tag"
+);
+
+expect(
+  settings.includes('data-mg-app-version="true"') &&
+    settings.includes("Installed:") &&
+    settings.includes("Check for update") &&
+    settings.includes('new CustomEvent("mg:check-fire-tv-update")') &&
+    settings.includes('new CustomEvent("mg:check-android-mobile-update")'),
+  "Settings no longer shows the installed Media God app version or manual update check"
+);
+expect(
+  nativeReleaseInfo.includes("raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/firetv-update.json") &&
+    nativeReleaseInfo.includes("raw.githubusercontent.com/leepeterss85-hue/media-god/main/public/android-mobile-update.json") &&
+    nativeReleaseInfo.includes("AbortController") &&
+    nativeReleaseInfo.includes("CACHE_TTL_MS") &&
+    fireTvUpdateNotice.includes('fetchLatestNativeRelease("fire-tv"') &&
+    fireTvUpdateNotice.includes('window.addEventListener("mg:check-fire-tv-update"') &&
+    androidUpdateNotice.includes('fetchLatestNativeRelease("android-mobile"') &&
+    androidUpdateNotice.includes('window.addEventListener("mg:check-android-mobile-update"') &&
+    settings.includes("checkRd(false, false)") &&
+    settings.includes("void Promise.all(["),
+  "Native update checks or Settings startup optimisation regressed"
+);
+expect(
+  home.includes("const WatchlistView = lazy(") &&
+    home.includes("const SettingsView = lazy(") &&
+    home.includes("<SafeDeferredView") &&
+    pageErrorBoundary.includes("Back to Home") &&
+    pageErrorBoundary.includes("Try again"),
+  "Deferred secondary screens or page-level crash recovery are missing"
+);
+expect(
+  fireTvAppUpdater.includes("currentSigners.isNotEmpty()") &&
+    fireTvAppUpdater.includes("archiveSigners.isNotEmpty()") &&
+    fireTvAppUpdater.includes("signingCertificateHistory") &&
+    fireTvAppUpdater.includes('"signature_migration"') &&
+    fireTvUpdateNotice.includes("legacySignatureCheckError") &&
+    fireTvUpdateNotice.includes("Do not uninstall Media God Fire TV."),
+  "Fire TV can again mistake unavailable signer metadata for a real signing-key migration"
+);
+
+expect(
+  fireTvAppUpdater.includes("Intent.ACTION_INSTALL_PACKAGE") &&
+    fireTvAppUpdater.includes("installerHandoffInProgress") &&
+    fireTvAppUpdater.includes("fun onHostPaused()") &&
+    fireTvAppUpdater.includes("activity.hasWindowFocus()") &&
+    fireTvAppUpdater.includes("activity.startActivity(compatibilityIntent)"),
+  "Fire TV updater no longer foregrounds the native installer immediately or lacks its compatibility fallback"
+);
+expect(
+  Number.isInteger(Number(fireTvReleaseData?.versionCode)) &&
+    Number(fireTvReleaseData.versionCode) > 0 &&
+    /^\d+\.\d+\.\d+$/.test(String(fireTvReleaseData?.versionName || "")) &&
+    String(fireTvReleaseData?.apkUrl || "").includes("Media-God-Fire-TV.apk") &&
+    String(fireTvReleaseData?.channel || "") === "fire-tv",
+  "Fire TV update manifest is missing valid version or APK metadata"
+);
+expect(
+  fireTvGradleVersionCode > 0 &&
+    fireTvGradleVersionName &&
+    Number(fireTvReleaseData.versionCode) === fireTvGradleVersionCode &&
+    String(fireTvReleaseData.versionName) === fireTvGradleVersionName,
+  `Fire TV update manifest ${fireTvReleaseData.versionName || "?"}/${fireTvReleaseData.versionCode || "?"} does not match APK ${fireTvGradleVersionName || "?"}/${fireTvGradleVersionCode || "?"}`
+);
+
+expect(
+  videoPlayer.includes("const activeRecoveryTraits = detectStreamTraits") &&
+    videoPlayer.includes("qualityRank: qualityRecoveryRank") &&
+    videoPlayer.includes("hdrRescueRank: hdrRecoveryRank"),
+  "quality-preserving 4K failover or HDR rescue ordering is missing"
+);
+expect(
+  videoPlayer.includes("__MG_NATIVE_PLAYBACK_DIAGNOSTICS__") &&
+    videoPlayer.includes("mg:native-playback-diagnostic"),
+  "native playback diagnostics history is missing"
+);
+expect(
+  mediaCompatibility.includes("nativePlayerAvailable\n      ? nativeFireTvCodecInfo()") &&
+    mediaCompatibility.includes("!deviceProfile?.nativePlayerAvailable || !codec"),
+  "phone/tablet native codec registry is not used for compatibility scoring"
+);
+expect(
+  playbackReliabilityCore.includes("android-mobile:") &&
+    playbackReliabilityCore.includes("hdr:dolby-vision") &&
+    playbackReliabilityCore.includes("bitdepth:10"),
+  "per-device mobile HDR/codec reliability learning is missing"
+);
+
+const playbackAdvancedSettings = await read("src/components/mg/PlaybackAdvancedSettings.jsx");
+const playbackPreferences = await read("src/components/mg/playbackPreferences.js");
+const playerAutomation = await read("src/components/mg/PlayerProvider.jsx");
+const episodeExperience = await read("src/components/mg/episodeExperience.js");
+
+for (const marker of [
+  "Audio output",
+  "Lip sync",
+  "Dialogue boost",
+  "Volume normalization",
+  "Network-aware 4K",
+  "Thermal / performance protection",
+  "Playback diagnostics",
+  "Clear playback learning",
+]) {
+  expect(playbackAdvancedSettings.includes(marker), `Advanced playback setting missing: ${marker}`);
+}
+expect(
+  playbackPreferences.includes('audioOutputMode: "auto"') &&
+    playbackPreferences.includes("lipSyncMs: 0") &&
+    playbackPreferences.includes("automaticNoSoundRecovery: false") &&
+    playbackPreferences.includes("networkAware4K: true") &&
+    playbackPreferences.includes("thermalProtection: true"),
+  "Advanced playback preference defaults are incomplete"
+);
+expect(
+  !playbackAdvancedSettings.includes("Automatic no-sound recovery") &&
+    playbackPreferences.includes("automaticNoSoundRecovery: false"),
+  "Automatic no-sound recovery must stay removed from Settings and disabled by default"
+);
+expect(
+  settings.includes("<PlaybackAdvancedSettings />"),
+  "Advanced playback settings are not mounted in Settings"
+);
+expect(
+  playerAutomation.includes("nextEpisodePreloadRef") &&
+    playerAutomation.includes("const preloadNextEpisode = useCallback(") &&
+    (
+      playerAutomation.includes("void preloadNextEpisode(reliableRequest);") ||
+      playerAutomation.includes("void preloadNextEpisode(request);")
+    ) &&
+    playerAutomation.includes('typeof core.prepare === "function"') &&
+    playerAutomation.includes("applyReliableVodPolicy") &&
+    playerAutomation.includes("preparedFresh") &&
+    playerAutomation.includes("freshEpisodePreparation(cachedPreload?.prepared)") &&
+    episodeExperience.includes('prepared.verifiedPlaybackPolicy === "strict" && prepared.verifiedPrepared !== true') &&
+    playerAutomation.includes("preparedEpisodeHandoff: true") &&
+    coreMediaPlayerProvider.includes("verifiedPrepared:") &&
+    coreMediaPlayerProvider.includes("phase: preparedEpisodeHandoff") &&
+    coreMediaPlayerProvider.includes("prepared-handoff"),
+  "Verified next-episode source pre-resolution or prepared-source handoff is no longer active"
+);
+expect(
+  mediaGodV2Assist.includes("createPortal(controls, portalTarget)") &&
+    mediaGodV2Assist.includes('data-mg-episode-assist="true"') &&
+    mediaGodV2Assist.includes("pointer-events-auto absolute bottom-20 right-4 z-[120]") &&
+    mediaGodV2Assist.includes("onPointerDown={(event) => runAction(event, skipIntro)}") &&
+    mediaGodV2Assist.includes("runClickFallback") &&
+    mediaGodV2Assist.includes("runKeyAction") &&
+    mediaGodV2Assist.includes("tabIndex={0}") &&
+    mediaGodV2Assist.includes("focus:ring-4"),
+  "Episode assist controls can fall behind the full-screen player or lose first-press click/focus handling"
+);
+expect(
+  fireTvPlayerActivity.includes("assistControlsWereVisible") &&
+    fireTvPlayerActivity.includes("configureAssistFocus") &&
+    fireTvPlayerActivity.includes("moveAssistFocus") &&
+    fireTvPlayerActivity.includes("focused.performClick()") &&
+    (fireTvPlayerActivity.includes("ColorStateList") ||
+      fireTvPlayerActivity.includes("StateListDrawable")) &&
+    seamlessNextCss.includes('content: "Loading next episode…";') &&
+    seamlessNextCss.includes("z-index: 2147483647"),
+  "Fire TV episode prompts can lose remote focus or expose the episode list during native handoff"
+);
+expect(
+  videoPlayer.includes("preservePosition: true") &&
+    videoPlayer.includes("trackPreferences.audioLanguage") &&
+    videoPlayer.includes("automaticNetworkScore") &&
+    videoPlayer.includes("hdrRecoveryScore"),
+  "Seamless/network/HDR automatic recovery markers are incomplete"
+);
+
+expect(
+  videoPlayer.includes('new CustomEvent("mg:continue-watching-source"') &&
+    continueWatchingAssist.includes('window.addEventListener("mg:continue-watching-source", onSelectedSource)') &&
+    continueWatchingAssist.includes("mgsource:") &&
+    continueWatchingRow.includes('savedUrl.startsWith("mgsource:")') &&
+    continueWatchingRow.includes("sources: [savedSource]") &&
+    continueWatchingRow.includes("await player.play({"),
+  "Continue Watching must persist the manually selected torrent identity and replay that source before OnlyFlix"
+);
+
+const watchmodeFeatures = await read("src/components/mg/WatchmodeFeatures.jsx");
+const watchmodeBackend = await read("base44/functions/getWatchmodeFeatures/entry.ts");
+const homeDashboardWatchmode = await read("src/components/mg/HomeDashboard.jsx");
+expect(
+  homeDashboardWatchmode.includes("<WatchmodeFeatures />") &&
+    watchmodeFeatures.includes("Live Sports & TV") &&
+    watchmodeFeatures.includes("Leaving Soon") &&
+    watchmodeFeatures.includes("Find awards"),
+  "Watchmode live events, leaving-soon and awards features are not mounted on Home"
+);
+expect(
+  watchmodeBackend.includes('secrets.get("WATCHMODE_API_KEY")') &&
+    watchmodeBackend.includes('action === "live-events"') &&
+    watchmodeBackend.includes('action === "leaving"') &&
+    watchmodeBackend.includes('action === "awards"'),
+  "Watchmode server integration is missing an authenticated feature endpoint"
+);
+
+console.log("ok UI/navigation/download/watch-party/locked-source/version-update structural checks complete");

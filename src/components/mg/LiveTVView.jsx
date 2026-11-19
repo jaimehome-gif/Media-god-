@@ -1,0 +1,4140 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Hls from "hls.js";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Film,
+  Globe2,
+  Loader2,
+  Pause,
+  Play,
+  Radio,
+  RefreshCw,
+  Search,
+  Square,
+  Trophy,
+  Tv,
+  Volume2,
+  Wifi,
+  Star,
+  Clock3,
+  LayoutGrid,
+  ListVideo,
+} from "lucide-react";
+
+import { getFreeTvChannels } from "@/components/mg/freeTvPlaylist";
+import { usePlayer } from "@/components/mg/PlayerProvider";
+import { base44 } from "@/api/base44Client";
+import { cn } from "@/lib/utils";
+import CastButton from "@/components/mg/CastButton";
+import {
+  readHiddenLiveTvChannels,
+  readHiddenLiveTvGroups,
+  readLiveTvChannelOrder,
+  readLiveTvGroupOrder,
+  writeHiddenLiveTvChannels,
+  writeHiddenLiveTvGroups,
+  writeLiveTvChannelOrder,
+  writeLiveTvGroupOrder,
+  movedOrder,
+} from "@/components/mg/liveTvPersonalisation";
+import {
+  liveTvUrlQuarantined,
+  liveTvUrlScore,
+  prewarmLiveTvUrl,
+  recordLiveTvPlaybackResult,
+} from "@/components/mg/liveTvPlaybackLearning";
+import {
+  isNativeFireTvPlayerAvailable,
+  openNativeFireTvExternalPlayer,
+  openNativeFireTvExternalUrl,
+} from "@/components/mg/nativeFireTvBridge";
+import { isAndroidMobileRuntime } from "@/components/mg/runtimePlatform";
+import { compareLiveTvRankRecords } from "@/components/mg/liveTvRankingCore";
+import { detectStreamingRegion, getStreamingRegionDetails } from "@/components/mg/streamingRegion";
+import { classifyLiveTvAccessIssue, liveTvGeoPreferenceTier } from "@/components/mg/liveTvRegionalAccess";
+
+const DEFAULT_FILTER = "All";
+const MAX_VISIBLE = 400;
+
+const countryDisplayName = (code) => {
+  const value = String(code || "").trim().toUpperCase();
+  if (!value) return "";
+
+  try {
+    if (typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+      const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const label = displayNames.of(value);
+      if (label && label !== value) return `${label} (${value})`;
+    }
+  } catch {
+    // Fall back to the ISO-style country code.
+  }
+
+  return value;
+};
+const GUIDE_VISIBLE = 120;
+const LIVE_TV_FAVOURITES_KEY = "mg_live_tv_favourites_v1";
+const LIVE_TV_RECENT_KEY = "mg_live_tv_recent_v1";
+const LIVE_TV_VIEW_STATE_KEY = "mg_live_tv_view_state_v1";
+const GUIDE_COUNTRY_PRIORITY = ["GB", "US", "IE", "CA", "AU", "NZ", "FR", "DE"];
+
+const normaliseSkySportNowChannel = (item) => ({
+  id: `sky-sport-now:${String(item?.eventId || item?.id || "")}`,
+  tvgId: `SkySportNow.${String(item?.channelId || item?.id || "NZ")}`,
+  name: String(item?.name || "Sky Sport Now").trim(),
+  rawName: String(item?.name || "Sky Sport Now").trim(),
+  logo: String(item?.logo || "").trim(),
+  country: "NZ",
+  group: "Sports",
+  sourceCategory: "Sports",
+  sourceName: "Sky Sport Now",
+  sourceNames: ["Sky Sport Now"],
+  sourcePriority: 150,
+  quality: 1080,
+  kind: "provider",
+  format: "dash",
+  browserPlayable: true,
+  geoBlocked: false,
+  geoRestricted: false,
+  tags: ["Sports", "New Zealand", "Sky Sport Now"],
+  alternatives: [],
+  provider: "sky-sport-now",
+  skySportNowEventId: String(item?.eventId || "").trim(),
+  skySportNowChannelId: String(item?.channelId || item?.id || "").trim(),
+  providerNow: item?.now || null,
+  providerNext: item?.next || null,
+  officialUrl: "https://www.skysportnow.co.nz/",
+  officialLabel: "Open Sky Sport Now",
+});
+
+const readStoredList = (key) => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value.filter(Boolean).map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeStoredList = (key, values) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(values));
+  } catch {
+    // Favourites and recent channels are a convenience only.
+  }
+};
+
+const readStoredLiveTvState = () => {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(LIVE_TV_VIEW_STATE_KEY) || "{}"
+    );
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeStoredLiveTvState = (patch) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const current = readStoredLiveTvState();
+    window.localStorage.setItem(
+      LIVE_TV_VIEW_STATE_KEY,
+      JSON.stringify({
+        ...current,
+        ...(patch || {}),
+        updatedAt: Date.now(),
+      })
+    );
+  } catch {
+    // Live TV position memory is a convenience only.
+  }
+};
+
+const safeStoredViewMode = (value) =>
+  ["channels", "guide", "sources"].includes(String(value || ""))
+    ? String(value)
+    : "channels";
+
+const BBC_RADIO_STREAMS = {
+  "bbc radio 1":
+    "https://as-hls-ww-live.akamaized.net/pool_01505109/live/ww/bbc_radio_one/bbc_radio_one.isml/bbc_radio_one-audio%3d320000.norewind.m3u8",
+  "bbc radio 1xtra":
+    "https://as-hls-ww-live.akamaized.net/pool_92079267/live/ww/bbc_1xtra/bbc_1xtra.isml/bbc_1xtra-audio%3d96000.norewind.m3u8",
+  "bbc radio 2":
+    "https://as-hls-ww-live.akamaized.net/pool_74208725/live/ww/bbc_radio_two/bbc_radio_two.isml/bbc_radio_two-audio%3d320000.norewind.m3u8",
+  "bbc radio 3":
+    "https://as-hls-ww-live.akamaized.net/pool_23461179/live/ww/bbc_radio_three/bbc_radio_three.isml/bbc_radio_three-audio%3d320000.norewind.m3u8",
+  "bbc radio 4":
+    "https://as-hls-ww-live.akamaized.net/pool_55057080/live/ww/bbc_radio_fourfm/bbc_radio_fourfm.isml/bbc_radio_fourfm-audio%3d320000.norewind.m3u8",
+  "bbc radio 4 extra":
+    "https://as-hls-ww-live.akamaized.net/pool_26173715/live/ww/bbc_radio_four_extra/bbc_radio_four_extra.isml/bbc_radio_four_extra-audio%3d96000.norewind.m3u8",
+  "bbc radio 5 live":
+    "https://as-hls-ww-live.akamaized.net/pool_89021708/live/ww/bbc_radio_five_live/bbc_radio_five_live.isml/bbc_radio_five_live-audio%3d320000.norewind.m3u8",
+  "bbc radio 5 sports extra":
+    "https://as-hls-uk-live.akamaized.net/pool_47700285/live/uk/bbc_radio_five_live_sports_extra/bbc_radio_five_live_sports_extra.isml/bbc_radio_five_live_sports_extra-audio%3d96000.norewind.m3u8",
+  "bbc radio 6 music":
+    "https://as-hls-ww-live.akamaized.net/pool_81827798/live/ww/bbc_6music/bbc_6music.isml/bbc_6music-audio%3d320000.norewind.m3u8",
+  "bbc asian network":
+    "https://as-hls-ww-live.akamaized.net/pool_22108647/live/ww/bbc_asian_network/bbc_asian_network.isml/bbc_asian_network-audio%3d96000.norewind.m3u8",
+  "bbc world service":
+    "https://as-hls-ww-live.akamaized.net/pool_87948813/live/ww/bbc_world_service/bbc_world_service.isml/bbc_world_service-audio%3d96000.norewind.m3u8",
+};
+
+const RADIO_STREAM_OVERRIDES = {
+  ...BBC_RADIO_STREAMS,
+};
+
+const searchText = (value) => String(value || "").toLowerCase().trim();
+
+const normaliseStationName = (value) =>
+  searchText(value).replace(/\s+/g, " ").replace(/\s+(uk|hd|fhd)$/i, "").trim();
+
+/** @type {Array<[RegExp, string, string]>} */
+const OFFICIAL_LIVE_FALLBACKS = [
+  [/^bbc one\b/i, "https://www.bbc.co.uk/iplayer/live/bbcone", "Open BBC iPlayer"],
+  [/^bbc two\b/i, "https://www.bbc.co.uk/iplayer/live/bbctwo", "Open BBC iPlayer"],
+  [/^bbc three\b/i, "https://www.bbc.co.uk/iplayer/live/bbcthree", "Open BBC iPlayer"],
+  [/^bbc four\b/i, "https://www.bbc.co.uk/iplayer/live/bbcfour", "Open BBC iPlayer"],
+  [/^bbc news\b/i, "https://www.bbc.co.uk/iplayer/live/bbcnews", "Open BBC iPlayer"],
+  [/^bbc parliament\b/i, "https://www.bbc.co.uk/iplayer/live/bbcparliament", "Open BBC iPlayer"],
+  [/^cbbc\b/i, "https://www.bbc.co.uk/iplayer/live/cbbc", "Open BBC iPlayer"],
+  [/^cbeebies\b/i, "https://www.bbc.co.uk/iplayer/live/cbeebies", "Open BBC iPlayer"],
+  [/^bbc scotland\b/i, "https://www.bbc.co.uk/iplayer/live/bbcscotland", "Open BBC iPlayer"],
+  [/^bbc alba\b/i, "https://www.bbc.co.uk/iplayer/live/bbcalba", "Open BBC iPlayer"],
+  [/^itv\s*1\b/i, "https://www.itv.com/watch?channel=itv", "Open ITVX"],
+  [/^itv\s*2\b/i, "https://www.itv.com/watch?channel=itv2", "Open ITVX"],
+  [/^itv\s*3\b/i, "https://www.itv.com/watch?channel=itv3", "Open ITVX"],
+  [/^itv\s*4\b/i, "https://www.itv.com/watch?channel=itv4", "Open ITVX"],
+  [/^itv\s*be\b/i, "https://www.itv.com/watch?channel=itvbe", "Open ITVX"],
+  [/^channel\s*4\b/i, "https://www.channel4.com/now/c4", "Open Channel 4"],
+  [/^e4\b/i, "https://www.channel4.com/now/e4", "Open Channel 4"],
+  [/^(?:more4|film4)\b/i, "https://www.channel4.com/now", "Open Channel 4"],
+  [/^channel\s*5\b/i, "https://www.5.tv/", "Open 5"],
+  [/^5(?:usa|star|action|select)\b/i, "https://www.5.tv/", "Open 5"],
+  [/^sky mix\b/i, "https://www.sky.com/watch/channel/pick", "Open Sky Mix on Sky"],
+  [/^sky news\b/i, "https://news.sky.com/watch-live", "Open Sky News"],
+  [/^gb news\b/i, "https://www.gbnews.com/", "Open GB News"],
+  [/^(?:talk|talktv)\b/i, "https://talk.tv/play/talkradio?video=true", "Open Talk"],
+  [/^bloomberg\b/i, "https://www.bloomberg.com/live", "Open Bloomberg"],
+  [/^trt world\b/i, "https://www.trtworld.com/live/europe", "Open TRT World"],
+  [/^france 24\b/i, "https://www.france24.com/en/live", "Open France 24"],
+  [/^dw english\b/i, "https://www.dw.com/en/live-tv/channel-english", "Open DW"],
+  [/^al jazeera english\b/i, "https://www.aljazeera.com/live/", "Open Al Jazeera"],
+  [/^nhk world(?:-japan)?\b/i, "https://www3.nhk.or.jp/nhkworld/en/live/", "Open NHK World"],
+  [/^abc news live\b/i, "https://abcnews.com/Live", "Open ABC News Live"],
+  [/^cbs news\b/i, "https://www.cbsnews.com/live/", "Open CBS News"],
+  [/^nbc news now\b/i, "https://www.nbcnews.com/now", "Open NBC News NOW"],
+  [/^euronews\b/i, "https://www.euronews.com/live", "Open Euronews"],
+  [/^cgtn\b/i, "https://www.cgtn.com/tv", "Open CGTN"],
+  [/^arirang tv\b/i, "https://www.arirang.com/tv", "Open Arirang"],
+  [/^voa\b/i, "https://www.voanews.com/", "Open VOA"],
+  [/^greatest hits radio\b/i, "https://www.hellorayo.co.uk/greatest-hits/london", "Open Rayo"],
+];
+
+const officialLiveFallback = (channel) => {
+  const name = String(channel?.name || "").trim();
+  const matched = OFFICIAL_LIVE_FALLBACKS.find(([pattern]) => pattern.test(name));
+  const explicit = String(channel?.officialUrl || "").trim();
+  const url = /^https?:\/\//i.test(explicit) ? explicit : matched?.[1] || "";
+
+  if (!url) return null;
+
+  return {
+    url,
+    label: String(channel?.officialLabel || matched?.[2] || "Open official live service"),
+  };
+};
+
+const openOfficialLiveUrl = (url) => {
+  const target = String(url || "").trim();
+  if (!/^https?:\/\//i.test(target)) return false;
+
+  if (openNativeFireTvExternalUrl(target)) {
+    return true;
+  }
+
+  try {
+    const opened = window.open(target, "_blank", "noopener,noreferrer");
+    if (opened) return true;
+  } catch {
+    // Fall through to same-window navigation.
+  }
+
+  try {
+    window.location.assign(target);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const channelMemoryKey = (channel) =>
+  String(
+    channel?.tvgId ||
+      channel?.id ||
+      normaliseStationName(channel?.name) ||
+      "channel"
+  );
+
+const isRadioChannel = (channel) => {
+  const name = searchText(channel?.name);
+  const group = searchText(channel?.group);
+  const tags = channel?.tags || [];
+
+  return (
+    tags.includes("Radio") ||
+    /\bradio\b/.test(name) ||
+    /\bradio\b/.test(group) ||
+    /\bfm\b/.test(name) ||
+    name === "bbc asian network" ||
+    name === "bbc world service" ||
+    name.includes("greatest hits")
+  );
+};
+
+const isHlsUrl = (url) => /\.m3u8(?:[?#&]|$)/i.test(String(url || ""));
+const isRadioStreamUrl = (url) =>
+  isHlsUrl(url) || /\.(?:mp3|aac|m4a|ogg|opus)(?:[?#&]|$)/i.test(String(url || ""));
+
+const groupSort = (a, b) => {
+  const preferred = ["United Kingdom", "International", "United States", "Sports", "Movies"];
+  const ai = preferred.indexOf(a);
+  const bi = preferred.indexOf(b);
+
+  if (ai !== -1 || bi !== -1) {
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }
+
+  return String(a || "").localeCompare(String(b || ""));
+};
+
+const epgKeyForChannel = (channel, index = 0) =>
+  String(
+    channel?.id ||
+      channel?.tvgId ||
+      `${channel?.name || "channel"}-${index}`
+  );
+
+const epgCountryForChannel = (channel) => {
+  const explicit = String(channel?.country || "").trim().toUpperCase();
+  if (explicit === "UK") return "GB";
+  if (/^[A-Z]{2}$/.test(explicit)) return explicit;
+
+  const tvgId = String(channel?.tvgId || "").trim();
+  const suffix = tvgId.match(/\.([a-z]{2})(?:@.*)?$/i)?.[1]?.toUpperCase() || "";
+  if (suffix === "UK") return "GB";
+  return /^[A-Z]{2}$/.test(suffix) ? suffix : "";
+};
+
+const isUkChannel = (channel) =>
+  epgCountryForChannel(channel) === "GB" ||
+  (channel?.tags || []).includes("United Kingdom");
+
+const epgUniqueValues = (values, limit = 16) => {
+  const seen = new Set();
+  const result = [];
+
+  const add = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(add);
+      return;
+    }
+
+    const clean = String(value || "").trim();
+    const key = clean.toLowerCase();
+
+    if (!clean || seen.has(key) || result.length >= limit) return;
+
+    seen.add(key);
+    result.push(clean);
+  };
+
+  add(values);
+  return result;
+};
+
+const formatProgrammeTime = (value) => {
+  const date = new Date(value || 0);
+  if (!Number.isFinite(date.getTime())) return "";
+
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const programmeProgress = (programme, now = Date.now()) => {
+  if (!programme?.start || !programme?.stop) return 0;
+  const start = new Date(programme.start).getTime();
+  const stop = new Date(programme.stop).getTime();
+  if (!start || !stop || stop <= start) return 0;
+  return Math.max(0, Math.min(1, (now - start) / (stop - start)));
+};
+
+const qualityLabel = (channel) => {
+  const quality = Number(channel?.quality || 0);
+
+  if (quality >= 2160) return "4K";
+  if (quality >= 1080) return "1080p";
+  if (quality >= 720) return "HD";
+  if (quality >= 576) return "576p";
+  if (quality > 0) return "SD";
+
+  return "";
+};
+
+const antSportsKickoffLabel = (channel) => {
+  if (channel?.sourceId !== "antsports-live") return "";
+
+  const matchTime = Number(channel?.antsports?.matchTime || 0);
+  if (matchTime > 0) {
+    const date = new Date(matchTime * 1000);
+    if (Number.isFinite(date.getTime())) {
+      return date.toLocaleString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+  }
+
+  return String(
+    channel?.antsports?.timeHeader ||
+      channel?.antsports?.matchDate2 ||
+      channel?.antsports?.matchDate ||
+      ""
+  ).trim();
+};
+
+const normaliseEventMatchText = (value) =>
+  searchText(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const ANT_SPORTS_DIRECTORY_URL = "https://antsports.tv/us";
+
+const evSportsMatchName = (value) =>
+  normaliseStationName(value)
+    .replace(/\s+(?:4k|uhd)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const matchingEvSportsChannelForChannel = (channel, allChannels) => {
+  if (!channel) return null;
+  if (channel?.sourceId === "evsports-live") return channel;
+
+  const wanted = evSportsMatchName(channel?.name);
+  if (!wanted) return null;
+
+  return [...(allChannels || [])]
+    .filter(
+      (candidate) =>
+        candidate?.sourceId === "evsports-live" &&
+        evSportsMatchName(candidate?.name) === wanted &&
+        /^https?:\/\//i.test(
+          String(candidate?.officialUrl || candidate?.url || "").trim()
+        )
+    )
+    .sort(
+      (a, b) =>
+        Number(b?.sourcePriority || 0) - Number(a?.sourcePriority || 0) ||
+        Number(b?.score || 0) - Number(a?.score || 0)
+    )[0] || null;
+};
+
+const evSportsDestinationForChannel = (channel, allChannels) => {
+  const matchedChannel = matchingEvSportsChannelForChannel(channel, allChannels);
+  if (!matchedChannel) return null;
+
+  const url = String(
+    matchedChannel?.officialUrl || matchedChannel?.url || ""
+  ).trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  return {
+    url,
+    label: `Open ${matchedChannel?.name || "channel"} on EV SPORTS`,
+    matchedChannel,
+  };
+};
+
+const ANT_SPORTS_FALLBACK_PATTERNS = [
+  /^tnt sports [1-4]\b/i,
+  /^sky sports\b/i,
+  /^premier sports(?: [12])?\b/i,
+  /^dazn\b/i,
+  /\bufc\b/i,
+  /\bnfl\b/i,
+  /\bmlb\b/i,
+  /\bnhl\b/i,
+  /\bnba\b/i,
+  /\bncaaf\b/i,
+  /\bafl\b/i,
+  /\bgolf\b/i,
+  /\btennis\b/i,
+  /\bformula\s*1\b/i,
+  /\bf1\b/i,
+  /\bmotor\s*racing\b/i,
+  /\bmotorsport\b/i,
+  /\brugby\b/i,
+];
+
+const channelUsesAntSportsFallback = (channel) => {
+  if (!channel) return false;
+  if (channel?.sourceId === "antsports-live") return true;
+  if (channel?.sourceId === "evsports-live") return false;
+  if ((channel?.sourceNames || []).includes("EV SPORTS · Saptarshi")) return false;
+  if (channel?.provider === "sky-sport-now") return false;
+
+  const name = String(channel?.name || "").trim();
+  return ANT_SPORTS_FALLBACK_PATTERNS.some((pattern) => pattern.test(name));
+};
+
+const matchingAntSportsEventForChannel = (channel, allChannels, epgByKey) => {
+  if (!channel) return null;
+
+  const guide = epgByKey?.[epgKeyForChannel(channel)] || {};
+  const programmeTitles = [
+    guide?.now,
+    guide?.next,
+    channel?.providerNow,
+    channel?.providerNext,
+  ]
+    .map((programme) => normaliseEventMatchText(programme?.title))
+    .filter(Boolean);
+
+  if (programmeTitles.length === 0) return null;
+
+  let best = null;
+
+  for (const event of allChannels || []) {
+    if (event?.sourceId !== "antsports-live") continue;
+
+    const eventName = normaliseEventMatchText(event?.name);
+    const home = normaliseEventMatchText(event?.antsports?.home);
+    const away = normaliseEventMatchText(event?.antsports?.away);
+    let score = 0;
+
+    for (const title of programmeTitles) {
+      if (home && away && title.includes(home) && title.includes(away)) {
+        score = Math.max(score, 12000);
+      }
+
+      if (
+        eventName &&
+        (title.includes(eventName) || eventName.includes(title))
+      ) {
+        score = Math.max(score, 10000);
+      }
+
+      if (
+        home &&
+        away &&
+        (title.includes(home) || title.includes(away))
+      ) {
+        score = Math.max(score, 4000);
+      }
+    }
+
+    if (score <= 0) continue;
+    if (event?.live === true) score += 2500;
+
+    const matchTime = Number(event?.antsports?.matchTime || 0);
+    if (matchTime > 0) {
+      const distanceMinutes = Math.abs(matchTime * 1000 - Date.now()) / 60000;
+      score += Math.max(0, 1200 - Math.min(1200, distanceMinutes));
+    }
+
+    if (!best || score > best.score) {
+      best = { event, score };
+    }
+  }
+
+  return best?.event || null;
+};
+
+const matchingLiveAntFormulaOneEvent = (allChannels) => {
+  let best = null;
+
+  for (const event of allChannels || []) {
+    if (event?.sourceId !== "antsports-live" || event?.live !== true) continue;
+
+    const joined = [
+      event?.name,
+      event?.antsports?.sport,
+      event?.antsports?.matchType,
+      event?.antsports?.league,
+      ...(Array.isArray(event?.tags) ? event.tags : []),
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+
+    if (!/\bformula\s*1\b|\bf1\b|\bgrand\s+prix\b/.test(joined)) continue;
+
+    const matchTime = Number(event?.antsports?.matchTime || 0);
+    const distance =
+      matchTime > 0
+        ? Math.abs(matchTime * 1000 - Date.now())
+        : Number.MAX_SAFE_INTEGER;
+
+    if (!best || distance < best.distance) {
+      best = { event, distance };
+    }
+  }
+
+  return best?.event || null;
+};
+
+const antSportsDestinationForChannel = (channel, allChannels, epgByKey) => {
+  const matchedEvent = matchingAntSportsEventForChannel(
+    channel,
+    allChannels,
+    epgByKey
+  );
+
+  const eventUrl = String(
+    matchedEvent?.officialUrl ||
+      matchedEvent?.url ||
+      ""
+  ).trim();
+
+  if (/^https?:\/\//i.test(eventUrl)) {
+    return {
+      url: eventUrl,
+      label:
+        matchedEvent?.live === true
+          ? "Open matching ANT SPORTS live event"
+          : "Open matching ANT SPORTS event",
+      matchedEvent,
+    };
+  }
+
+  return {
+    url: ANT_SPORTS_DIRECTORY_URL,
+    label: "Open ANT SPORTS",
+    matchedEvent: null,
+  };
+};
+
+const repositoryHealth = (source) => {
+  if (source?.error) {
+    return {
+      label: "Down",
+      className: "border-red-400/30 bg-red-400/10 text-red-200",
+    };
+  }
+
+  const count = Number(source?.count || 0);
+  const latencyMs = Number(source?.latencyMs || 0);
+
+  if (count <= 0) {
+    return {
+      label: "Empty",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+    };
+  }
+
+  if (latencyMs >= 10000) {
+    return {
+      label: "Slow",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+    };
+  }
+
+  if (latencyMs >= 5000) {
+    return {
+      label: "Fair",
+      className: "border-white/15 bg-white/5 text-white/65",
+    };
+  }
+
+  return {
+    label: "Healthy",
+    className: "border-mg-green/30 bg-mg-green/10 text-mg-green",
+  };
+};
+
+const channelReliabilityScore = (channel) =>
+  [channel, ...(channel?.alternatives || [])].reduce(
+    (best, candidate) =>
+      Math.max(best, liveTvUrlScore(candidate?.url)),
+    -Infinity
+  );
+
+const playableChannelCandidates = (channel) => {
+  const viewerRegion = detectStreamingRegion();
+  const nativeFireTv = isNativeFireTvPlayerAvailable();
+  const androidMobileApp = isAndroidMobileRuntime();
+
+  return [channel, ...(channel?.alternatives || [])]
+    .filter((candidate) => {
+      if (candidate?.kind !== "direct" || !candidate?.url) {
+        return false;
+      }
+
+      if (candidate?.browserPlayable !== false) {
+        return true;
+      }
+
+      /*
+       * The dedicated Fire TV build plays through native Media3, not Chromium.
+       * Keep HTTP, DASH, header-required and other device-only candidates that
+       * a browser correctly rejected. Media3 gets the final decoder/network
+       * decision and normal web/mobile users never see these extra candidates.
+       */
+      if (
+        nativeFireTv &&
+        /^https?:\/\//i.test(String(candidate.url || ""))
+      ) {
+        return true;
+      }
+
+      /*
+       * The dedicated Android phone app explicitly allows clear-text media in
+       * its WebView/network security config. Keep plain-HTTP public streams
+       * available there as fallbacks instead of unnecessarily falling through
+       * to a geo-restricted HTTPS mirror. Do not do this in an ordinary mobile
+       * browser, and do not bypass candidates that require custom headers.
+       */
+      return (
+        androidMobileApp &&
+        candidate?.mixedContent === true &&
+        candidate?.requiresHeaders !== true &&
+        /^http:\/\//i.test(String(candidate.url || ""))
+      );
+    })
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      quarantined: liveTvUrlQuarantined(candidate.url),
+      geoRiskTier: liveTvGeoPreferenceTier(candidate, viewerRegion),
+      score:
+        liveTvUrlScore(candidate.url) +
+        Number(candidate?.sourcePriority || 0) * 30 +
+        Number(candidate?.quality || 0) * 2 +
+        (index === 0 ? 900 : 0),
+    }))
+    .sort(
+      (a, b) =>
+        a.geoRiskTier - b.geoRiskTier ||
+        Number(a.quarantined) - Number(b.quarantined) ||
+        b.score - a.score ||
+        a.index - b.index
+    )
+    .map(({ candidate }) => candidate);
+};
+
+const channelPlaybackHealth = (channel) => {
+  if (!channel || channel?.kind === "external") return null;
+
+  const candidates = playableChannelCandidates(channel);
+  if (candidates.length === 0) return null;
+
+  const primaryUrl = String(channel?.url || "").trim();
+  const primaryScore = primaryUrl ? liveTvUrlScore(primaryUrl) : 0;
+  const primaryQuarantined = primaryUrl
+    ? liveTvUrlQuarantined(primaryUrl)
+    : false;
+  const scored = candidates.map((candidate) => ({
+    candidate,
+    score: liveTvUrlScore(candidate?.url),
+    quarantined: liveTvUrlQuarantined(candidate?.url),
+  }));
+  const usable = scored.filter((item) => !item.quarantined);
+  const bestScore = Math.max(
+    ...scored.map((item) => Number(item.score || 0))
+  );
+  const allQuarantined = scored.length > 0 && usable.length === 0;
+  const backupCanTakeOver =
+    primaryQuarantined &&
+    usable.some((item) => item.candidate?.url !== primaryUrl);
+  const healthierBackupAvailable =
+    primaryScore < 0 &&
+    usable.some(
+      (item) =>
+        item.candidate?.url !== primaryUrl &&
+        item.score >= primaryScore + 3500
+    );
+
+  if (backupCanTakeOver || healthierBackupAvailable) {
+    return {
+      label: "Backup",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+      title: "The primary feed recently failed; Media God has a healthier backup ready.",
+    };
+  }
+
+  if (allQuarantined || bestScore <= -2500) {
+    return {
+      label: "Recently failed",
+      className: "border-red-400/30 bg-red-400/10 text-red-200",
+      title: "This device recently saw playback failures on the available feed(s).",
+    };
+  }
+
+  if (bestScore >= 2500 || primaryScore >= 2500) {
+    return {
+      label: "Healthy",
+      className: "border-mg-green/30 bg-mg-green/10 text-mg-green",
+      title: "This device has recently played one of this channel's feeds successfully.",
+    };
+  }
+
+  return null;
+};
+
+const channelSourcePriority = (channel) =>
+  [channel, ...(channel?.alternatives || [])].reduce(
+    (best, candidate) => Math.max(best, Number(candidate?.sourcePriority || 0)),
+    0
+  );
+
+const channelBestQuality = (channel) =>
+  [channel, ...(channel?.alternatives || [])].reduce(
+    (best, candidate) => Math.max(best, Number(candidate?.quality || 0)),
+    0
+  );
+
+const smartChannelCompare = (a, b, rankByKey) => {
+  const aRank = rankByKey.get(channelMemoryKey(a)) || {};
+  const bRank = rankByKey.get(channelMemoryKey(b)) || {};
+
+  return compareLiveTvRankRecords(
+    aRank,
+    bRank,
+    a?.name,
+    b?.name
+  );
+};
+
+const prewarmChannel = (channel) => {
+  const candidates = playableChannelCandidates(channel).slice(0, 2);
+
+  for (const candidate of candidates) {
+    if (candidate?.url) {
+      prewarmLiveTvUrl(candidate.url);
+    }
+  }
+};
+
+const radioUrlsFor = (channel) => {
+  const seen = new Set();
+  const urls = [];
+
+  const add = (value, trustedRadioSource = false) => {
+    const url = String(value || "").trim();
+
+    if (
+      !url ||
+      seen.has(url) ||
+      (!trustedRadioSource && !isRadioStreamUrl(url))
+    ) {
+      return;
+    }
+
+    seen.add(url);
+    urls.push(url);
+  };
+
+  const normalised = normaliseStationName(channel?.name);
+
+  add(RADIO_STREAM_OVERRIDES[normalised], true);
+
+  add(channel?.url, channel?.sourceCategory === "Radio");
+
+  (channel?.alternatives || []).forEach((candidate) => {
+    add(candidate?.url, candidate?.sourceCategory === "Radio");
+  });
+
+  return urls;
+};
+
+export default function LiveTVView({
+  initialQuery = "",
+  initialQuickFilter = "",
+  searchRequestKey = 0,
+}) {
+  const [initialViewState] = useState(() => readStoredLiveTvState());
+  const [channels, setChannels] = useState([]);
+  const [sourceStatus, setSourceStatus] = useState([]);
+  const [rawCount, setRawCount] = useState(0);
+  const [browserRejectedCount, setBrowserRejectedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [channelNotice, setChannelNotice] = useState("");
+  const [channelNoticeAction, setChannelNoticeAction] = useState(null);
+  const [channelNoticeActions, setChannelNoticeActions] = useState([]);
+  const [query, setQuery] = useState(
+    String(initialQuery || initialViewState?.query || "")
+  );
+  const [group, setGroup] = useState(String(initialViewState?.group || DEFAULT_FILTER));
+  const [countryFilter, setCountryFilter] = useState(
+    String(initialViewState?.countryFilter || DEFAULT_FILTER)
+  );
+  const [quickFilter, setQuickFilter] = useState(
+    String(initialQuickFilter || initialViewState?.quickFilter || DEFAULT_FILTER)
+  );
+  const [directOnly, setDirectOnly] = useState(Boolean(initialViewState?.directOnly));
+  const [radioStation, setRadioStation] = useState(null);
+  const [selectedCastChannel, setSelectedCastChannel] = useState(null);
+  const [radioSourceIndex, setRadioSourceIndex] = useState(0);
+  const [radioPlaying, setRadioPlaying] = useState(false);
+  const [radioStatus, setRadioStatus] = useState("");
+  const [epgByKey, setEpgByKey] = useState({});
+  const [epgMatched, setEpgMatched] = useState(0);
+  const [learningRevision, setLearningRevision] = useState(0);
+  const [clockTick, setClockTick] = useState(() => Date.now());
+  const [viewMode, setViewMode] = useState(() =>
+    safeStoredViewMode(initialViewState?.viewMode)
+  );
+  const [channelVisibleLimit, setChannelVisibleLimit] = useState(() =>
+    Math.max(
+      MAX_VISIBLE,
+      Number(initialViewState?.channelVisibleLimit || MAX_VISIBLE)
+    )
+  );
+  const [favouriteKeys, setFavouriteKeys] = useState(
+    () => new Set(readStoredList(LIVE_TV_FAVOURITES_KEY))
+  );
+  const [recentKeys, setRecentKeys] = useState(
+    () => readStoredList(LIVE_TV_RECENT_KEY)
+  );
+  const [hiddenChannelKeys, setHiddenChannelKeys] = useState(
+    () => new Set(readHiddenLiveTvChannels())
+  );
+  const [hiddenGroups, setHiddenGroups] = useState(
+    () => new Set(readHiddenLiveTvGroups())
+  );
+  const [manualChannelOrder, setManualChannelOrder] = useState(
+    readLiveTvChannelOrder
+  );
+  const [manualGroupOrder, setManualGroupOrder] = useState(
+    readLiveTvGroupOrder
+  );
+  const [focusedChannelKey, setFocusedChannelKey] = useState(
+    String(initialViewState?.focusedChannelKey || "")
+  );
+
+  const audioRef = useRef(null);
+  const restoredLiveTvPositionRef = useRef(false);
+  const scrollSaveTimerRef = useRef(null);
+  const filterResetReadyRef = useRef(false);
+  const player = usePlayer();
+
+  useEffect(() => {
+    const requestedQuery = String(initialQuery || "").trim();
+    const requestedQuickFilter = String(initialQuickFilter || "").trim();
+
+    if (!requestedQuery && !requestedQuickFilter) {
+      return;
+    }
+
+    setQuery(requestedQuery);
+    setQuickFilter(requestedQuickFilter || DEFAULT_FILTER);
+    setGroup(DEFAULT_FILTER);
+    setCountryFilter(DEFAULT_FILTER);
+    setDirectOnly(false);
+    setViewMode("channels");
+  }, [initialQuery, initialQuickFilter, searchRequestKey]);
+
+  const channelRankByKey = useMemo(() => {
+    const recentOrder = new Map(
+      recentKeys.map((key, index) => [key, index])
+    );
+    const rank = new Map();
+
+    channels.forEach((channel) => {
+      const key = channelMemoryKey(channel);
+      const reliability = channelReliabilityScore(channel);
+
+      rank.set(key, {
+        favourite: favouriteKeys.has(key),
+        uk: isUkChannel(channel),
+        recentIndex: recentOrder.has(key)
+          ? recentOrder.get(key)
+          : Number.MAX_SAFE_INTEGER,
+        reliability: Number.isFinite(reliability) ? reliability : -999999,
+        sourcePriority: channelSourcePriority(channel),
+        quality: channelBestQuality(channel),
+      });
+    });
+
+    return rank;
+  }, [channels, favouriteKeys, recentKeys, learningRevision]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const refreshLearning = () => {
+      setLearningRevision((current) => current + 1);
+    };
+
+    window.addEventListener("mg:live-tv-diagnostic", refreshLearning);
+    return () => {
+      window.removeEventListener("mg:live-tv-diagnostic", refreshLearning);
+    };
+  }, []);
+
+  const load = async (force = false) => {
+    if (force) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setError("");
+
+    try {
+      const result = await getFreeTvChannels({
+        force,
+      });
+
+      let loadedChannels = Array.isArray(result?.channels) ? result.channels : [];
+      let skyChannels = [];
+      let skySourceStatus = null;
+
+      try {
+        const skyResponse = await base44.functions.invoke("skySportNow", {
+          action: "channels",
+        });
+        const skyData = skyResponse?.data ?? skyResponse ?? {};
+
+        if (skyData?.connected === true && Array.isArray(skyData?.channels)) {
+          skyChannels = skyData.channels
+            .map(normaliseSkySportNowChannel)
+            .filter((channel) => channel.skySportNowEventId && channel.name);
+
+          skySourceStatus = {
+            id: "sky-sport-now",
+            name: "Sky Sport Now",
+            category: "Sports",
+            priority: 150,
+            count: skyChannels.length,
+            latencyMs: 0,
+            bytes: 0,
+            direct: true,
+            authenticated: true,
+            error: null,
+          };
+        }
+      } catch (skyError) {
+        const message = String(
+          skyError?.response?.data?.error ||
+            skyError?.message ||
+            ""
+        ).trim();
+
+        if (message && !/connect sky sport now|unauthorized/i.test(message)) {
+          skySourceStatus = {
+            id: "sky-sport-now",
+            name: "Sky Sport Now",
+            category: "Sports",
+            priority: 150,
+            count: 0,
+            latencyMs: 0,
+            bytes: 0,
+            direct: true,
+            authenticated: true,
+            error: message,
+          };
+        }
+      }
+
+      if (skyChannels.length > 0) {
+        loadedChannels = [...skyChannels, ...loadedChannels];
+      }
+
+      /*
+       * Never overwrite a current playlist result with an old hard-coded TV
+       * URL. Several channels (GB News, Talk, Bloomberg, TRT) had perfectly
+       * good current feeds replaced by stale endpoints here. Instead, attach
+       * an official broadcaster fallback while preserving the ranked direct
+       * candidates returned by freeTvPlaylist.
+       */
+      loadedChannels = loadedChannels.map((channel) => {
+        const unlockedChannel = {
+          ...channel,
+          geoBlocked: false,
+          alternatives: Array.isArray(channel?.alternatives)
+            ? channel.alternatives.map((candidate) => ({
+                ...candidate,
+                geoBlocked: false,
+              }))
+            : [],
+        };
+
+        const fallback = officialLiveFallback(unlockedChannel);
+
+        if (!fallback) {
+          return unlockedChannel;
+        }
+
+        return {
+          ...unlockedChannel,
+          officialUrl: unlockedChannel.officialUrl || fallback.url,
+          officialLabel: unlockedChannel.officialLabel || fallback.label,
+        };
+      });
+
+      setChannels(loadedChannels);
+
+      setSourceStatus([
+        ...(skySourceStatus ? [skySourceStatus] : []),
+        ...(Array.isArray(result?.sourceStatus) ? result.sourceStatus : []),
+      ]);
+
+      setRawCount(
+        Number(result?.rawCount || 0) + skyChannels.length
+      );
+
+      setBrowserRejectedCount(
+        Number(
+          result?.browserRejectedCount || 0
+        )
+      );
+
+    } catch (loadError) {
+      const issue = classifyLiveTvAccessIssue(loadError);
+      const message = loadError?.message || "Could not load the public Live TV playlists.";
+      setError(issue.reason === "unknown" ? message : `${message} ${issue.message}`);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    load(false);
+
+  }, []);
+
+  useEffect(() => {
+    if (channels.length === 0) return;
+
+    if (
+      group !== DEFAULT_FILTER &&
+      !channels.some((channel) => channel?.group === group)
+    ) {
+      setGroup(DEFAULT_FILTER);
+    }
+
+    if (
+      countryFilter !== DEFAULT_FILTER &&
+      !channels.some(
+        (channel) => epgCountryForChannel(channel) === countryFilter
+      )
+    ) {
+      setCountryFilter(DEFAULT_FILTER);
+    }
+  }, [channels, group, countryFilter]);
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setClockTick(Date.now()),
+      60 * 1000
+    );
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    writeStoredLiveTvState({
+      query,
+      group,
+      countryFilter,
+      quickFilter,
+      directOnly,
+      viewMode,
+      channelVisibleLimit,
+      focusedChannelKey,
+    });
+  }, [
+    query,
+    group,
+    countryFilter,
+    quickFilter,
+    directOnly,
+    viewMode,
+    channelVisibleLimit,
+    focusedChannelKey,
+  ]);
+
+  useEffect(() => {
+    const saveScrollPosition = () => {
+      if (scrollSaveTimerRef.current) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+      }
+
+      scrollSaveTimerRef.current = window.setTimeout(() => {
+        scrollSaveTimerRef.current = null;
+        writeStoredLiveTvState({
+          scrollY: Math.max(0, Number(window.scrollY || 0)),
+        });
+      }, 180);
+    };
+
+    window.addEventListener("scroll", saveScrollPosition, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", saveScrollPosition);
+      if (scrollSaveTimerRef.current) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = null;
+      }
+      writeStoredLiveTvState({
+        scrollY: Math.max(0, Number(window.scrollY || 0)),
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      loading ||
+      channels.length === 0 ||
+      restoredLiveTvPositionRef.current
+    ) {
+      return;
+    }
+
+    restoredLiveTvPositionRef.current = true;
+    const saved = readStoredLiveTvState();
+    const savedScrollY = Math.max(0, Number(saved?.scrollY || 0));
+    const savedFocusKey = String(saved?.focusedChannelKey || "");
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (savedScrollY > 0) {
+          window.scrollTo({ top: savedScrollY, behavior: "auto" });
+        }
+
+        if (isNativeFireTvPlayerAvailable() && savedFocusKey) {
+          const encodedKey = encodeURIComponent(savedFocusKey);
+          const target = document.querySelector(
+            `[data-mg-live-tv-key="${encodedKey}"]`
+          );
+
+          if (target instanceof HTMLElement) {
+            try {
+              target.focus({ preventScroll: true });
+            } catch {
+              target.focus();
+            }
+          }
+        }
+      });
+    });
+  }, [loading, channels.length]);
+
+  useEffect(() => {
+    if (channels.length === 0) return undefined;
+
+    let cancelled = false;
+    let timer = null;
+
+    const loadGuide = async () => {
+      const guideCandidates = channels
+        .filter((channel) => !isRadioChannel(channel))
+        .map((channel) => ({
+          channel,
+          country: epgCountryForChannel(channel),
+        }))
+        .filter((item) => Boolean(item.country));
+
+      let selectedCountries = [];
+
+      if (countryFilter !== DEFAULT_FILTER) {
+        selectedCountries = [String(countryFilter || "").trim().toUpperCase()];
+      } else {
+        const availableCountries = new Set(
+          guideCandidates.map((item) => item.country)
+        );
+
+        selectedCountries = [
+          ...GUIDE_COUNTRY_PRIORITY.filter((country) => availableCountries.has(country)),
+          ...Array.from(availableCountries)
+            .filter((country) => !GUIDE_COUNTRY_PRIORITY.includes(country))
+            .sort(),
+        ].slice(0, 8);
+      }
+
+      const buckets = new Map(
+        selectedCountries.map((country) => [country, []])
+      );
+
+      guideCandidates.forEach((item) => {
+        if (buckets.has(item.country)) {
+          buckets.get(item.country).push(item.channel);
+        }
+      });
+
+      /*
+       * When the catalogue is larger than the EPG request cap, spend the guide
+       * slots on the channels the user is most likely to see first: favourites,
+       * UK channels, recent channels, learned-good feeds, then stronger source
+       * repositories. International channels remain eligible and are filled in
+       * once the priority rows have been covered.
+       */
+      buckets.forEach((list, country) => {
+        buckets.set(
+          country,
+          [...list].sort((a, b) => smartChannelCompare(a, b, channelRankByKey))
+        );
+      });
+
+      const targets = [];
+
+      if (selectedCountries.length === 1) {
+        for (const channel of buckets.get(selectedCountries[0]) || []) {
+          if (targets.length >= 400) break;
+          targets.push(channel);
+        }
+      } else {
+        const weights = Object.fromEntries(
+          selectedCountries.map((country) => [
+            country,
+            country === "GB" ? 5 : country === "US" ? 2 : 1,
+          ])
+        );
+        const totalWeight = selectedCountries.reduce(
+          (sum, country) => sum + Number(weights[country] || 1),
+          0
+        );
+
+        selectedCountries.forEach((country) => {
+          const quota = Math.max(
+            1,
+            Math.floor((400 * Number(weights[country] || 1)) / totalWeight)
+          );
+          const list = buckets.get(country) || [];
+          targets.push(...list.slice(0, quota));
+          buckets.set(country, list.slice(quota));
+        });
+
+        let madeProgress = true;
+        while (targets.length < 400 && madeProgress) {
+          madeProgress = false;
+          for (const country of selectedCountries) {
+            const list = buckets.get(country) || [];
+            const nextChannel = list.shift();
+            if (!nextChannel) continue;
+            targets.push(nextChannel);
+            madeProgress = true;
+            if (targets.length >= 400) break;
+          }
+        }
+      }
+
+      const requestTargets = targets.map((channel) => ({
+        key: epgKeyForChannel(channel),
+        tvgId: channel?.tvgId || "",
+        name: channel?.name || "",
+        country: epgCountryForChannel(channel),
+        aliases: epgUniqueValues([
+          channel?.name,
+          channel?.rawName,
+          channel?.tvgName,
+          channel?.displayName,
+          ...(channel?.alternatives || []).flatMap((candidate) => [
+            candidate?.name,
+            candidate?.rawName,
+            candidate?.tvgName,
+            candidate?.displayName,
+          ]),
+        ]),
+        idAliases: epgUniqueValues([
+          channel?.tvgId,
+          channel?.id,
+          ...(channel?.alternatives || []).flatMap((candidate) => [
+            candidate?.tvgId,
+            candidate?.id,
+          ]),
+        ]),
+      }));
+
+      if (requestTargets.length === 0) return;
+
+      try {
+        const response = await base44.functions.invoke(
+          "getLiveEpg",
+          { channels: requestTargets }
+        );
+        const data = response?.data ?? response ?? {};
+
+        if (cancelled) return;
+
+        const next = {};
+        (Array.isArray(data?.items) ? data.items : []).forEach((item) => {
+          if (item?.key) next[item.key] = item;
+        });
+
+        setEpgByKey((current) => {
+          const merged = { ...current };
+
+          requestTargets.forEach((target) => {
+            delete merged[target.key];
+          });
+
+          return {
+            ...merged,
+            ...next,
+          };
+        });
+        setEpgMatched(Number(data?.matched || 0));
+      } catch {
+        if (!cancelled) {
+          setEpgMatched(0);
+        }
+      }
+    };
+
+    loadGuide();
+    timer = window.setInterval(loadGuide, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [channels, countryFilter, favouriteKeys, recentKeys]);
+
+  const activeRadioUrls = useMemo(
+    () => {
+      const urls = radioStation
+        ? radioUrlsFor(radioStation)
+        : [];
+
+      return urls
+        .map((url, index) => ({
+          url,
+          index,
+          score:
+            liveTvUrlScore(url) +
+            (index === 0 ? 900 : 0),
+        }))
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            a.index - b.index
+        )
+        .map((item) => item.url);
+    },
+    [radioStation]
+  );
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (
+      !audio ||
+      !radioStation ||
+      activeRadioUrls.length === 0
+    ) {
+      return undefined;
+    }
+
+    const url =
+      activeRadioUrls[radioSourceIndex];
+
+    if (!url) {
+      return undefined;
+    }
+
+    let hls = null;
+    let cancelled = false;
+    let sourceFailed = false;
+    let recoveryAttempts = 0;
+    let startupTimer = null;
+    let stallTimer = null;
+    let successRecorded = false;
+    const startedAt =
+      typeof performance !== "undefined" && performance.now
+        ? performance.now()
+        : Date.now();
+
+    const clearStartupTimer = () => {
+      if (startupTimer) {
+        window.clearTimeout(startupTimer);
+        startupTimer = null;
+      }
+    };
+
+    const clearStallTimer = () => {
+      if (stallTimer) {
+        window.clearTimeout(stallTimer);
+        stallTimer = null;
+      }
+    };
+
+    setRadioStatus("Loading radio…");
+    setRadioPlaying(false);
+
+    const tryPlay = async () => {
+      if (cancelled) {
+        return;
+      }
+
+      try {
+        audio.muted = false;
+        audio.volume = 1;
+
+        await audio.play();
+
+        setRadioPlaying(true);
+        setRadioStatus("");
+      } catch {
+        clearStartupTimer();
+        setRadioPlaying(false);
+        setRadioStatus(
+          "Press Play to start the radio."
+        );
+      }
+    };
+
+    const failToNext = ({ stalled = false } = {}) => {
+      if (
+        cancelled ||
+        sourceFailed
+      ) {
+        return;
+      }
+
+      sourceFailed = true;
+      clearStartupTimer();
+      clearStallTimer();
+
+      recordLiveTvPlaybackResult(url, {
+        success: false,
+        stalled,
+      });
+
+      if (
+        radioSourceIndex + 1 <
+        activeRadioUrls.length
+      ) {
+        setRadioStatus(
+          "Trying backup radio source…"
+        );
+
+        setRadioSourceIndex(
+          (current) => current + 1
+        );
+
+        return;
+      }
+
+      setRadioPlaying(false);
+
+      const fallback = officialLiveFallback(radioStation);
+
+      setRadioStatus(
+        fallback
+          ? "This direct radio stream is unavailable. Use the official station player instead."
+          : "This radio stream is currently unavailable."
+      );
+
+      if (fallback) {
+        setChannelNotice(
+          `${radioStation?.name || "This station"} is available from its official player.`
+        );
+        setChannelNoticeAction({
+          label: fallback.label,
+          url: fallback.url,
+        });
+      }
+    };
+
+    const handlePlaying = () => {
+      clearStartupTimer();
+      clearStallTimer();
+
+      if (!successRecorded) {
+        successRecorded = true;
+        const now =
+          typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now();
+
+        recordLiveTvPlaybackResult(url, {
+          success: true,
+          startupMs: Math.max(0, now - startedAt),
+        });
+      }
+
+      setRadioPlaying(true);
+      setRadioStatus("");
+    };
+
+    const handlePause = () => {
+      setRadioPlaying(false);
+    };
+
+    const handleStalled = () => {
+      if (cancelled || sourceFailed) return;
+
+      setRadioStatus(
+        "Radio stalled — trying to recover…"
+      );
+
+      clearStallTimer();
+      stallTimer = window.setTimeout(
+        () => failToNext({ stalled: true }),
+        7000
+      );
+    };
+
+    const handleError = () => {
+      failToNext();
+    };
+
+    audio.addEventListener(
+      "playing",
+      handlePlaying
+    );
+
+    audio.addEventListener(
+      "pause",
+      handlePause
+    );
+
+    audio.addEventListener(
+      "stalled",
+      handleStalled
+    );
+
+    audio.addEventListener(
+      "error",
+      handleError
+    );
+
+    startupTimer = window.setTimeout(
+      () => failToNext(),
+      12000
+    );
+
+    try {
+      audio.pause();
+
+      audio.removeAttribute("src");
+
+      audio.load();
+    } catch {
+      // Ignore reset errors.
+    }
+
+    if (
+      isHlsUrl(url) &&
+      Hls.isSupported()
+    ) {
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+      });
+
+      hls.on(
+        Hls.Events.ERROR,
+        (_event, data) => {
+          if (
+            !data?.fatal ||
+            cancelled
+          ) {
+            return;
+          }
+
+          try {
+            if (
+              data.type ===
+                Hls.ErrorTypes
+                  .MEDIA_ERROR &&
+              recoveryAttempts < 2
+            ) {
+              recoveryAttempts += 1;
+
+              hls.recoverMediaError();
+
+              return;
+            }
+
+            if (
+              data.type ===
+                Hls.ErrorTypes
+                  .NETWORK_ERROR &&
+              recoveryAttempts < 2
+            ) {
+              recoveryAttempts += 1;
+
+              hls.startLoad();
+
+              return;
+            }
+          } catch {
+            // Move to fallback source.
+          }
+
+          failToNext();
+        }
+      );
+
+      hls.on(
+        Hls.Events.MANIFEST_PARSED,
+        tryPlay
+      );
+
+      hls.loadSource(url);
+      hls.attachMedia(audio);
+    } else {
+      audio.src = url;
+      audio.load();
+      tryPlay();
+    }
+
+    return () => {
+      cancelled = true;
+      clearStartupTimer();
+      clearStallTimer();
+
+      audio.removeEventListener(
+        "playing",
+        handlePlaying
+      );
+
+      audio.removeEventListener(
+        "pause",
+        handlePause
+      );
+
+      audio.removeEventListener(
+        "stalled",
+        handleStalled
+      );
+
+      audio.removeEventListener(
+        "error",
+        handleError
+      );
+
+      if (hls) {
+        try {
+          hls.destroy();
+        } catch {
+          // Ignore teardown errors.
+        }
+      }
+
+      try {
+        audio.pause();
+
+        audio.removeAttribute("src");
+
+        audio.load();
+      } catch {
+        // Ignore teardown errors.
+      }
+    };
+  }, [
+    radioStation,
+    radioSourceIndex,
+    activeRadioUrls,
+  ]);
+
+  const rememberRecentChannel = (channel) => {
+    const key = channelMemoryKey(channel);
+
+    setRecentKeys((current) => {
+      const next = [
+        key,
+        ...current.filter((item) => item !== key),
+      ].slice(0, 30);
+
+      writeStoredList(LIVE_TV_RECENT_KEY, next);
+      return next;
+    });
+  };
+
+  const toggleFavouriteChannel = (channel) => {
+    const key = channelMemoryKey(channel);
+
+    setFavouriteKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      writeStoredList(LIVE_TV_FAVOURITES_KEY, Array.from(next));
+      return next;
+    });
+  };
+
+  const channelIsHidden = (channel) => {
+    const key = channelMemoryKey(channel);
+    const channelGroup = String(channel?.group || "").trim();
+
+    return (
+      hiddenChannelKeys.has(key) ||
+      Boolean(channelGroup && hiddenGroups.has(channelGroup))
+    );
+  };
+
+  const setChannelHidden = (channel, hidden) => {
+    const key = channelMemoryKey(channel);
+
+    setHiddenChannelKeys((current) => {
+      const next = new Set(current);
+
+      if (hidden) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+
+      writeHiddenLiveTvChannels(Array.from(next));
+      return next;
+    });
+  };
+
+  const setCurrentGroupHidden = (hidden) => {
+    const channelGroup = String(group || "").trim();
+
+    if (!channelGroup || channelGroup === DEFAULT_FILTER) {
+      return;
+    }
+
+    setHiddenGroups((current) => {
+      const next = new Set(current);
+
+      if (hidden) {
+        next.add(channelGroup);
+      } else {
+        next.delete(channelGroup);
+      }
+
+      writeHiddenLiveTvGroups(Array.from(next));
+      return next;
+    });
+
+    if (hidden) {
+      setGroup(DEFAULT_FILTER);
+    }
+  };
+
+  const moveChannel = (channel, direction) => {
+    const key = channelMemoryKey(channel);
+    const visibleKeys = filtered.map(channelMemoryKey);
+
+    setManualChannelOrder((current) => {
+      const next = movedOrder(
+        current,
+        visibleKeys,
+        key,
+        direction
+      );
+
+      writeLiveTvChannelOrder(next);
+      return next;
+    });
+  };
+
+  const moveCurrentGroup = (direction) => {
+    const channelGroup = String(group || "").trim();
+
+    if (!channelGroup || channelGroup === DEFAULT_FILTER) {
+      return;
+    }
+
+    const visibleGroups = groups.filter(
+      (value) => value !== DEFAULT_FILTER
+    );
+
+    setManualGroupOrder((current) => {
+      const next = movedOrder(
+        current,
+        visibleGroups,
+        channelGroup,
+        direction
+      );
+
+      writeLiveTvGroupOrder(next);
+      return next;
+    });
+  };
+
+  const favouriteChannels = useMemo(
+    () =>
+      channels
+        .filter(
+          (channel) =>
+            favouriteKeys.has(channelMemoryKey(channel)) &&
+            !channelIsHidden(channel)
+        )
+        .sort((a, b) => smartChannelCompare(a, b, channelRankByKey)),
+    [
+      channels,
+      favouriteKeys,
+      channelRankByKey,
+      hiddenChannelKeys,
+      hiddenGroups,
+    ]
+  );
+
+  const recentChannels = useMemo(() => {
+    const byKey = new Map(
+      channels.map((channel) => [channelMemoryKey(channel), channel])
+    );
+
+    return recentKeys
+      .map((key) => byKey.get(key))
+      .filter(
+        (channel) =>
+          Boolean(channel) &&
+          !channelIsHidden(channel)
+      )
+      .slice(0, 18);
+  }, [
+    channels,
+    recentKeys,
+    hiddenChannelKeys,
+    hiddenGroups,
+  ]);
+
+
+  const groups = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        channels
+          .map(
+            (channel) =>
+              channel?.group
+          )
+          .filter(Boolean)
+      )
+    );
+
+    const order = new Map(
+      manualGroupOrder.map((value, index) => [value, index])
+    );
+
+    values.sort((a, b) => {
+      const aOrder = order.has(a)
+        ? order.get(a)
+        : Number.MAX_SAFE_INTEGER;
+      const bOrder = order.has(b)
+        ? order.get(b)
+        : Number.MAX_SAFE_INTEGER;
+
+      return aOrder - bOrder || groupSort(a, b);
+    });
+
+    return [
+      "All",
+      ...values,
+    ];
+  }, [channels, manualGroupOrder]);
+
+  const countries = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        channels
+          .map((channel) => epgCountryForChannel(channel))
+          .filter(Boolean)
+      )
+    ).sort((a, b) =>
+      Number(b === "GB") - Number(a === "GB") ||
+      countryDisplayName(a).localeCompare(countryDisplayName(b))
+    );
+
+    return ["All", ...values];
+  }, [channels]);
+
+  const quickCounts = useMemo(() => {
+    const counts = {
+      All: channels.length,
+      "United Kingdom": 0,
+      Worldwide: 0,
+      Sports: 0,
+      Motorsport: 0,
+      Movies: 0,
+      "Video Channels": 0,
+      Radio: 0,
+      Favourites: 0,
+      Recent: 0,
+      "Most Reliable": 0,
+      Hidden: 0,
+    };
+
+    for (const channel of channels) {
+      const tags = new Set(
+        channel?.tags || []
+      );
+      const key = channelMemoryKey(channel);
+
+      if (channelIsHidden(channel)) {
+        counts.Hidden += 1;
+      }
+
+      if (favouriteKeys.has(key)) {
+        counts.Favourites += 1;
+      }
+
+      if (recentKeys.includes(key)) {
+        counts.Recent += 1;
+      }
+
+      if (channelReliabilityScore(channel) > 0) {
+        counts["Most Reliable"] += 1;
+      }
+
+      if (isUkChannel(channel)) {
+        counts["United Kingdom"] += 1;
+      }
+
+      if (tags.has("Worldwide")) {
+        counts.Worldwide += 1;
+      }
+
+      if (
+        tags.has("Sports")
+      ) {
+        counts.Sports += 1;
+      }
+
+      if (tags.has("Motorsport")) {
+        counts.Motorsport += 1;
+      }
+
+      if (
+        tags.has("Movies")
+      ) {
+        counts.Movies += 1;
+      }
+
+      if (tags.has("Video Channels")) {
+        counts["Video Channels"] += 1;
+      }
+
+      if (tags.has("Radio")) {
+        counts.Radio += 1;
+      }
+    }
+
+    return counts;
+  }, [
+    channels,
+    favouriteKeys,
+    recentKeys,
+    hiddenChannelKeys,
+    hiddenGroups,
+  ]);
+
+  const filtered = useMemo(() => {
+    const q = searchText(query);
+
+    const result = channels.filter(
+      (channel) => {
+        const tags = new Set(
+          channel?.tags || []
+        );
+        const key = channelMemoryKey(channel);
+        const hidden = channelIsHidden(channel);
+
+        if (quickFilter === "Hidden") {
+          if (!hidden) {
+            return false;
+          }
+        } else if (hidden) {
+          return false;
+        }
+
+        if (
+          quickFilter === "Favourites" &&
+          !favouriteKeys.has(key)
+        ) {
+          return false;
+        }
+
+        if (
+          quickFilter === "Recent" &&
+          !recentKeys.includes(key)
+        ) {
+          return false;
+        }
+
+        if (
+          quickFilter === "Most Reliable" &&
+          channelReliabilityScore(channel) <= 0
+        ) {
+          return false;
+        }
+
+        if (
+          quickFilter === "United Kingdom" &&
+          !isUkChannel(channel)
+        ) {
+          return false;
+        }
+
+        if (
+          ![
+            "All",
+            "Favourites",
+            "Recent",
+            "Most Reliable",
+            "United Kingdom",
+            "Hidden",
+          ].includes(quickFilter) &&
+          !tags.has(quickFilter)
+        ) {
+          return false;
+        }
+
+        if (
+          group !== "All" &&
+          channel?.group !== group
+        ) {
+          return false;
+        }
+
+        if (
+          countryFilter !== "All" &&
+          epgCountryForChannel(channel) !== countryFilter
+        ) {
+          return false;
+        }
+
+        if (
+          directOnly &&
+          channel?.kind !== "direct" &&
+          !tags.has("Official") &&
+          channel?.sourceId !== "evsports-live" &&
+          channel?.sourceId !== "antsports-live"
+        ) {
+          return false;
+        }
+
+        if (!q) {
+          return true;
+        }
+
+        const haystack =
+          searchText(
+            `${
+              channel?.name || ""
+            } ${
+              channel?.group || ""
+            } ${
+              channel?.country || ""
+            } ${
+              (
+                channel?.sourceNames ||
+                []
+              ).join(" ")
+            } ${
+              (
+                channel?.tags ||
+                []
+              ).join(" ")
+            }`
+          );
+
+        return haystack.includes(q);
+      }
+    );
+
+    if (quickFilter === "Recent") {
+      const order = new Map(
+        recentKeys.map((key, index) => [key, index])
+      );
+
+      return [...result].sort(
+        (a, b) =>
+          (order.get(channelMemoryKey(a)) ?? 9999) -
+          (order.get(channelMemoryKey(b)) ?? 9999)
+      );
+    }
+
+    if (quickFilter === "Most Reliable") {
+      return [...result].sort((a, b) => {
+        const aRank = channelRankByKey.get(channelMemoryKey(a)) || {};
+        const bRank = channelRankByKey.get(channelMemoryKey(b)) || {};
+
+        return (
+          Number(bRank.reliability || 0) - Number(aRank.reliability || 0) ||
+          Number(bRank.uk === true) - Number(aRank.uk === true) ||
+          Number(bRank.favourite === true) - Number(aRank.favourite === true) ||
+          Number(bRank.sourcePriority || 0) - Number(aRank.sourcePriority || 0) ||
+          String(a?.name || "").localeCompare(String(b?.name || ""))
+        );
+      });
+    }
+
+    /*
+     * Manual order from the NetFly-style channel organiser wins first. Any
+     * channel the user has not moved still falls back to Media God's normal
+     * smart ordering.
+     */
+    const manualOrder = new Map(
+      manualChannelOrder.map((key, index) => [key, index])
+    );
+
+    return [...result].sort((a, b) => {
+      const aKey = channelMemoryKey(a);
+      const bKey = channelMemoryKey(b);
+      const aManual = manualOrder.has(aKey)
+        ? manualOrder.get(aKey)
+        : Number.MAX_SAFE_INTEGER;
+      const bManual = manualOrder.has(bKey)
+        ? manualOrder.get(bKey)
+        : Number.MAX_SAFE_INTEGER;
+
+      return (
+        aManual - bManual ||
+        smartChannelCompare(a, b, channelRankByKey)
+      );
+    });
+  }, [
+    channels,
+    group,
+    countryFilter,
+    query,
+    directOnly,
+    quickFilter,
+    favouriteKeys,
+    recentKeys,
+    channelRankByKey,
+    hiddenChannelKeys,
+    hiddenGroups,
+    manualChannelOrder,
+  ]);
+
+  const visibleLimit =
+    viewMode === "guide"
+      ? GUIDE_VISIBLE
+      : channelVisibleLimit;
+
+  const shown = filtered.slice(
+    0,
+    visibleLimit
+  );
+
+  useEffect(() => {
+    if (!filterResetReadyRef.current) {
+      filterResetReadyRef.current = true;
+      return;
+    }
+
+    setFocusedChannelKey("");
+    setChannelVisibleLimit(MAX_VISIBLE);
+  }, [quickFilter, group, countryFilter, query, directOnly, viewMode]);
+
+  const resetFilters = () => {
+    setQuery("");
+    setGroup(DEFAULT_FILTER);
+    setCountryFilter(DEFAULT_FILTER);
+    setQuickFilter(DEFAULT_FILTER);
+    setDirectOnly(false);
+  };
+
+  const stopRadio = () => {
+    try {
+      audioRef.current?.pause();
+    } catch {
+      // Ignore.
+    }
+
+    setRadioStation(null);
+    setRadioSourceIndex(0);
+    setRadioPlaying(false);
+    setRadioStatus("");
+  };
+
+  const openRadio = (channel) => {
+    setRadioStation(channel);
+    setRadioSourceIndex(0);
+    setRadioStatus("Loading radio…");
+  };
+
+  const toggleRadio = async () => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    if (!audio.paused) {
+      audio.pause();
+
+      return;
+    }
+
+    try {
+      audio.muted = false;
+      audio.volume = 1;
+
+      await audio.play();
+
+      setRadioPlaying(true);
+      setRadioStatus("");
+    } catch {
+      setRadioStatus(
+        "Radio could not start. Try the next source."
+      );
+    }
+  };
+
+  const nextRadioSource = () => {
+    if (
+      radioSourceIndex + 1 <
+      activeRadioUrls.length
+    ) {
+      setRadioSourceIndex(
+        (current) => current + 1
+      );
+    }
+  };
+
+  const playChannel = async (channel) => {
+    if (!channel) {
+      return;
+    }
+
+    setSelectedCastChannel(channel);
+
+    setChannelNoticeActions([]);
+
+    const memoryKey = channelMemoryKey(channel);
+
+    writeStoredLiveTvState({
+      query,
+      group,
+      countryFilter,
+      quickFilter,
+      directOnly,
+      viewMode,
+      channelVisibleLimit,
+      focusedChannelKey: memoryKey,
+      scrollY: Math.max(0, Number(window.scrollY || 0)),
+    });
+
+    rememberRecentChannel(channel);
+    setFocusedChannelKey(memoryKey);
+
+    if (
+      isRadioChannel(channel)
+    ) {
+      const radioUrls = radioUrlsFor(channel);
+
+      if (radioUrls.length > 0) {
+        setChannelNotice("");
+        setChannelNoticeAction(null);
+        openRadio(channel);
+      } else {
+        const fallback = officialLiveFallback(channel);
+
+        setChannelNotice(
+          fallback
+            ? `${channel.name || "This station"} does not currently expose a direct audio feed that Media God can play. Use the official station player instead.`
+            : `${channel.name || "This station"} does not currently have a playable audio stream.`
+        );
+        setChannelNoticeAction(
+          fallback
+            ? {
+                label: fallback.label,
+                url: fallback.url,
+              }
+            : null
+        );
+      }
+
+      return;
+    }
+
+    if (channel?.sourceId === "evsports-live") {
+      stopRadio();
+      setChannelNotice("");
+      setChannelNoticeAction(null);
+
+      const evSportsWatchUrl = String(
+        channel.officialUrl || channel.url || ""
+      ).trim();
+      const evSportsHomeUrl = "https://saptarshiorg.github.io/";
+
+      if (!/^https?:\/\//i.test(evSportsWatchUrl)) {
+        openOfficialLiveUrl(evSportsHomeUrl);
+        return;
+      }
+
+      const evChannelName = String(channel?.name || "").trim();
+      const evIsFormulaOne =
+        /\bsky\s*sports\s*f1\b|\bformula\s*1\b|\bf1\b/i.test(evChannelName);
+
+      if (evIsFormulaOne) {
+        const liveAntF1 = matchingLiveAntFormulaOneEvent(channels);
+        const liveAntF1Url = String(
+          liveAntF1?.officialUrl || liveAntF1?.url || ""
+        ).trim();
+
+        if (/^https?:\/\//i.test(liveAntF1Url)) {
+          openOfficialLiveUrl(liveAntF1Url);
+          return;
+        }
+
+        setChannelNotice(
+          "EV SPORTS' current Sky Sports F1 source is serving the same frozen 15-second clip. No separate live Formula 1 event source is available right now."
+        );
+        setChannelNoticeAction(null);
+        setChannelNoticeActions([
+          {
+            label: "Open official Sky Sports F1",
+            url: "https://www.skysports.com/watch/sky-sports-f1",
+          },
+          {
+            label: "Try EV F1 anyway",
+            url: evSportsWatchUrl,
+          },
+        ]);
+        return;
+      }
+
+      /*
+       * EV SPORTS publishes watch_url values as web-player/embed destinations,
+       * not as guaranteed HLS/DASH media URLs. Their own public front end opens
+       * those destinations inside its stream-player frame. Mirror that contract
+       * here: keep normal EV pages inside Media God's provider iframe instead of
+       * handing HTML to LiveVideo or leaving the app for a separate browser.
+       */
+      player.play({
+        id: channel.tvgId || channel.id,
+        title: channel.name,
+        poster: channel.logo || "",
+        type: "live",
+        mediaType: "live",
+        noRd: true,
+        officialUrl: evSportsHomeUrl,
+        officialLabel: "Open EV SPORTS",
+        sources: [
+          {
+            label: "LIVE • EV SPORTS",
+            type: "provider",
+            src: evSportsWatchUrl,
+            url: evSportsWatchUrl,
+            live: true,
+            sourceName: channel.sourceName || "EV SPORTS · Saptarshi",
+            sourceCategory: channel.sourceCategory || "Sports",
+            sourcePriority: Number(channel.sourcePriority || 220),
+            quality: Number(channel.quality || 0),
+            browserPlayable: true,
+            format: "external",
+            officialUrl: evSportsHomeUrl,
+            officialLabel: "Open EV SPORTS",
+          },
+        ],
+      });
+      return;
+    }
+
+    if (channel?.sourceId === "antsports-live") {
+      stopRadio();
+      setChannelNotice("");
+      setChannelNoticeAction(null);
+
+      openOfficialLiveUrl(
+        channel.officialUrl ||
+          channel.url ||
+          ANT_SPORTS_DIRECTORY_URL
+      );
+      return;
+    }
+
+    if (channel.provider === "sky-sport-now") {
+      stopRadio();
+      setChannelNotice("Requesting a fresh Sky Sport Now stream…");
+      setChannelNoticeAction(null);
+
+      try {
+        const response = await base44.functions.invoke("skySportNow", {
+          action: "play_event",
+          event_id: channel.skySportNowEventId,
+        });
+        const data = response?.data ?? response ?? {};
+        const sourceData = data?.source || {};
+        const streamUrl = String(sourceData?.url || sourceData?.src || "").trim();
+
+        if (!/^https?:\/\//i.test(streamUrl)) {
+          throw new Error(data?.error || "Sky Sport Now did not return a playable stream.");
+        }
+
+        setChannelNotice("");
+        prewarmChannel({ ...channel, url: streamUrl });
+
+        player.play({
+          id: channel.tvgId || channel.id,
+          title: channel.name,
+          poster: channel.logo || "",
+          type: "live",
+          mediaType: "live",
+          noRd: true,
+          officialUrl: channel.officialUrl || "https://www.skysportnow.co.nz/",
+          officialLabel: channel.officialLabel || "Open Sky Sport Now",
+          sources: [
+            {
+              label: "LIVE • Sky Sport Now",
+              type: "live",
+              src: streamUrl,
+              url: streamUrl,
+              live: true,
+              sourceName: "Sky Sport Now",
+              sourceCategory: "Sports",
+              sourcePriority: 150,
+              quality: 1080,
+              browserPlayable: true,
+              format: String(sourceData?.format || "dash"),
+              mimeType: String(sourceData?.mimeType || "application/dash+xml"),
+              headers:
+                sourceData?.headers && typeof sourceData.headers === "object"
+                  ? sourceData.headers
+                  : {},
+              drm:
+                sourceData?.drm && typeof sourceData.drm === "object"
+                  ? sourceData.drm
+                  : null,
+              officialUrl: channel.officialUrl || "https://www.skysportnow.co.nz/",
+              officialLabel: channel.officialLabel || "Open Sky Sport Now",
+            },
+          ],
+        });
+      } catch (skyError) {
+        const message = String(
+          skyError?.response?.data?.error ||
+            skyError?.message ||
+            "Could not start Sky Sport Now playback."
+        ).trim();
+
+        const issue = classifyLiveTvAccessIssue(skyError);
+        setChannelNotice(issue.reason === "unknown" ? message : `${message} ${issue.message}`);
+        setChannelNoticeAction({
+          label: "Open Sky Sport Now",
+          url: channel.officialUrl || "https://www.skysportnow.co.nz/",
+        });
+      }
+
+      return;
+    }
+
+    const evSportsFallback = evSportsDestinationForChannel(channel, channels);
+    const antSportsFallback =
+      !evSportsFallback && channelUsesAntSportsFallback(channel)
+        ? antSportsDestinationForChannel(channel, channels, epgByKey)
+        : null;
+
+    const candidates = playableChannelCandidates(channel);
+
+    if (
+      channel.kind ===
+        "external" &&
+      candidates.length === 0
+    ) {
+      const target =
+        evSportsFallback ||
+        antSportsFallback ||
+        officialLiveFallback(channel) ||
+        (channel.officialUrl || channel.url
+          ? {
+              url: channel.officialUrl || channel.url,
+              label: channel.officialLabel || "Open live service",
+            }
+          : null);
+
+      if (target?.url) {
+        openOfficialLiveUrl(target.url);
+      }
+
+      return;
+    }
+
+    if (candidates.length === 0) {
+      const fallback =
+        evSportsFallback ||
+        antSportsFallback ||
+        officialLiveFallback(channel);
+
+      setChannelNotice(
+        fallback
+          ? evSportsFallback
+            ? `${channel.name || "This sports channel"} does not have a direct stream this device can play. The matching EV SPORTS channel is available and has priority.`
+            : antSportsFallback
+              ? `${channel.name || "This sports channel"} does not have a direct stream this device can play. Open the matching ANT SPORTS event, or the ANT SPORTS directory if no exact event match is available.`
+              : `${channel.name || "This channel"} does not have a direct stream this device can play. Use the broadcaster’s official live service instead.`
+          : `${channel.name || "This channel"} does not currently have a browser-playable stream.`
+      );
+      setChannelNoticeAction(
+        fallback
+          ? {
+              label: fallback.label,
+              url: fallback.url,
+            }
+          : null
+      );
+      return;
+    }
+
+    stopRadio();
+    setChannelNotice("");
+    setChannelNoticeAction(null);
+    prewarmChannel(channel);
+
+    const directSources = candidates
+      .map(
+        (
+          candidate,
+          index
+        ) => {
+          const quality =
+            qualityLabel(candidate);
+
+          const headers = {
+            ...(candidate?.referrer
+              ? { Referer: candidate.referrer }
+              : {}),
+            ...(candidate?.userAgent
+              ? { "User-Agent": candidate.userAgent }
+              : {}),
+          };
+
+          const mimeType =
+            candidate?.format === "hls"
+              ? "application/x-mpegURL"
+              : candidate?.format === "dash"
+                ? "application/dash+xml"
+                : "";
+
+          return {
+            label:
+              index === 0
+                ? `LIVE • Best${
+                    quality
+                      ? ` • ${quality}`
+                      : ""
+                  }`
+                : `Backup ${index}${
+                    quality
+                      ? ` • ${quality}`
+                      : ""
+                  }`,
+            type: "live",
+            src: candidate.url,
+            url: candidate.url,
+            live: true,
+            sourceName:
+              candidate.sourceName,
+            sourceCategory: candidate?.sourceCategory || "",
+            sourcePriority: Number(candidate?.sourcePriority || 0),
+            quality: Number(candidate?.quality || 0),
+            geoRestricted: candidate?.geoRestricted === true,
+            browserPlayable: candidate?.browserPlayable !== false,
+            mixedContent: candidate?.mixedContent === true,
+            requiresHeaders: candidate?.requiresHeaders === true,
+            format: candidate.format || "",
+            mimeType,
+            headers,
+            officialUrl:
+              candidate.officialUrl || channel.officialUrl || "",
+            officialLabel:
+              candidate.officialLabel || channel.officialLabel || "",
+          };
+        }
+      );
+
+    const playbackRequest = {
+      id:
+        channel.tvgId ||
+        channel.id,
+
+      title:
+        channel.name,
+
+      poster:
+        channel.logo || "",
+
+      type: "live",
+
+      mediaType:
+        "live",
+
+      noRd: true,
+
+      officialUrl:
+        antSportsFallback?.url ||
+        channel.officialUrl ||
+        officialLiveFallback(channel)?.url ||
+        "",
+
+      officialLabel:
+        antSportsFallback?.label ||
+        channel.officialLabel ||
+        officialLiveFallback(channel)?.label ||
+        "",
+
+      sources: directSources,
+    };
+
+    /*
+     * Desktop browsers can keep MediaSource/HLS state alive for a short time
+     * after a channel switch. When another Live TV channel is chosen while the
+     * web player is already open, fully close the old portal first and launch
+     * the new request on the next animation frame. Native Android/Fire TV is
+     * deliberately left on its existing handoff path.
+     */
+    if (!isNativeFireTvPlayerAvailable() && player.isOpen) {
+      player.close();
+
+      window.requestAnimationFrame(() => {
+        player.play(playbackRequest);
+      });
+
+      return;
+    }
+
+    player.play(playbackRequest);
+  };
+
+  const renderQuickChannelCard = (channel) => {
+    const memoryKey = channelMemoryKey(channel);
+    const matchedGuide = epgByKey[epgKeyForChannel(channel)] || {};
+    const guide = matchedGuide?.now
+      ? matchedGuide
+      : { now: channel?.providerNow || null, next: channel?.providerNext || null };
+    const nowProgramme = guide?.now || null;
+    const favourite = favouriteKeys.has(memoryKey);
+    const playbackHealth = isRadioChannel(channel)
+      ? null
+      : channelPlaybackHealth(channel);
+
+    return (
+      <button
+        key={memoryKey}
+        type="button"
+        data-mg-live-tv-key={encodeURIComponent(memoryKey)}
+        onClick={() => playChannel(channel)}
+        onFocus={(event) => {
+          setFocusedChannelKey(memoryKey);
+          event.currentTarget.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+          });
+        }}
+        className="mg-fire-tv-card mg-live-tv-card w-48 shrink-0 rounded-xl border border-white/10 bg-mg-card p-3 text-left outline-none transition-colors focus:border-mg-green focus:bg-mg-surface focus:ring-2 focus:ring-mg-green/40"
+      >
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/30">
+            <Tv className="h-4 w-4 text-white/25" />
+            {channel.logo && (
+              <img
+                src={channel.logo}
+                alt=""
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-contain p-1"
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+              />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-xs font-bold text-white">
+                {channel.name}
+              </span>
+              {favourite && (
+                <Star className="h-3.5 w-3.5 shrink-0 fill-current text-mg-green" />
+              )}
+            </div>
+            <div className="mt-1 truncate text-[10px] text-white/40">
+              {nowProgramme?.title || channel.group || "Live TV"}
+            </div>
+            {playbackHealth && (
+              <span
+                className={cn(
+                  "mt-1 inline-flex rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide",
+                  playbackHealth.className
+                )}
+                title={playbackHealth.title}
+              >
+                {playbackHealth.label}
+              </span>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  const failedSources =
+    sourceStatus.filter(
+      (source) =>
+        source.error
+    );
+
+  const workingSources =
+    sourceStatus.filter(
+      (source) =>
+        !source.error
+    );
+
+  const repositorySources = sourceStatus.filter((source) => !source?.direct);
+  const failedRepositoryCount = repositorySources.filter((source) => source?.error).length;
+
+  const diagnosticSources = [...sourceStatus].sort((a, b) => {
+    const rank = {
+      Down: 4,
+      Slow: 3,
+      Empty: 2,
+      Fair: 1,
+      Healthy: 0,
+    };
+    const aHealth = repositoryHealth(a);
+    const bHealth = repositoryHealth(b);
+
+    return (
+      (rank[bHealth.label] ?? 0) - (rank[aHealth.label] ?? 0) ||
+      Number(b?.latencyMs || 0) - Number(a?.latencyMs || 0) ||
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+  });
+
+  const healthyRepositoryCount = repositorySources.filter(
+    (source) => repositoryHealth(source).label === "Healthy"
+  ).length;
+  const slowRepositoryCount = repositorySources.filter((source) =>
+    ["Slow", "Fair"].includes(repositoryHealth(source).label)
+  ).length;
+  const mergedBackupCount = channels.reduce(
+    (total, channel) => total + (Array.isArray(channel?.alternatives) ? channel.alternatives.length : 0),
+    0
+  );
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[55vh] flex-col items-center justify-center gap-3 p-6">
+        <Loader2 className="h-7 w-7 animate-spin text-mg-green" />
+
+        <p className="text-sm text-white/55">
+          Loading and checking public Live TV sources…
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-mg-live-tv-view="true"
+      className="w-full p-3 min-[420px]:p-4 sm:p-6 md:p-8 3xl:p-10 4xl:p-14"
+    >
+      <audio
+        ref={audioRef}
+        preload="none"
+        className="hidden"
+      />
+
+      <div
+        data-mg-live-tv-header="true"
+        className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
+      >
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Radio className="h-5 w-5 text-mg-green" />
+
+            <h1 className="text-xl font-bold text-white sm:text-2xl 3xl:text-3xl">
+              Live TV
+            </h1>
+          </div>
+
+          <p className="max-w-3xl text-xs text-white/45 sm:text-sm">
+            UK-aware public Live TV, sports, movies, video channels and radio with Sky, TNT, and public news streams integrated.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            load(true)
+          }
+          disabled={refreshing}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/10 bg-mg-card px-4 py-2 text-sm font-semibold text-white/75 hover:border-mg-green/50 hover:text-white disabled:opacity-50"
+        >
+          <RefreshCw
+            className={cn(
+              "h-4 w-4",
+              refreshing &&
+                "animate-spin"
+            )}
+          />
+
+          Refresh channels
+        </button>
+      </div>
+
+      <div
+        data-mg-live-tv-regional-note="true"
+        className="mb-4 flex items-center gap-2 rounded-lg border border-mg-green/20 bg-mg-green/5 px-3 py-2 text-xs text-mg-green"
+      >
+        <CheckCircle2 className="h-4 w-4 shrink-0" />
+
+        <div>
+          <p>Regional filtering disabled — Media God keeps geo-marked Live TV channels and backups eligible for playback.</p>
+          <p className="mt-1 text-white/60">
+            Preferred country: {countryDisplayName(getStreamingRegionDetails().region)}.
+            Regional labels help choose backups, but do not bypass a broadcaster&apos;s location or subscription restrictions.
+            Change your preferred country in Settings.
+          </p>
+        </div>
+      </div>
+
+      {radioStation && (
+        <div className="mb-5 rounded-xl border border-mg-green/40 bg-mg-card p-4 shadow-lg">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/30">
+                <Radio className="h-6 w-6 text-mg-green" />
+
+                {radioStation.logo && (
+                  <img
+                    src={
+                      radioStation.logo
+                    }
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-contain p-1"
+                    onError={(
+                      event
+                    ) => {
+                      event.currentTarget.style.display =
+                        "none";
+                    }}
+                  />
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="h-4 w-4 shrink-0 text-mg-green" />
+
+                  <div className="truncate font-bold text-white">
+                    {
+                      radioStation.name
+                    }
+                  </div>
+                </div>
+
+                <div className="mt-1 text-xs text-white/45">
+                  Radio • source{" "}
+                  {radioSourceIndex + 1}{" "}
+                  of{" "}
+                  {Math.max(
+                    activeRadioUrls.length,
+                    1
+                  )}
+                </div>
+
+                {radioStatus && (
+                  <div className="mt-1 text-xs text-amber-200/80">
+                    {radioStatus}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={
+                  toggleRadio
+                }
+                className="flex min-h-11 items-center gap-2 rounded-lg bg-mg-green px-4 py-2 text-sm font-bold text-black"
+              >
+                {radioPlaying ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+
+                {radioPlaying
+                  ? "Pause"
+                  : "Play"}
+              </button>
+
+              {radioSourceIndex + 1 <
+                activeRadioUrls.length && (
+                <button
+                  type="button"
+                  onClick={
+                    nextRadioSource
+                  }
+                  className="min-h-11 rounded-lg border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-white/75 hover:text-white"
+                >
+                  Next source
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={
+                  stopRadio
+                }
+                className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-white/75 hover:text-white"
+              >
+                <Square className="h-4 w-4" />
+
+                Stop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {channelNotice && !error && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-100/85">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div>{channelNotice}</div>
+            {channelNoticeAction?.url && (
+              <button
+                type="button"
+                onClick={() => openOfficialLiveUrl(channelNoticeAction.url)}
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300/30 bg-black/25 px-3 py-2 text-xs font-bold text-white outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-mg-green"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                {channelNoticeAction.label || "Open official stream"}
+              </button>
+            )}
+
+            {channelNoticeActions.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {channelNoticeActions.map((action, index) => (
+                  <button
+                    key={`${action?.label || "link"}-${index}`}
+                    type="button"
+                    onClick={() => {
+                      if (action?.channel) {
+                        playChannel(action.channel);
+                        return;
+                      }
+
+                      if (action?.url) {
+                        openOfficialLiveUrl(action.url);
+                      }
+                    }}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300/30 bg-black/25 px-3 py-2 text-xs font-bold text-white outline-none hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-mg-green"
+                  >
+                    {action?.channel ? (
+                      <Tv className="h-3.5 w-3.5" />
+                    ) : (
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    )}
+                    {action?.label || "Open link"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setChannelNotice("");
+              setChannelNoticeAction(null);
+              setChannelNoticeActions([]);
+            }}
+            className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-white/60 hover:bg-white/5 hover:text-white"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+          <div>
+            <div className="font-semibold">
+              Live TV could not load
+            </div>
+
+            <div className="mt-1 text-red-200/70">
+              {error}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!error &&
+        failedSources.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">
+            {failedSources.length} playlist source
+            {failedSources.length === 1
+              ? ""
+              : "s"}{" "}
+            could not be reached. Working playlists are still available.
+          </div>
+        )}
+
+      {viewMode === "channels" &&
+        quickFilter === "All" &&
+        !query.trim() &&
+        favouriteChannels.length > 0 && (
+          <section data-mg-live-tv-quick-section="true" className="mb-5">
+            <div className="mb-2 flex items-center gap-2">
+              <Star className="h-4 w-4 fill-current text-mg-green" />
+              <h2 className="text-sm font-bold text-white">Favourite channels</h2>
+            </div>
+            <div
+              data-mg-tv-row="true"
+              className="flex gap-3 overflow-x-auto pb-2 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {favouriteChannels
+                .slice(0, 18)
+                .map(renderQuickChannelCard)}
+            </div>
+          </section>
+        )}
+
+      {viewMode === "channels" &&
+        quickFilter === "All" &&
+        !query.trim() &&
+        recentChannels.length > 0 && (
+          <section data-mg-live-tv-quick-section="true" className="mb-5">
+            <div className="mb-2 flex items-center gap-2">
+              <Clock3 className="h-4 w-4 text-mg-green" />
+              <h2 className="text-sm font-bold text-white">Recent channels</h2>
+            </div>
+            <div
+              data-mg-tv-row="true"
+              className="flex gap-3 overflow-x-auto pb-2 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {recentChannels.map(renderQuickChannelCard)}
+            </div>
+          </section>
+        )}
+
+      <div
+        data-mg-live-tv-category-row="true"
+        className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-12"
+      >
+        {[
+          {
+            id: "All",
+            label: "All",
+            icon: Tv,
+          },
+          {
+            id: "United Kingdom",
+            label: "UK",
+            icon: Globe2,
+          },
+          {
+            id: "Worldwide",
+            label: "Worldwide",
+            icon: Globe2,
+          },
+          {
+            id: "Sports",
+            label: "Sports",
+            icon: Trophy,
+          },
+          {
+            id: "Motorsport",
+            label: "Motorsport",
+            icon: Activity,
+          },
+          {
+            id: "Movies",
+            label: "Movies",
+            icon: Film,
+          },
+          {
+            id: "Video Channels",
+            label: "Video Channels",
+            icon: Play,
+          },
+          {
+            id: "Radio",
+            label: "Radio",
+            icon: Radio,
+          },
+          {
+            id: "Favourites",
+            label: "Favourites",
+            icon: Star,
+          },
+          {
+            id: "Recent",
+            label: "Recent",
+            icon: Clock3,
+          },
+          {
+            id: "Most Reliable",
+            label: "Reliable",
+            icon: CheckCircle2,
+          },
+          {
+            id: "Hidden",
+            label: "Hidden",
+            icon: EyeOff,
+          },
+        ].map((item) => {
+          const Icon =
+            item.icon;
+
+          const active =
+            quickFilter ===
+            item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setQuickFilter(
+                  item.id
+                );
+
+                setGroup("All");
+              }}
+              className={cn(
+                "flex min-h-12 items-center justify-between gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-green focus-visible:ring-offset-2 focus-visible:ring-offset-mg-background",
+
+                active
+                  ? "border-mg-green bg-mg-green text-black"
+                  : "border-white/10 bg-mg-card text-white/70 hover:border-mg-green/50 hover:text-white"
+              )}
+              aria-pressed={active}
+            >
+              <span className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+
+                {item.label}
+              </span>
+
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px]",
+
+                  active
+                    ? "bg-black/15"
+                    : "bg-white/5 text-white/45"
+                )}
+              >
+                {Number(
+                  quickCounts[
+                    item.id
+                  ] || 0
+                ).toLocaleString()}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        data-mg-live-tv-controls="true"
+        className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_200px_220px_auto_auto_auto]"
+      >
+        <label data-mg-live-tv-search="true" className="relative block">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+
+          <input
+            value={query}
+            onChange={(event) =>
+              setQuery(
+                event.target.value
+              )
+            }
+            placeholder="Search channel, country, source or category…"
+            aria-label="Search Live TV channels"
+            className="h-11 w-full rounded-lg border border-white/10 bg-mg-card pl-10 pr-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-mg-green focus:ring-2 focus:ring-mg-green/30"
+          />
+        </label>
+
+        <select
+          value={group}
+          onChange={(event) =>
+            setGroup(
+              event.target.value
+            )
+          }
+          aria-label="Filter Live TV by group"
+          className="h-11 rounded-lg border border-white/10 bg-mg-card px-3 text-sm text-white outline-none focus:border-mg-green focus:ring-2 focus:ring-mg-green/30"
+        >
+          {groups.map((item) => (
+            <option
+              key={item}
+              value={item}
+            >
+              {item}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={countryFilter}
+          onChange={(event) =>
+            setCountryFilter(event.target.value)
+          }
+          aria-label="Filter Live TV by country"
+          className="h-11 rounded-lg border border-white/10 bg-mg-card px-3 text-sm text-white outline-none focus:border-mg-green focus:ring-2 focus:ring-mg-green/30"
+        >
+          {countries.map((code) => (
+            <option key={code} value={code}>
+              {code === "All" ? "All countries" : countryDisplayName(code)}
+            </option>
+          ))}
+        </select>
+
+        <div className="grid h-11 grid-cols-[minmax(0,1fr)_40px_40px] overflow-hidden rounded-lg border border-white/10 bg-mg-card">
+          <button
+            type="button"
+            disabled={group === DEFAULT_FILTER}
+            onClick={() =>
+              setCurrentGroupHidden(
+                !hiddenGroups.has(group)
+              )
+            }
+            className={cn(
+              "min-w-0 px-2 text-xs font-semibold transition-colors",
+              group === DEFAULT_FILTER
+                ? "cursor-not-allowed text-white/20"
+                : hiddenGroups.has(group)
+                  ? "bg-mg-green/10 text-mg-green"
+                  : "text-white/65 hover:text-white"
+            )}
+            title={
+              group === DEFAULT_FILTER
+                ? "Choose a group first"
+                : hiddenGroups.has(group)
+                  ? "Restore this group"
+                  : "Hide this group"
+            }
+          >
+            {hiddenGroups.has(group) ? "Restore" : "Hide group"}
+          </button>
+          <button
+            type="button"
+            disabled={group === DEFAULT_FILTER}
+            onClick={() => moveCurrentGroup("up")}
+            aria-label="Move selected group up"
+            title="Move group up"
+            className="border-l border-white/10 text-white/45 outline-none hover:text-white disabled:opacity-20 focus:ring-2 focus:ring-inset focus:ring-mg-green"
+          >
+            <ArrowUp className="mx-auto h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            disabled={group === DEFAULT_FILTER}
+            onClick={() => moveCurrentGroup("down")}
+            aria-label="Move selected group down"
+            title="Move group down"
+            className="border-l border-white/10 text-white/45 outline-none hover:text-white disabled:opacity-20 focus:ring-2 focus:ring-inset focus:ring-mg-green"
+          >
+            <ArrowDown className="mx-auto h-4 w-4" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setDirectOnly(
+              (current) =>
+                !current
+            )
+          }
+          aria-pressed={directOnly}
+          className={cn(
+            "h-11 rounded-lg border px-4 text-sm font-semibold transition-colors",
+
+            directOnly
+              ? "border-mg-green bg-mg-green text-black"
+              : "border-white/10 bg-mg-card text-white/70 hover:text-white"
+          )}
+        >
+          Direct + linked
+        </button>
+
+        <div className="grid h-11 grid-cols-3 overflow-hidden rounded-lg border border-white/10 bg-mg-card">
+          <button
+            type="button"
+            onClick={() => setViewMode("channels")}
+            aria-label="Channel cards view"
+            aria-pressed={viewMode === "channels"}
+            className={cn(
+              "flex min-w-11 items-center justify-center gap-1.5 px-2 text-xs font-semibold outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-mg-green",
+              viewMode === "channels"
+                ? "bg-mg-green text-black"
+                : "text-white/60 hover:text-white"
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            <span className="hidden xl:inline">Channels</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode("guide")}
+            aria-label="TV Guide view"
+            aria-pressed={viewMode === "guide"}
+            className={cn(
+              "flex min-w-11 items-center justify-center gap-1.5 px-2 text-xs font-semibold outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-mg-green",
+              viewMode === "guide"
+                ? "bg-mg-green text-black"
+                : "text-white/60 hover:text-white"
+            )}
+          >
+            <ListVideo className="h-4 w-4" />
+            <span className="hidden xl:inline">Guide</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode("sources")}
+            aria-label="Live TV source diagnostics"
+            aria-pressed={viewMode === "sources"}
+            className={cn(
+              "flex min-w-11 items-center justify-center gap-1.5 px-2 text-xs font-semibold outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-mg-green",
+              viewMode === "sources"
+                ? "bg-mg-green text-black"
+                : "text-white/60 hover:text-white"
+            )}
+          >
+            <Activity className="h-4 w-4" />
+            <span className="hidden xl:inline">Sources</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-white/40 sm:text-xs">
+        {selectedCastChannel && !isRadioChannel(selectedCastChannel) && (() => {
+          const castSource = playableChannelCandidates(selectedCastChannel)[0];
+          return castSource?.url ? (
+            <div className="relative">
+              <CastButton
+                url={castSource.url}
+                title={selectedCastChannel.name || "Live TV"}
+                poster={selectedCastChannel.logo || ""}
+                contentType={castSource.format === "hls" ? "application/x-mpegURL" : castSource.format === "dash" ? "application/dash+xml" : ""}
+                source={{ ...castSource, live: true }}
+              />
+            </div>
+          ) : null;
+        })()}
+        <span className="flex items-center gap-1.5">
+          <Tv className="h-3.5 w-3.5" />
+
+          {filtered.length.toLocaleString()} matching channels
+        </span>
+
+        <span data-mg-live-tv-technical="true">
+          {rawCount.toLocaleString()} raw entries merged into{" "}
+          {channels.length.toLocaleString()} visible channels
+        </span>
+
+        <span data-mg-live-tv-technical="true">
+          {workingSources.length}/
+          {sourceStatus.length} source endpoints loaded
+        </span>
+
+        {epgMatched > 0 && (
+          <span data-mg-live-tv-technical="true" className="text-mg-green/70">
+            Now/Next guide matched to {epgMatched} channels
+          </span>
+        )}
+
+        {browserRejectedCount > 0 && (
+          <span data-mg-live-tv-technical="true">
+            {browserRejectedCount.toLocaleString()} incompatible/dead-format sources filtered out
+          </span>
+        )}
+
+        {filtered.length > visibleLimit && (
+          <span>
+            {viewMode === "guide"
+              ? `Guide showing first ${visibleLimit.toLocaleString()}. Use country/search filters to narrow it.`
+              : `Showing ${shown.length.toLocaleString()} of ${filtered.length.toLocaleString()} channels. Load more below or narrow by country/search.`}
+          </span>
+        )}
+      </div>
+
+      {viewMode === "sources" ? (
+        <div className="space-y-4" data-mg-live-tv-source-diagnostics="true">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-xl border border-mg-green/25 bg-mg-green/5 p-4">
+              <div className="text-2xl font-black text-mg-green">
+                {healthyRepositoryCount}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-white/55">
+                Healthy repositories
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4">
+              <div className="text-2xl font-black text-amber-200">
+                {slowRepositoryCount}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-white/55">
+                Fair / slow
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-red-400/20 bg-red-400/5 p-4">
+              <div className="text-2xl font-black text-red-200">
+                {failedRepositoryCount}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-white/55">
+                Down right now
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-mg-card p-4">
+              <div className="text-2xl font-black text-white">
+                {mergedBackupCount.toLocaleString()}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-white/55">
+                Hidden backup feeds
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-mg-card p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 font-bold text-white">
+                  <Activity className="h-4 w-4 text-mg-green" />
+                  Repository health
+                </div>
+                <p className="mt-1 text-xs text-white/40">
+                  Failed and slow repositories are shown first. Refresh channels to retest them.
+                </p>
+              </div>
+
+              <div className="text-xs text-white/40">
+                {repositorySources.length} repositories checked
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {diagnosticSources.map((source) => {
+                const health = repositoryHealth(source);
+                const latencyMs = Number(source?.latencyMs || 0);
+
+                return (
+                  <div
+                    key={source.id || source.name}
+                    className="rounded-lg border border-white/8 bg-black/20 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-white">
+                          {source.name || source.id || "Live TV repository"}
+                        </div>
+                        <div className="mt-1 truncate text-[10px] text-white/35">
+                          {source.category || "Other"}
+                        </div>
+                      </div>
+
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide",
+                          health.className
+                        )}
+                      >
+                        {health.label}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-white/50">
+                      <span>{Number(source?.count || 0).toLocaleString()} channels</span>
+                      <span>
+                        {source?.direct
+                          ? "Native backup"
+                          : latencyMs > 0
+                            ? `${(latencyMs / 1000).toFixed(latencyMs >= 10000 ? 0 : 1)}s load`
+                            : "Instant"}
+                      </span>
+                    </div>
+
+                    {source.error && (
+                      <div className="mt-2 line-clamp-2 rounded-md border border-red-400/15 bg-red-400/5 px-2 py-1.5 text-[10px] leading-4 text-red-200/80">
+                        {source.error}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-mg-card p-8 text-center">
+          <Tv className="mx-auto mb-3 h-8 w-8 text-white/25" />
+
+          <div className="font-semibold text-white">
+            No channels found
+          </div>
+
+          <div className="mt-1 text-sm text-white/40">
+            Try All, another group, or a different search.
+          </div>
+
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="mt-4 min-h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/70 hover:border-mg-green/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-green"
+          >
+            Reset filters
+          </button>
+        </div>
+      ) : viewMode === "guide" ? (
+        <div className="grid gap-2" data-mg-live-tv-guide="true">
+          {shown.map((channel, index) => {
+            const memoryKey = channelMemoryKey(channel);
+            const matchedGuide = epgByKey[epgKeyForChannel(channel)] || {};
+            const guide = matchedGuide?.now
+              ? matchedGuide
+              : { now: channel?.providerNow || null, next: channel?.providerNext || null };
+            const upcoming = Array.isArray(guide?.upcoming)
+              ? guide.upcoming.slice(0, 4)
+              : [guide?.now, guide?.next].filter(Boolean);
+            const currentStart = String(guide?.now?.start || "");
+
+            return (
+              <div
+                key={`guide-${channel.id || memoryKey}-${index}`}
+                data-mg-tv-row="true"
+                className="grid min-h-[84px] gap-2 rounded-xl border border-white/8 bg-mg-card/70 p-2 md:grid-cols-[220px_minmax(0,1fr)]"
+              >
+                <button
+                  type="button"
+                  data-mg-live-tv-key={encodeURIComponent(memoryKey)}
+                  onClick={() => playChannel(channel)}
+                  onFocus={(event) => {
+                    setFocusedChannelKey(memoryKey);
+                    event.currentTarget.scrollIntoView({
+                      block: "nearest",
+                      inline: "nearest",
+                    });
+                  }}
+                  className={cn(
+                    "mg-fire-tv-card mg-live-tv-card flex min-h-[68px] items-center gap-3 rounded-lg border bg-black/25 px-3 text-left outline-none transition-colors focus:border-mg-green focus:bg-mg-surface focus:ring-2 focus:ring-mg-green/35",
+                    focusedChannelKey === memoryKey
+                      ? "border-mg-green/35"
+                      : "border-white/8"
+                  )}
+                >
+                  <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/30">
+                    <Tv className="h-4 w-4 text-white/25" />
+                    {channel.logo && (
+                      <img
+                        src={channel.logo}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-contain p-1"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold text-white">
+                      {channel.name}
+                    </div>
+                    <div className="mt-0.5 truncate text-[10px] text-white/40">
+                      {channel.group || channel.country || "Live TV"}
+                    </div>
+                  </div>
+
+                  {favouriteKeys.has(memoryKey) && (
+                    <Star className="h-4 w-4 shrink-0 fill-current text-mg-green" />
+                  )}
+                </button>
+
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {upcoming.length > 0 ? (
+                    upcoming.map((programme, programmeIndex) => {
+                      const isNow =
+                        Boolean(currentStart) &&
+                        String(programme?.start || "") === currentStart;
+                      const progress = isNow
+                        ? programmeProgress(programme, clockTick)
+                        : 0;
+
+                      return (
+                        <div
+                          key={`${programme?.start || programmeIndex}-${programme?.title || "programme"}`}
+                          className={cn(
+                            "min-w-0 rounded-lg border px-3 py-2",
+                            isNow
+                              ? "border-mg-green/30 bg-mg-green/8"
+                              : "border-white/8 bg-black/20"
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                            <span className={isNow ? "text-mg-green" : "text-white/45"}>
+                              {isNow ? "NOW" : formatProgrammeTime(programme?.start)}
+                            </span>
+                            {!isNow && programme?.stop && (
+                              <span className="text-white/25">
+                                – {formatProgrammeTime(programme.stop)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 truncate text-xs font-semibold text-white/85">
+                            {programme?.title || "Programme"}
+                          </div>
+                          {isNow && (
+                            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full bg-mg-green"
+                                style={{ width: `${Math.round(progress * 100)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full flex min-h-[68px] items-center rounded-lg border border-white/8 bg-black/20 px-3 text-xs text-white/35">
+                      Guide information is not available for this channel yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          <div
+            data-mg-live-tv-grid="true"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 3xl:grid-cols-4 4xl:grid-cols-5"
+          >
+            {shown.map(
+            (
+              channel,
+              index
+            ) => {
+              const external =
+                channel.kind ===
+                "external";
+
+              const antSports = channel?.sourceId === "antsports-live";
+              const antSportsLive = antSports && channel?.antsports?.status === "live";
+              const antSportsKickoff = antSportsKickoffLabel(channel);
+
+              const radio =
+                isRadioChannel(
+                  channel
+                );
+
+              const quality =
+                qualityLabel(
+                  channel
+                );
+
+              const backupCount = Math.max(
+                0,
+                playableChannelCandidates(channel).length - 1
+              );
+
+              const guide = epgByKey[
+                epgKeyForChannel(channel)
+              ];
+              const nowProgramme = guide?.now || null;
+              const nextProgramme = guide?.next || null;
+              const nowProgress = programmeProgress(
+                nowProgramme,
+                clockTick
+              );
+
+              const memoryKey = channelMemoryKey(channel);
+              const favourite = favouriteKeys.has(memoryKey);
+              const playbackHealth = channelPlaybackHealth(channel);
+
+              return (
+                <div
+                  key={`${channel.id}-${index}`}
+                  className="group relative min-h-[118px]"
+                  data-mg-live-tv-channel="true"
+                  data-mg-live-tv-card="true"
+                >
+                  <button
+                    type="button"
+                    data-mg-live-tv-key={encodeURIComponent(memoryKey)}
+                    onClick={() =>
+                      playChannel(
+                        channel
+                      )
+                    }
+                    onFocus={(event) => {
+                      setFocusedChannelKey(memoryKey);
+                      event.currentTarget.scrollIntoView({
+                        block: "nearest",
+                        inline: "nearest",
+                      });
+                    }}
+                    className="mg-live-tv-channel-button flex h-full min-h-[118px] w-full items-start gap-3 rounded-xl border border-white/10 bg-mg-card p-3 pr-11 text-left transition-colors hover:border-mg-green/60 hover:bg-mg-surface focus:border-mg-green focus:bg-mg-surface focus:outline-none focus:ring-2 focus:ring-mg-green/40"
+                  >
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/30">
+                    {radio ? (
+                      <Radio className="h-5 w-5 text-mg-green/50" />
+                    ) : (
+                      <Tv className="h-5 w-5 text-white/20" />
+                    )}
+
+                    {channel.logo && (
+                      <img
+                        src={channel.logo}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-contain p-1"
+                        onError={(event) => {
+                          event.currentTarget.style.display =
+                            "none";
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-white group-hover:text-mg-green">
+                      {channel.name}
+                    </div>
+
+                    <div className="mt-1 truncate text-xs text-white/40">
+                      {channel.group ||
+                        channel.country ||
+                        "Free TV"}
+                    </div>
+
+                    {nowProgramme && (
+                      <div className="mt-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="shrink-0 rounded bg-mg-green/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mg-green">
+                            Now
+                          </span>
+                          <span className="truncate text-[11px] font-semibold text-white/85">
+                            {nowProgramme.title}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full bg-mg-green"
+                            style={{ width: `${Math.round(nowProgress * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {nextProgramme && (
+                      <div className="mt-1.5 flex min-w-0 gap-1.5 text-[10px] text-white/45">
+                        <span className="shrink-0 font-semibold text-white/55">
+                          Next {formatProgrammeTime(nextProgramme.start)}
+                        </span>
+                        <span className="truncate">· {nextProgramme.title}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-1.5 truncate text-[10px] text-white/30">
+                      {channel.sourceName ||
+                        "Public IPTV"}
+
+                      {backupCount > 0
+                        ? ` • ${backupCount} backup${
+                            backupCount === 1
+                              ? ""
+                              : "s"
+                          }`
+                        : ""}
+                    </div>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {radio ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-mg-green/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mg-green">
+                          <Volume2 className="h-2.5 w-2.5" />
+
+                          Radio
+                        </span>
+                      ) : external ? (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                            antSports
+                              ? antSportsLive
+                                ? "bg-mg-green/10 text-mg-green"
+                                : "bg-amber-500/10 text-amber-200"
+                              : "bg-white/5 text-white/50"
+                          )}
+                        >
+                          {antSportsLive ? (
+                            <Wifi className="h-2.5 w-2.5" />
+                          ) : (
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          )}
+
+                          {antSports
+                            ? antSportsLive
+                              ? "ANT Live"
+                              : antSportsKickoff
+                                ? `Upcoming • ${antSportsKickoff}`
+                                : "Upcoming"
+                            : "Web stream"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-mg-green/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-mg-green">
+                          <Wifi className="h-2.5 w-2.5" />
+
+                          Live
+                        </span>
+                      )}
+
+                      {!radio && !external && playbackHealth && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                            playbackHealth.className
+                          )}
+                          title={playbackHealth.title}
+                        >
+                          {playbackHealth.label === "Healthy" ? (
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                          ) : playbackHealth.label === "Backup" ? (
+                            <RefreshCw className="h-2.5 w-2.5" />
+                          ) : (
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                          )}
+                          {playbackHealth.label}
+                        </span>
+                      )}
+
+                      {!radio &&
+                        channel?.catchup === true && (
+                          <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-violet-200">
+                            Catch-up
+                            {Number(channel?.catchupDays || 0) > 0
+                              ? ` ${Number(channel.catchupDays)}d`
+                              : ""}
+                          </span>
+                        )}
+
+                      {!radio &&
+                        quality && (
+                          <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-blue-200">
+                            {quality}
+                          </span>
+                        )}
+
+                      {(channel.tags || []).includes(
+                        "Sports"
+                      ) && (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+                          Sports
+                        </span>
+                      )}
+
+                      {(channel.tags || []).includes(
+                        "Movies"
+                      ) && (
+                        <span className="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-fuchsia-200">
+                          Movies
+                        </span>
+                      )}
+
+                      {channel.country && (
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white/60">
+                          {String(channel.country).toUpperCase()}
+                        </span>
+                      )}
+
+                      {channel.standardDefinition &&
+                        !radio && (
+                          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white/40">
+                            SD
+                          </span>
+                        )}
+
+                      {channel.insecure && (
+                        <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-300">
+                          HTTP
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                    {radio ? (
+                      <Volume2 className="h-4 w-4 shrink-0 text-mg-green" />
+                    ) : external ? (
+                      antSportsLive ? (
+                        <Wifi className="h-4 w-4 shrink-0 text-mg-green" />
+                      ) : (
+                        <ExternalLink className="h-4 w-4 shrink-0 text-white/30" />
+                      )
+                    ) : (
+                      <Wifi className="h-4 w-4 shrink-0 text-mg-green" />
+                    )}
+                  </button>
+
+                  {!radio && (() => {
+                    const castSource = playableChannelCandidates(channel)[0];
+                    return castSource?.url ? (
+                      <div className="relative z-10 mt-1 flex justify-start" data-mg-live-tv-cast="true">
+                        <CastButton
+                          url={castSource.url}
+                          title={channel.name || "Live TV"}
+                          poster={channel.logo || ""}
+                          source={{ ...castSource, live: true, id: channel.id, tvgId: channel.tvgId }}
+                          menuAlign="left"
+                        />
+                      </div>
+                    ) : null;
+                  })()}
+                  <div className="absolute right-2 top-2 grid gap-1">
+                    <button
+                      type="button"
+                      aria-label={
+                        favourite
+                          ? `Remove ${channel.name} from favourites`
+                          : `Add ${channel.name} to favourites`
+                      }
+                      title={favourite ? "Remove favourite" : "Add favourite"}
+                      onClick={() => toggleFavouriteChannel(channel)}
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-full border bg-black/70 outline-none transition-colors focus:ring-2 focus:ring-mg-green",
+                        favourite
+                          ? "border-mg-green/50 text-mg-green"
+                          : "border-white/10 text-white/45 hover:text-white"
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "h-4 w-4",
+                          favourite && "fill-current"
+                        )}
+                      />
+                    </button>
+
+                    <button
+                      type="button"
+                      aria-label={
+                        channelIsHidden(channel)
+                          ? `Restore ${channel.name}`
+                          : `Hide ${channel.name}`
+                      }
+                      title={channelIsHidden(channel) ? "Restore channel" : "Hide channel"}
+                      onClick={() =>
+                        setChannelHidden(
+                          channel,
+                          !channelIsHidden(channel)
+                        )
+                      }
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/70 text-white/45 outline-none transition-colors hover:text-white focus:ring-2 focus:ring-mg-green"
+                    >
+                      {channelIsHidden(channel) ? (
+                        <Eye className="h-4 w-4" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" />
+                      )}
+                    </button>
+
+                    {quickFilter !== "Hidden" && (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`Move ${channel.name} up`}
+                          title="Move up"
+                          onClick={() => moveChannel(channel, "up")}
+                          className="flex h-7 w-8 items-center justify-center rounded-full border border-white/10 bg-black/70 text-white/40 outline-none hover:text-white focus:ring-2 focus:ring-mg-green"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${channel.name} down`}
+                          title="Move down"
+                          onClick={() => moveChannel(channel, "down")}
+                          className="flex h-7 w-8 items-center justify-center rounded-full border border-white/10 bg-black/70 text-white/40 outline-none hover:text-white focus:ring-2 focus:ring-mg-green"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+
+                    {isNativeFireTvPlayerAvailable() &&
+                      playableChannelCandidates(channel)[0]?.url && (
+                        <button
+                          type="button"
+                          aria-label={`Open ${channel.name} in an external player`}
+                          title="Open in external player"
+                          onClick={() =>
+                            openNativeFireTvExternalPlayer(
+                              playableChannelCandidates(channel)[0].url
+                            )
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/70 text-white/45 outline-none hover:text-white focus:ring-2 focus:ring-mg-green"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </button>
+                      )}
+                  </div>
+                </div>
+              );
+            }
+            )}
+          </div>
+
+          {filtered.length > shown.length && (
+            <div className="mt-5 flex justify-center">
+              <button
+                type="button"
+                onClick={() =>
+                  setChannelVisibleLimit((current) =>
+                    Math.min(filtered.length, current + MAX_VISIBLE)
+                  )
+                }
+                className="min-h-11 rounded-lg border border-white/10 bg-mg-card px-5 text-sm font-bold text-white/75 outline-none hover:border-mg-green/50 hover:text-white focus-visible:ring-2 focus-visible:ring-mg-green"
+              >
+                Show more channels · {Math.min(
+                  MAX_VISIBLE,
+                  filtered.length - shown.length
+                ).toLocaleString()} more
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
