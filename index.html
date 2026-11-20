@@ -11,7 +11,7 @@
   <body>
     <div id="root"></div>
 
-    <script>
+    <script type="module">
       (() => {
         const isDesktopMediaGod = () => {
           const ua = `${navigator.userAgent || ""} ${navigator.platform || ""}`;
@@ -155,7 +155,7 @@
       })();
     </script>
 
-    <script>
+    <script type="module">
       (() => {
         /*
          * Real-Debrid can keep reporting a torrent as "downloading" with a
