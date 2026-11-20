@@ -1,4 +1,5 @@
-import { getPlaybackDeviceProfile } from "./mediaCompatibility";
+import { supportsLegacyBoxWebPlayer } from "./legacyBoxWebPlayer";
+import { browserCodecSupport, getPlaybackDeviceProfile } from "./mediaCompatibility";
 
 // The Fire Stick's main Play button must enter the same selectable web-scraper
 // player available from source cards. OnlyFlix is the first provider
@@ -19,12 +20,16 @@ export const launchFireTvCardPlay = (player, media) => {
 
   // Never pass an OnlyFlix/VidCore webpage URL to LibVLC: web providers
   // require their own iframe/player with the user's manual scraper selector.
-  if (typeof player?.playOnlyFlix === "function" &&
-      player.playOnlyFlix(scraperMedia)) return true;
-  if (typeof player?.playVidCore === "function" &&
-      player.playVidCore(scraperMedia)) return true;
+  const needsNativeVideo = supportsLegacyBoxWebPlayer(true, navigator.userAgent) &&
+    !browserCodecSupport.h264Aac;
+  if (!needsNativeVideo) {
+    if (typeof player?.playOnlyFlix === "function" &&
+        player.playOnlyFlix(scraperMedia)) return true;
+    if (typeof player?.playVidCore === "function" &&
+        player.playVidCore(scraperMedia)) return true;
+  }
 
-  // Missing embed IDs: retain the already working direct-file discovery path.
+  // Resolve direct media for the native decoder when the WebView lacks H.264/AAC or embed IDs are missing.
   if (typeof player?.play !== "function") return false;
   void player.play({
     ...scraperMedia,

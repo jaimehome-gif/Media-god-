@@ -47,7 +47,10 @@ const protectedFiles = {
 const sourceReviewedFiles = {
   // 2026-11-17 explicit user approval to release same-session scraper fix after\n  // Android phone manual verification (Ebenezer 2026 continuous video without\n  // misleading copyright notice). Android box and Fire Stick remain unverified.\n  // This is an approved release baseline, not a claim of universal device pass.\n  // Prior file hashes recorded in docs/SCRAPER_RELEASE_20261117.md.\n  // Legacy box web-player controls and built-in embedded playback test.
   // Approved for live Fire Stick testing on 18 November. Physical acceptance is pending.
-  "src/components/mg/OnlyFlixEmbedPlayer.jsx": "571349bcee6b7ab1ab01016269823567a5e2b23cf4adedeb115f3452337f1b54",
+  // Android 5–9 generic box recovery. Chromium 75 frame and route checks passed; physical box pending.
+  "src/components/mg/OnlyFlixEmbedPlayer.jsx": "fe72815f75d59d9dd25c3b72706699749906f3da6c44c124d0ca44e00ab0ac41",
+  "src/components/mg/SafeEmbedStage.jsx": "e8d5cac75b1670f3bfdff402c0fff7043c9ae04e62b81c8982d4cdbc05018453",
+  "src/components/mg/fireTvCardPlay.js": "555d5b9edeccafceb2d7a43857b6f1ad1f26b3b9e56007e85269543f42d4dd50",
   // Explicit 14 November release instruction: reviewed wake recovery; physical
   // Fire Stick acceptance remains unverified. See FIRETV_WAKE_RELEASE_20261114.md.
   // Approved for live Fire Stick testing on 18 November. Physical acceptance is pending.

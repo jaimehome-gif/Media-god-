@@ -164,6 +164,7 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
   const chosen = activeBackups.find((item) => item.id === activeEpisodePlayer);
   const selectedUrl = chosen?.url || url;
   const legacyBox = supportsLegacyBoxWebPlayer(isFireTv, globalThis.navigator?.userAgent);
+  const providerFullscreen = isFireTv && !legacyBox;
   const testingBox = legacyBox && activeEpisodePlayer === "device-test";
   const [openError, setOpenError] = useState("");
   useEffect(() => {
@@ -341,11 +342,10 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
                 className="min-h-10 shrink-0 rounded-lg border border-white/30 px-3 text-xs text-white focus:ring-2 focus:ring-mg-green"
               >Test video</button>
             )}
-            {legacyBox && !testingBox && activeEpisodePlayer !== "vyla" && /^https:\/\//i.test(selectedUrl) && (
-              <button type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent("mg:embed-toggle-fullscreen"))}
+            {legacyBox && !testingBox && (
+              <button type="button" onClick={beginTorrentFallback}
                 className="min-h-10 shrink-0 rounded-lg border border-mg-green/60 px-3 text-xs font-semibold text-white focus:ring-2 focus:ring-mg-green"
-              >Fullscreen in this player</button>
+              >Try native player</button>
             )}
             {onlyFlixServersUrl && (
               <button type="button"
@@ -436,10 +436,10 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
                 src={selectedUrl}
                 title={providerLabel + ": " + title}
                 className="h-full w-full border-0"
-                allow={isFireTv
+                allow={providerFullscreen
                   ? "autoplay; encrypted-media; picture-in-picture; fullscreen"
                   : "autoplay; encrypted-media; picture-in-picture"}
-                allowFullScreen={isFireTv}
+                allowFullScreen={providerFullscreen}
                 sandbox="allow-scripts allow-same-origin allow-presentation"
                 referrerPolicy="strict-origin-when-cross-origin"
                 tabIndex={0}

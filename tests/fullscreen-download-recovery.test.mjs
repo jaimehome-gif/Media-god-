@@ -18,7 +18,7 @@ test("OnlyFlix permits native fullscreen on Fire TV while phone and other embeds
     assert.match(src,/picture-in-picture/,path);
     if (path === "OnlyFlixEmbedPlayer") {
       // Fire TV alone can test the native video surface; phone stays inline.
-      assert.match(src, /allowFullScreen=\{isFireTv\}/, path);
+      assert.match(src, /allowFullScreen=\{providerFullscreen\}/, path);
       assert.match(src, /\? "autoplay; encrypted-media; picture-in-picture; fullscreen"/, path);
       assert.match(src, /: "autoplay; encrypted-media; picture-in-picture"/, path);
     } else {

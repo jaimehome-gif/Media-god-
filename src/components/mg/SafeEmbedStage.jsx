@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Expand, Shrink } from "lucide-react";
 import { isNativeFireTvEmbedRemoteAvailable } from "@/components/mg/nativeFireTvBridge";
+import { supportsLegacyBoxWebPlayer } from "@/components/mg/legacyBoxWebPlayer";
 import { syncEmbeddedFramePixels } from "@/components/mg/embeddedFramePixels";
 
 /**
@@ -45,6 +46,9 @@ export default function SafeEmbedStage({ children }) {
     if (!isNativeFireTvEmbedRemoteAvailable()) return undefined;
     const stage = stageRef.current;
     if (!stage) return undefined;
+    // The TV stylesheet already anchors the stage and stretches its iframe.
+    // Old box WebViews can resize their viewport again on each pixel write.
+    if (supportsLegacyBoxWebPlayer(true, navigator.userAgent)) return undefined;
     let paint = 0;
     const measure = () => {
       cancelAnimationFrame(paint);
