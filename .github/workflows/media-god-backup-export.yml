@@ -1,0 +1,43 @@
+name: One-time Media God source backup export
+on:
+  push:
+    branches:
+      - backup/source-export-20261120
+    paths:
+      - .github/workflows/media-god-backup-export.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download and verify independent source snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export chunks
+          urls=(
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/ac1ac44cb_Media-God-Backup-Chunk-000.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/0e6d5bdfa_Media-God-Backup-Chunk-001.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/d89cc07f1_Media-God-Backup-Chunk-002.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/cc2d6dd70_Media-God-Backup-Chunk-003.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/d8b20e5fc_Media-God-Backup-Chunk-004.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/c85bc1c4f_Media-God-Backup-Chunk-005.zip'
+            'https://media.base44.com/files/public/6a95b85c1b5a8657bf3906c8/e99a5a016_Media-God-Backup-Chunk-006.zip'
+          )
+          for i in "${!urls[@]}"; do
+            key=$(printf '%03d' "$i")
+            curl --fail --location --silent --show-error --retry 3 --max-time 90 "${urls[$i]}" -o "chunks/$key.zip"
+            unzip -p "chunks/$key.zip" "archive-part-$key.bin" >> export/Media-God-Source-Backup-2026-11-20.zip
+          done
+          echo '84eedbcb483adc243e5e5687ddc2b1f08ada8c07be7887c699e54b2c27543c74  export/Media-God-Source-Backup-2026-11-20.zip' | sha256sum --check
+          unzip -t export/Media-God-Source-Backup-2026-11-20.zip
+      - name: Upload verified source backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Media-God-Source-Backup-2026-11-20
+          path: export/Media-God-Source-Backup-2026-11-20.zip
+          retention-days: 3
+          if-no-files-found: error
