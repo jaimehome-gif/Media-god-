@@ -8,6 +8,7 @@ import {
 
 const REPO = "jaimehome-gif/Media-god-";
 const SHA = "82b3c736a64cabac2943da2050f25abac96e9c77";
+const HASH = "a".repeat(64);
 const targets = {
   "android-mobile": {
     tag: "android-mobile-latest",
@@ -30,10 +31,11 @@ function mockedRelease(platform, edits = {}) {
   const release = {
     tag_name: item.tag,
     target_commitish: SHA,
-    body: `Verified-APK-Commit: ${SHA}`,
+    body: `Verified-APK-Commit: ${SHA}\nVerified-APK-SHA256: ${HASH}`,
     draft: false,
     published_at: "2026-10-23T17:16:10Z",
-    assets: [{ name: item.asset, size: 180000000, state: "uploaded" }],
+    assets: [{ name: item.asset, size: 180000000, state: "uploaded", digest: "sha256:" + HASH,
+      browser_download_url: `https://github.com/${REPO}/releases/download/${item.tag}/${item.asset}` }],
     ...edits,
   };
   const manifest = {
@@ -68,6 +70,8 @@ for (const platform of ["android-mobile", "fire-tv"]) {
       { ...release, body: "Verified-APK-Commit: " + "0".repeat(40) },
       { ...release, target_commitish: "main" },
       { ...release, assets: [] },
+      { ...release, assets: [{ ...release.assets[0], digest: "sha256:" + "b".repeat(64) }] },
+      { ...release, assets: [{ ...release.assets[0], browser_download_url: "https://example.test/old.apk" }] },
       { ...release, assets: [{ ...release.assets[0], state: "starter" }] },
       { ...release, assets: [{ ...release.assets[0], size: 0 }] },
       { ...release, assets: [{ ...release.assets[0], name: "wrong.apk" }] },

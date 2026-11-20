@@ -251,6 +251,8 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Android-Mobile.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Fire-TV.apk
+          python3 scripts/verify-announced-apk.py android-mobile Media-God-Android-Mobile.apk
+          python3 scripts/verify-announced-apk.py fire-tv Media-God-Fire-TV.apk
       - name: Upload coordinated APK artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -292,6 +294,12 @@ jobs:
             ' "$RUNNER_TEMP/$tag.json" >/dev/null
             download_release_asset "$(cat "$RUNNER_TEMP/$tag.json")" "$asset" "$RUNNER_TEMP/$dir"
             cmp "$asset" "$RUNNER_TEMP/$dir/$asset"
+            manifest=public/firetv-update.json
+            if [[ "$tag" == android-mobile-latest ]]; then manifest=public/android-mobile-update.json; fi
+            url="$(jq -er .apkUrl "$manifest")"
+            [[ "$url" == "https://github.com/$repo/releases/download/$tag/$asset" ]]
+            curl --fail --location --retry 3 --max-time 240 "$url" -o "$RUNNER_TEMP/$dir/public.apk"
+            cmp "$asset" "$RUNNER_TEMP/$dir/public.apk"
           done
           echo "Both signed APKs are published and byte-identical to the tested build"
       - name: Mark both APK releases ready for update pop-ups
@@ -306,7 +314,10 @@ jobs:
           for spec in "android-mobile-latest:phone/tablet" "firetv-latest:Fire TV/Stick"; do
             tag="${spec%%:*}"
             platform="${spec#*:}"
-            printf 'Verified Media God %s release.\n\nVerified-APK-Commit: %s\nBoth phone and Fire TV APKs passed test, signature, and published-download verification.\n' "$platform" "$GITHUB_SHA" > "$RUNNER_TEMP/$tag-verified-notes.txt"
+            asset=Media-God-Fire-TV.apk
+            if [[ "$tag" == android-mobile-latest ]]; then asset=Media-God-Android-Mobile.apk; fi
+            digest="$(sha256sum "$asset" | cut -d' ' -f1)"
+            printf 'Verified Media God %s release.\n\nVerified-APK-Commit: %s\nVerified-APK-SHA256: %s\nBoth phone and Fire TV APKs passed test, signature, and published-download verification.\n' "$platform" "$GITHUB_SHA" "$digest" > "$RUNNER_TEMP/$tag-verified-notes.txt"
             release_id="$(release_json "$tag" | jq -er .id)"
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               --raw-field body="$(cat "$RUNNER_TEMP/$tag-verified-notes.txt")" >/dev/null

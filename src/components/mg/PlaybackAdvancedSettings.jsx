@@ -1,3 +1,6 @@
+import BoxPlayerPreference from "./BoxPlayerPreference";
+import { isNativeFireTvEmbedRemoteAvailable } from "./nativeFireTvBridge";
+import { supportsLegacyBoxWebPlayer } from "./legacyBoxWebPlayer";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   readPlaybackPreferences,
@@ -114,6 +117,8 @@ export default function PlaybackAdvancedSettings() {
       </div>
 
       <div className="divide-y divide-white/5">
+        {supportsLegacyBoxWebPlayer(isNativeFireTvEmbedRemoteAvailable(), navigator.userAgent) &&
+          <div className="p-4"><BoxPlayerPreference /></div>}
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between 3xl:p-5">
           <div>
             <p className="text-sm font-medium text-white">Audio output</p>

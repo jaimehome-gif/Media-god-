@@ -1,3 +1,7 @@
+import BoxPlayerPreference from "./BoxPlayerPreference";
+import { copySupportReportText } from "./supportReportCopy.js";
+import { getAndroidBoxSupportLines } from "./androidBoxDiagnostics.js";
+import { redactSupportErrorMessage } from "./supportErrorRedaction.js";
 import embeddedVideoTestPage from "../../../public/embedded-video-test.html?raw";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ListVideo, Loader2 } from "lucide-react";
@@ -171,7 +175,26 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
     setOpenError("");
   }, [selectedUrl, activeEpisodePlayer]);
   const providerLabel = chosen?.label || "OnlyFlix";
-  const advanceAfterFailure = useCallback(() => {
+  const lastProviderError = useRef("");
+  const copyPlaybackReport = async () => {
+    const model = /;\s*([^;()]+?)\s+Build\//i.exec(navigator.userAgent)?.[1];
+    const report = [
+      "Media God playback report",
+      "Box model: " + (redactSupportErrorMessage(model) || "not reported"),
+      "Source: " + (testingBox ? "Media God test clip" : activeEpisodePlayer === "vyla" ? "Vyla" : providerLabel),
+      "Player: embedded web player",
+      "Page state: " + (testingBox ? "device test" : activeEpisodePlayer === "vyla" ? "source selection" :
+        iframeLoadedRef.current ? "provider page loaded; video output unconfirmed" : "waiting for provider page"),
+      "Latest player error: " + (redactSupportErrorMessage(openError || lastProviderError.current) || "none recorded"),
+      ...getAndroidBoxSupportLines(),
+    ].join("\n");
+    if (!await copySupportReportText(report)) window.prompt("Copy playback report", report);
+    else setReportCopied(true);
+  };
+  const [reportCopied, setReportCopied] = useState(false);
+  useEffect(() => { setReportCopied(false); }, [selectedUrl, activeEpisodePlayer]);
+  const advanceAfterFailure = useCallback((event) => {
+    if (event?.type === "error") lastProviderError.current = providerLabel + " page failed to load";
     if (handledFailureRef.current) return;
     handledFailureRef.current = true;
     failedProvidersRef.current.add(activeEpisodePlayer);
@@ -189,7 +212,7 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
       }
       setActiveEpisodePlayer(next);
     }
-  }, [activeBackups, activeEpisodePlayer, vylaReady, beginTorrentFallback]);
+  }, [activeBackups, activeEpisodePlayer, vylaReady, beginTorrentFallback, providerLabel]);
 
   useEffect(() => {
     // Cross-origin iframes cannot report actual video playback. Never change
@@ -198,10 +221,12 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
     iframeLoadedRef.current = false;
     handledFailureRef.current = false;
     const timeout = window.setTimeout(() => {
-      if (!iframeLoadedRef.current) advanceAfterFailure();
+      if (iframeLoadedRef.current) return;
+      lastProviderError.current = providerLabel + " page timed out";
+      advanceAfterFailure();
     }, WEB_FALLBACK_LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
-  }, [activeEpisodePlayer, selectedUrl, advanceAfterFailure, testingBox]);
+  }, [activeEpisodePlayer, selectedUrl, advanceAfterFailure, testingBox, providerLabel]);
 
   useEffect(() => {
     if (activeEpisodePlayer !== "vyla" || !autoRecovery ||
@@ -304,6 +329,9 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
               className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-mg-green/50 bg-mg-green/10 px-3 text-xs font-bold text-white hover:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green"
             >Fullscreen</button>
           )}
+          <button type="button" onClick={copyPlaybackReport}
+            className="min-h-10 shrink-0 rounded-lg border border-white/30 px-3 text-xs text-white focus:ring-2 focus:ring-mg-green"
+          >{reportCopied ? "Report copied" : "Copy playback report"}</button>
           <CastButton
             url=""
             title={title}
@@ -347,6 +375,7 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
                 className="min-h-10 shrink-0 rounded-lg border border-mg-green/60 px-3 text-xs font-semibold text-white focus:ring-2 focus:ring-mg-green"
               >Try native player</button>
             )}
+            {legacyBox && <BoxPlayerPreference />}
             {onlyFlixServersUrl && (
               <button type="button"
                 data-mg-embedded-onlyflix-servers="true"

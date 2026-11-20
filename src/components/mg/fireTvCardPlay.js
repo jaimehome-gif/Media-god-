@@ -1,3 +1,4 @@
+import { prefersNativeBoxPlayer } from "./boxPlayerPreference.js";
 import { supportsLegacyBoxWebPlayer } from "./legacyBoxWebPlayer";
 import { browserCodecSupport, getPlaybackDeviceProfile } from "./mediaCompatibility";
 
@@ -21,7 +22,7 @@ export const launchFireTvCardPlay = (player, media) => {
   // Never pass an OnlyFlix/VidCore webpage URL to LibVLC: web providers
   // require their own iframe/player with the user's manual scraper selector.
   const needsNativeVideo = supportsLegacyBoxWebPlayer(true, navigator.userAgent) &&
-    !browserCodecSupport.h264Aac;
+    (!browserCodecSupport.h264Aac || prefersNativeBoxPlayer());
   if (!needsNativeVideo) {
     if (typeof player?.playOnlyFlix === "function" &&
         player.playOnlyFlix(scraperMedia)) return true;

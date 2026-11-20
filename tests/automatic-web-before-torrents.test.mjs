@@ -68,7 +68,7 @@ test("Sources, native player and Live TV protected core are not rewritten", () =
 
 test("Automatic escalation only follows iframe load failure; a loaded iframe is never timed out", () => {
   assert.equal(WEB_FALLBACK_LOAD_TIMEOUT_MS,30000);
-  assert.match(web,/if \(!iframeLoadedRef\.current\) advanceAfterFailure\(\)/);
+  assert.match(web,/if \(iframeLoadedRef\.current\) return;\s*lastProviderError\.current = providerLabel \+ " page timed out";\s*advanceAfterFailure\(\)/);
   assert.match(web,/onLoad=\{\(\) => \{ iframeLoadedRef\.current = true; \}\}/);
   assert.match(web,/onError=\{advanceAfterFailure\}/);
   assert.match(web,/return \(\) => window\.clearTimeout\(timeout\)/);

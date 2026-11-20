@@ -79,12 +79,17 @@ export const fetchPublishedNativeRelease = async (
     )
   ) return null;
 
+  const asset = release.assets.find(item => item.name === info.filename && item.state === "uploaded");
+  const verifiedHash = /^Verified-APK-SHA256: ([a-f0-9]{64})$/m.exec(release.body)?.[1];
+  if (!verifiedHash || asset.digest !== "sha256:" + verifiedHash) return null;
+
   const manifest = await fetchJson(
     `https://raw.githubusercontent.com/${REPOSITORY}/${commit}/public/${info.manifest}`
   );
   const versionCode = Number(manifest?.versionCode || 0);
   const versionName = String(manifest?.versionName || "");
   if (
+    manifest?.channel !== platform || asset.browser_download_url !== manifest?.apkUrl ||
     !Number.isSafeInteger(versionCode) || versionCode < 1 ||
     !/^[0-9][0-9a-z.+-]*$/i.test(versionName) ||
     manifest?.apkUrl !== `https://github.com/${REPOSITORY}/releases/download/${info.tag}/${info.filename}` ||
