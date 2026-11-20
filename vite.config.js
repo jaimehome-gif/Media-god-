@@ -1,4 +1,5 @@
 import base44 from "@base44/vite-plugin"
+import legacy from '@vitejs/plugin-legacy'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -15,5 +16,15 @@ export default defineConfig({
       visualEditAgent: true
     }),
     react(),
+    legacy({
+      // The TV APK installs from API 21. Its system WebView can predate ES modules.
+      targets: ['Chrome >= 37'],
+      modernTargets: ['Chrome >= 64', 'Safari >= 12', 'Firefox >= 67', 'Edge >= 79'],
+      modernPolyfills: true,
+      additionalLegacyPolyfills: [
+        'whatwg-fetch',
+        'abortcontroller-polyfill/dist/polyfill-patch-fetch',
+      ],
+    }),
   ]
 });

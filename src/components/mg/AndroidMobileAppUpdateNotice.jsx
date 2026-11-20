@@ -262,7 +262,7 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/70">
               {installedOnFireTv
-                ? "This television appears to be running the Android phone APK. Mobile 1.0.95 and Fire TV 1.4.120 are separate apps, not old and new versions of the same app. Install the dedicated Fire TV APK alongside Mobile, sign in and test before removing anything."
+                ? "This television appears to be running the Android phone APK. The TV APK also installs on Android boxes running Android 5.0 through 9.0. Install the dedicated Fire TV APK alongside Mobile, sign in and test before removing anything."
                 : canSelfUpdate
                   ? "Media God Mobile can download this update itself. Android will ask you to approve installation before anything is replaced."
                   : "Open the Android Mobile APK from GitHub to update this installation."}
