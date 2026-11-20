@@ -56,13 +56,13 @@ export const fetchEpisodeScraperJson = async (url, {
   timeoutMs = 3200,
   fetchImpl = globalThis.fetch,
 } = {}) => {
-  const controller = new AbortController();
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
   let timeout;
   try {
     const request = Promise.resolve().then(async () => {
       const response = await fetchImpl(url, {
         method: "GET", headers: { Accept: "application/json" },
-        signal: controller.signal,
+        ...(controller ? { signal: controller.signal } : {}),
       });
       if (!response.ok) {
         return response.status === 404 ? { __missingRoute: true } : null;
@@ -73,7 +73,7 @@ export const fetchEpisodeScraperJson = async (url, {
       request,
       new Promise(resolve => {
         timeout = setTimeout(() => {
-          controller.abort();
+          controller?.abort();
           resolve(null);
         }, Math.max(1, Number(timeoutMs) || 3200));
       }),

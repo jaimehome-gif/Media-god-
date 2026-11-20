@@ -20,6 +20,22 @@ test("Android TV scraper timeout resolves even when native WebView ignores abort
   assert.ok(Date.now() - start < 500, "A hung fetch must not pin the episode source search");
 });
 
+test("boxes without AbortController can discover sources and time out stalled requests", async (t) => {
+  const original = globalThis.AbortController;
+  t.after(() => { globalThis.AbortController = original; });
+  globalThis.AbortController = undefined;
+  const result = await fetchEpisodeScraperJson("https://scraper.example.test", {
+    fetchImpl: async (_url, options) => {
+      assert.equal("signal" in options, false);
+      return { ok: true, json: async () => ["episode"] };
+    },
+  });
+  assert.deepEqual(result, ["episode"]);
+  assert.equal(await fetchEpisodeScraperJson("https://scraper.example.test", {
+    timeoutMs: 15, fetchImpl: stalled,
+  }), null);
+});
+
 test("Android TV scraper timeout also bounds a stuck JSON body reader", async () => {
   let signal;
   const data = await fetchEpisodeScraperJson("https://scraper.example.test/watch-tv", {
