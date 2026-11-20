@@ -10,6 +10,22 @@ root="${RUNNER_TEMP:-/tmp}/media-god-release-archive"
 mkdir -p "$root"
 
 source "$(dirname "${BASH_SOURCE[0]}")/github-release-json.sh"
+# Seed missing download pointers on the first signed release of a migrated repo.
+# A failed listing or an existing orphaned tag requires investigation.
+pages="$(gh api --paginate --slurp "repos/$repo/releases?per_page=100")"
+for entry in "android-mobile-latest:Media-God-Android-Mobile.apk" "firetv-latest:Media-God-Fire-TV.apk"; do
+  tag="${entry%%:*}"
+  asset="${entry#*:}"
+  count="$(jq -er --arg tag "$tag" '[.[][] | select(.tag_name == $tag)] | length' <<< "$pages")"
+  [[ "$count" == 1 ]] && continue
+  [[ "$count" == 0 ]] || exit 1
+  refs="$(gh api "repos/$repo/git/matching-refs/tags/$tag")"
+  jq -e --arg ref "refs/tags/$tag" 'type == "array" and all(.[]; .ref != $ref)' <<< "$refs" >/dev/null
+  test -s "$asset"
+  gh release create "$tag" --repo "$repo" --target "${GITHUB_SHA:?}" --latest=false \
+    --title "Media God ${asset%.apk}" --notes "Initial signed APK. Public download verification pending." "$asset"
+done
+
 mobile="$(release_json android-mobile-latest)"
 firetv="$(release_json firetv-latest)"
 old_mobile_sha="$(release_source_sha "$mobile")"
