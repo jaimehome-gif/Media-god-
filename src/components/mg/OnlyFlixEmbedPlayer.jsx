@@ -170,6 +170,56 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
   const legacyBox = supportsLegacyBoxWebPlayer(isFireTv, globalThis.navigator?.userAgent);
   const providerFullscreen = isFireTv && !legacyBox;
   const testingBox = legacyBox && activeEpisodePlayer === "device-test";
+  const testFrame = useRef(null);
+  const testRequest = useRef("");
+  const [testEngine, setTestEngine] = useState("WebView");
+  const [testResults, setTestResults] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("mg.boxClipTest")) || {}; }
+    catch { return {}; }
+  });
+  const recordTest = useCallback((engine, change) => {
+    setTestResults(previous => ({
+      ...previous, [engine]: { ...previous[engine], ...change },
+    }));
+  }, []);
+  useEffect(() => {
+    try { sessionStorage.setItem("mg.boxClipTest", JSON.stringify(testResults)); } catch {}
+  }, [testResults]);
+  useEffect(() => {
+    if (!testingBox) return;
+    const webResult = event => {
+      if (event.origin !== window.location.origin || !testFrame.current ||
+          event.source !== testFrame.current.contentWindow || event.data?.type !== "mg-video-test-status") return;
+      recordTest("WebView", { status: String(event.data.message).slice(0, 160) });
+    };
+    const nativeResult = event => {
+      if (!testRequest.current || event.detail?.requestId !== testRequest.current) return;
+      testRequest.current = "";
+      const reason = event.detail.reason;
+      recordTest("VLC", { status: ["ended", "error", "back", "completed"].includes(reason) ? reason : "returned to app" });
+    };
+    window.addEventListener("message", webResult);
+    window.addEventListener("mg:native-player-result", nativeResult);
+    return () => {
+      window.removeEventListener("message", webResult);
+      window.removeEventListener("mg:native-player-result", nativeResult);
+    };
+  }, [testingBox, recordTest]);
+  const testVlc = () => {
+    setTestEngine("VLC");
+    testFrame.current?.contentDocument?.querySelector("video")?.pause();
+    testRequest.current = "box-clip-" + Date.now();
+    let result;
+    try {
+      result = window.MediaGodNative?.play(JSON.stringify({
+        requestId: testRequest.current, url: new URL("/media-god-test.mp4", window.location.origin).href,
+        title: "Media God test clip", live: false, forceCompatibility: true,
+        forceCompatibilityReason: "Android box playback test",
+      }));
+    } catch { result = "error"; }
+    if (result !== "true") testRequest.current = "";
+    recordTest("VLC", { status: result === "true" ? "opened" : result === "busy" ? "player busy" : "could not open native player", observation: "" });
+  };
   const [openError, setOpenError] = useState("");
   useEffect(() => {
     setOpenError("");
@@ -186,6 +236,8 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
       "Page state: " + (testingBox ? "device test" : activeEpisodePlayer === "vyla" ? "source selection" :
         iframeLoadedRef.current ? "provider page loaded; video output unconfirmed" : "waiting for provider page"),
       "Latest player error: " + (redactSupportErrorMessage(openError || lastProviderError.current) || "none recorded"),
+      ...["WebView", "VLC"].map(engine => engine + " test: " +
+        (testResults[engine]?.status || "not run") + " / " + (testResults[engine]?.observation || "picture and sound unconfirmed")),
       ...getAndroidBoxSupportLines(),
     ].join("\n");
     if (!await copySupportReportText(report)) window.prompt("Copy playback report", report);
@@ -453,11 +505,24 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
               )}
             </div>
           ) : testingBox ? (
-            <>
-              <iframe key="device-test" srcDoc={embeddedVideoTestPage} title="Media God embedded video test"
-                allow="autoplay" tabIndex={0} data-mg-embed-iframe="true" className="h-full w-full border-0" />
-              <OnlyFlixRemotePointer compact visible={chromeVisible} />
-            </>
+            <div className="flex h-full flex-col overflow-auto">
+              <div className="flex flex-wrap items-center gap-3 p-2">
+                <button onClick={() => setTestEngine("WebView")}>Test WebView</button>
+                <button onClick={testVlc}>Test native VLC</button>
+                <label>{testEngine} result{" "}
+                  <select className="bg-black text-white" value={testResults[testEngine]?.observation || ""}
+                    onChange={event => recordTest(testEngine, { observation: event.target.value })}>
+                    <option value="">What played?</option>
+                    {["Picture and sound", "Picture only", "Sound only", "Neither"].map(item => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+              </div>
+              {testEngine === "WebView" ? <>
+                <iframe ref={testFrame} key="device-test" srcDoc={embeddedVideoTestPage} title="Media God embedded video test"
+                  allow="autoplay" tabIndex={0} data-mg-embed-iframe="true" className="min-h-0 w-full flex-1 border-0" />
+                <OnlyFlixRemotePointer compact visible={chromeVisible} />
+              </> : <p role="status" className="p-2">Native VLC · {testResults.VLC?.status}</p>}
+            </div>
           ) : (
             <>
               <iframe

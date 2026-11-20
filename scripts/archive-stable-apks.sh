@@ -12,10 +12,11 @@ mkdir -p "$root"
 source "$(dirname "${BASH_SOURCE[0]}")/github-release-json.sh"
 # Seed missing download pointers on the first signed release of a migrated repo.
 # A failed listing or an existing orphaned tag requires investigation.
-pages="$(gh api --paginate --slurp "repos/$repo/releases?per_page=100")"
 for entry in "android-mobile-latest:Media-God-Android-Mobile.apk" "firetv-latest:Media-God-Fire-TV.apk"; do
   tag="${entry%%:*}"
   asset="${entry#*:}"
+  if gh api "repos/$repo/releases/tags/$tag" >/dev/null 2>&1; then continue; fi
+  pages="$(gh api --paginate --slurp "repos/$repo/releases?per_page=100")"
   count="$(jq -er --arg tag "$tag" '[.[][] | select(.tag_name == $tag)] | length' <<< "$pages")"
   [[ "$count" == 1 ]] && continue
   [[ "$count" == 0 ]] || exit 1
