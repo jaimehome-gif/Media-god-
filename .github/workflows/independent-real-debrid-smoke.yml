@@ -30,13 +30,13 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail-with-body --silent --show-error --retry 4 --retry-delay 3 --max-time 20 \
-            'https://media-god-rd-api-production.up.railway.app/health' \
+            'https://media-god-rd-api-production-15b0c56e.up.railway.app/health' \
             | jq -e '.status == "ready" and .auth == "required"'
       - name: Reject unauthenticated RD playback resolution
         run: |
           set -euo pipefail
           status=$(curl -sS -o /tmp/rd-response.json -w '%{http_code}' --max-time 20 \
-            -X POST 'https://media-god-rd-api-production.up.railway.app/functions/realDebrid' \
+            -X POST 'https://media-god-rd-api-production-15b0c56e.up.railway.app/functions/realDebrid' \
             -H 'Origin: https://underworldhub.co.uk' \
             -H 'Content-Type: application/json' --data '{"action":"status"}')
           test "$status" = "401"
@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           status=$(curl -sS -o /tmp/rd-response.json -w '%{http_code}' --max-time 20 \
-            -X POST 'https://media-god-rd-api-production.up.railway.app/functions/realDebridAuth' \
+            -X POST 'https://media-god-rd-api-production-15b0c56e.up.railway.app/functions/realDebridAuth' \
             -H 'Origin: https://underworldhub.co.uk' \
             -H 'Authorization: Bearer not-a-real-account-token-not-a-real-account-token' \
             -H 'Content-Type: application/json' --data '{"action":"status"}')
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           status=$(curl -sS -o /tmp/rd-response.json -w '%{http_code}' --max-time 20 \
-            -X POST 'https://media-god-rd-api-production.up.railway.app/functions/realDebrid' \
+            -X POST 'https://media-god-rd-api-production-15b0c56e.up.railway.app/functions/realDebrid' \
             -H 'Origin: https://untrusted.example' \
             -H 'Content-Type: application/json' --data '{"action":"status"}')
           test "$status" = "403"
