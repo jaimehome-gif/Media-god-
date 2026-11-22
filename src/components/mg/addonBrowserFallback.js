@@ -1658,13 +1658,19 @@ export async function fetchBrowserAddonStreams({
   }
 
   let addons = [];
+  let addonListTimer;
 
   try {
-    addons =
-      await base44.entities.Addon.list(
-        "-created_date",
-        100
-      );
+    // Installed-addon records are optional. An unresponsive user-scoped SDK
+    // lookup must not prevent credential-free built-in addons from running.
+    addons = await Promise.race([
+      base44.entities.Addon.list("-created_date", 100),
+      new Promise((_, reject) => {
+        addonListTimer = setTimeout(
+          () => reject(new Error("Addon list timed out")), 3_000
+        );
+      }),
+    ]);
   } catch {
     /*
      * Addon records are user-scoped. A session without readable records must
@@ -1672,6 +1678,8 @@ export async function fetchBrowserAddonStreams({
      * fallback below instead of returning an empty source list immediately.
      */
     addons = [];
+  } finally {
+    clearTimeout(addonListTimer);
   }
 
   const excludedAddonNames =
@@ -1857,18 +1865,39 @@ export async function fetchBrowserAddonStreams({
     )
     .slice(0, 16);
 
-  const settled =
-    await Promise.allSettled(
-      activeAddons.map(
-        (addon) =>
-          fetchOneAddon({
-            addon,
-            type,
-            streamId,
-            alternateStreamIds,
-          })
-      )
-    );
+  // One 404 can trigger up to sixteen alternate-id lookups per addon.
+  // Keep successful providers instead of waiting indefinitely for the
+  // slowest provider. Late results cannot mutate the returned snapshot.
+  const completed = new Array(activeAddons.length).fill(null);
+  let browserDeadlineTimer;
+  const addonRequests = activeAddons.map(async (addon, index) => {
+    try {
+      const value = await fetchOneAddon({
+        addon,
+        type,
+        streamId,
+        alternateStreamIds,
+      });
+      completed[index] = { status: "fulfilled", value };
+    } catch (reason) {
+      completed[index] = { status: "rejected", reason };
+    }
+  });
+  try {
+    await Promise.race([
+      Promise.all(addonRequests),
+      new Promise((resolve) => {
+        browserDeadlineTimer = setTimeout(resolve, 18_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(browserDeadlineTimer);
+  }
+  const settled = completed.map((result) => result || {
+    status: "rejected",
+    timedOut: true,
+    reason: new Error("Browser source provider exceeded the 18-second limit."),
+  });
 
   const streams =
     dedupe(
@@ -1904,7 +1933,7 @@ export async function fetchBrowserAddonStreams({
             `Addon ${index + 1}`,
 
           status:
-            "browser_error",
+            result.timedOut ? "browser_timeout" : "browser_error",
 
           playable_count:
             0,
