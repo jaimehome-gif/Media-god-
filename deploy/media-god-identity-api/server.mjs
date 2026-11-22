@@ -270,7 +270,7 @@ async function handler(req,res) {
     // Sign in with Apple sends a cross-site form_post from appleid.apple.com.
     // This single server-to-server OAuth callback is verified using its
     // one-use state, browser-binding cookie, signed ID token and nonce.
-    const appleCallback=path==="/auth/oauth/apple/callback" && req.method==="POST";
+    // appleCallback is defined above for both the origin check and body decoder.
     if (origin&&!origins.has(origin)&&!appleCallback) err(403,"Origin not allowed");
     if (req.method==="OPTIONS") return respond(res,204,{},origin);
     if (path==="/health"&&req.method==="GET") {
