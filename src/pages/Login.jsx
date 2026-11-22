@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import IndependentSocialButtons from "@/components/mg/IndependentSocialButtons";
 import { safeReturnTo } from "@/lib/authReturnTo";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -15,6 +16,19 @@ export default function Login() {
   const [password,setPassword]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
+  React.useEffect(() => {
+    const reason=new URLSearchParams(window.location.search).get("social_error");
+    if(!reason)return;
+    const messages={
+      not_configured:"This social login is not yet connected. Choose another sign-in method.",
+      cancelled:"Social sign-in was cancelled. You can try again.",
+      invalid_session:"The social login session expired. Please try again from this screen.",
+      unavailable:"Social sign-in could not be completed. Please try again later."
+    };
+    setError(messages[reason] || "Social login could not be completed.");
+    window.history.replaceState(null,"",window.location.pathname);
+  },[]);
+
   const submit=async e=>{
     e.preventDefault();
     setLoading(true);setError("");
@@ -32,6 +46,7 @@ export default function Login() {
         We've moved to a new, independent account system. Previous sign-ins cannot be used here.
       </p>
       {error&&<p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+      <IndependentSocialButtons onError={setError} />
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email address</Label>
