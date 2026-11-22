@@ -1,6 +1,7 @@
 import http from "node:http";
 import { deviceClient } from "./deviceClient.mjs";
 import { createClient } from "@base44/sdk";
+import { createAccountVerificationCache } from "./accountVerificationCache.mjs";
 import realDebrid from "./realDebrid.mjs";
 import realDebridAuth from "./realDebridAuth.mjs";
 import findRdLibrary from "./findRdLibrary.mjs";
@@ -89,20 +90,13 @@ function limited(userId) {
   }
   return next.count > MAX_REQUESTS_PER_USER;
 }
-async function verifiedClient(header) {
-  // Authenticate using the existing Media God account, not a client supplied
-  // user_id, RD token, or arbitrary device key. Base44 validates this token.
-  const match = /^Bearer ([A-Za-z0-9._~-]{32,8192})$/.exec(String(header || ""));
-  if (!match) return null;
-  const client = createClient({appId: APP_ID, token: match[1]});
-  try {
-    const user = await client.auth.me();
-    if (!user || !user.id || typeof user.id !== "string") return null;
-    return {client, user};
-  } catch {
-    return null;
-  }
-}
+// Authentication is still performed by Base44 User/me with the caller's
+// own Bearer token. Coalesce simultaneous checks for the SAME token, and
+// reuse a verified result for at most 15 seconds; invalid tokens never pass.
+const verifiedClient = createAccountVerificationCache({
+  appId: APP_ID,
+  createClient,
+});
 async function serve(req, res) {
   const origin = String(req.headers.origin || "");
   if (!allowedOrigin(origin, req.method === "OPTIONS" ? "preflight" : String(req.headers.authorization || ""))) {
