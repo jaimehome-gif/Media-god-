@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import AuthLayout from "@/components/AuthLayout";
+import IndependentSocialButtons from "@/components/mg/IndependentSocialButtons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +56,7 @@ export default function Register() {
               : "Registration status is temporarily unavailable. Please return to this page later."}
         </div>
       )}
+      {!pending && <IndependentSocialButtons onError={setError} />}
       {pending?(
         <div className="space-y-4 text-center">
           <Mail className="mx-auto h-12 w-12 text-primary"/>
