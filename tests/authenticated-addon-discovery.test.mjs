@@ -78,7 +78,8 @@ test("source lookup is isolated to the verified account and never exposed by the
   const client = read("src/api/base44Client.js");
   assert.match(privateServer, /"\/functions\/fetchAddonStreams": fetchAddonStreams/);
   assert.match(privateServer, /client\.auth\.me\(\)/);
-  assert.match(privateServer, /if \(!verified\) return respond\(res, 401/);
+  assert.match(privateServer, /if \(!verified\) \{/);
+  assert.match(privateServer, /return respond\(res, 401, \{error: "Sign in to Media God to use Real-Debrid\."\}/);
   const recovery = read("src/api/addonSourceRecovery.js");
   assert.match(client, /searchAddonSourcesWithPublicFallback\(payload/);
   assert.match(client, /readToken: readAccountSessionToken/);
