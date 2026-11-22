@@ -26,7 +26,8 @@ async function visit(path,expected) {
 }
 try {
   await visit('/login','Welcome to Media God');
-  assert.equal(await page.$('input[type="password"]').then(x=>x.length),1,'login has password field');
+  await page.waitForSelector('input[type="password"]', {timeout:15000});
+  assert.equal(await page.evaluate(()=>document.querySelectorAll('input[type="password"]').length),1,'login has password field');
   for (const provider of ['Google','Facebook','Microsoft','Apple']) {
     const label=provider+' sign-in not yet configured';
     assert.ok(await page.$('[aria-label="'+label+'"]') ||
@@ -36,7 +37,8 @@ try {
   const browse=await page.evaluate(()=>document.body.innerText);
   assert.match(browse,/Browse without signing in/, 'Original skip option preserved');
   await visit('/register','Create Media God account');
-  assert.equal(await page.$('input[type="password"]').then(x=>x.length),2,'registration has confirm password');
+  await page.waitForSelector('input[type="password"]', {timeout:15000});
+  assert.equal(await page.evaluate(()=>document.querySelectorAll('input[type="password"]').length),2,'registration has confirm password');
   for (const provider of ['Google','Facebook','Microsoft','Apple']) {
     assert.ok(await page.evaluate((name)=>document.body.innerText.includes(name),provider),
       provider+' sign-up must appear');
