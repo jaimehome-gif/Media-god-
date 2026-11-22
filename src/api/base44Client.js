@@ -65,6 +65,29 @@ const auth = {
   async getRegistrationConfig() {
     return call(IDENTITY_API,"/auth/config",{token:"",timeoutMs:8000});
   },
+  async getSocialProviders() {
+    return call(IDENTITY_API,"/auth/providers",{token:"",timeoutMs:8000});
+  },
+  loginWithProvider(provider,returnTo) {
+    if(!["google","facebook","microsoft","apple"].includes(provider)) {
+      throw new Error("Unsupported social login provider");
+    }
+    if(typeof window==="undefined") throw new Error("Social login requires a browser");
+    const start=new URL("/auth/oauth/"+provider+"/start",IDENTITY_API);
+    // The backend allows only the independently hosted app's fixed origins.
+    start.searchParams.set("return_to",returnTo || window.location.origin);
+    window.location.assign(start.toString());
+  },
+  async exchangeSocialTicket(ticket) {
+    if(typeof ticket!=="string" || ticket.length<40 || ticket.length>100) {
+      throw new Error("Missing social sign-in ticket");
+    }
+    const result=await call(IDENTITY_API,"/auth/oauth/exchange",{
+      method:"POST",body:{ticket},token:"",timeoutMs:12000
+    });
+    saveIndependentSessionToken(result.access_token);
+    return result;
+  },
   async loginViaEmailPassword(email,password) {
     const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
     saveIndependentSessionToken(result.access_token);
@@ -109,9 +132,7 @@ const auth = {
   async resetPassword({resetToken,newPassword}) {
     return call(IDENTITY_API,"/auth/reset",{method:"POST",body:{token:resetToken,password:newPassword},token:""});
   },
-  loginWithProvider() {
-    throw new Error("Social sign-in is being migrated. Use email and password for the new Media God account.");
-  }
+
 };
 function requireSession() {
   if (getIndependentSessionToken()) return;
