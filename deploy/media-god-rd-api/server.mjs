@@ -39,6 +39,7 @@ async function runHandler(handler, request, deviceId) {
 }
 const RATE_WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_USER = 220;
+const MAX_BULK_DISCOVERY_REQUESTS_PER_USER = 100;
 
 function allowedOrigin(origin, authorization = "") {
   if (!origin) return true;
@@ -62,6 +63,7 @@ function cors(origin, authorization = "") {
       ? {"Access-Control-Allow-Origin": origin} : {}),
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Expose-Headers": "Retry-After",
     "Access-Control-Max-Age": "3600",
     "Vary": "Origin",
   };
@@ -74,10 +76,11 @@ function respond(res, status, payload, origin = "", authorization = "") {
     "Content-Type": "application/json; charset=utf-8",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    ...(status === 429 ? {"Retry-After": "25"} : {}),
   });
   res.end(JSON.stringify(payload));
 }
-function limited(userId) {
+function limited(userId, limit = MAX_REQUESTS_PER_USER) {
   const now = Date.now();
   const previous = rate.get(userId);
   const next = previous && previous.ends > now
@@ -88,7 +91,7 @@ function limited(userId) {
     for (const [id, item] of rate) if (item.ends <= now) rate.delete(id);
     if (rate.size > 5000) rate.clear();
   }
-  return next.count > MAX_REQUESTS_PER_USER;
+  return next.count > limit;
 }
 // Authentication is still performed by Base44 User/me with the caller's
 // own Bearer token. Coalesce simultaneous checks for the SAME token, and
@@ -127,10 +130,6 @@ async function serve(req, res) {
     });
     return respond(res, 401, {error: "Sign in to Media God to use Real-Debrid."}, origin);
   }
-  if (limited(verified.user.id)) {
-    return respond(res, 429, {error: "Too many Real-Debrid requests. Retry shortly."}, origin);
-  }
-
   let body = {};
   try {
     const chunks = []; let size = 0;
@@ -150,6 +149,18 @@ async function serve(req, res) {
   // impersonation from the caller: the account is resolved via auth.me.
   if (["rd_token", "rd_refresh_token", "rd_client_secret", "user_id"].some(k => k in body)) {
     return respond(res, 400, {error: "Credentials must not be supplied in request bodies."}, origin);
+  }
+  // Reserve room in the existing per-account limit for actual playback and
+  // Google/RD status. Source searches and cache-verification batches are lower
+  // priority. Once their quota is full, stop them BEFORE they can exhaust the
+  // general allowance. A 429 never marks any torrent as uncached or broken.
+  const bulkDiscovery = path === "/functions/fetchAddonStreams" ||
+    (path === "/functions/multiDebrid" && body.action === "check_cache");
+  if (bulkDiscovery && limited("bulk:" + verified.user.id, MAX_BULK_DISCOVERY_REQUESTS_PER_USER)) {
+    return respond(res, 429, {error: "Source checks are temporarily rate limited. Playable sources remain available."}, origin);
+  }
+  if (limited("account:" + verified.user.id, MAX_REQUESTS_PER_USER)) {
+    return respond(res, 429, {error: "Too many Real-Debrid requests. Retry shortly."}, origin);
   }
   try {
     const request = new Request("http://127.0.0.1" + path, {
