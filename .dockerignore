@@ -1,0 +1,13 @@
+node_modules
+.git
+.env
+.env.*
+dist
+build
+coverage
+*.apk
+*.aab
+*.exe
+*.zip
+*.keystore
+*.jks
