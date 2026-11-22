@@ -43,6 +43,10 @@ jobs:
           node --check deploy/media-god-identity-api/socialOAuth.mjs
           node --check deploy/media-god-rd-api/server.mjs
           node --check src/api/base44Client.js
+      - name: Validate social login state, PKCE and session safeguards
+        run: |
+          npm install --prefix deploy/media-god-identity-api --ignore-scripts --no-audit --no-fund
+          node --test deploy/media-god-identity-api/socialOAuth.test.mjs
       - name: Confirm new identity routes do not use the blocked service
         run: |
           node --input-type=module <<'NODE'
