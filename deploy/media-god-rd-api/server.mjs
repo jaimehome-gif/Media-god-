@@ -1,200 +1,138 @@
 import http from "node:http";
+import { createHmac } from "node:crypto";
 import { deviceClient } from "./deviceClient.mjs";
-import { createClient } from "@base44/sdk";
-import { createAccountVerificationCache } from "./accountVerificationCache.mjs";
 import realDebrid from "./realDebrid.mjs";
 import realDebridAuth from "./realDebridAuth.mjs";
 import findRdLibrary from "./findRdLibrary.mjs";
 import multiDebrid from "./multiDebrid.mjs";
 import fetchAddonStreams from "./fetchAddonStreams.mjs";
 
-const APP_ID = process.env.BASE44_APP_ID || "6a95b85c1b5a8657bf3906c8";
-const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGINS ||
-    "https://underworldhub.co.uk,https://mysterious-media-vault-pro.base44.app,http://localhost:5173")
-    .split(",").map(v => v.trim()).filter(Boolean)
+const VERIFY_URL = process.env.IDENTITY_VERIFY_URL;
+const ACCOUNT_KEY = process.env.RD_ACCOUNT_DERIVATION_KEY;
+const allowed = new Set(
+  String(process.env.ALLOWED_ORIGINS || "https://underworldhub.co.uk")
+    .split(",").map(x=>x.trim()).filter(Boolean)
 );
-const HANDLERS = Object.freeze({
+if (!VERIFY_URL || !ACCOUNT_KEY || ACCOUNT_KEY.length<32) {
+  throw new Error("Identity verifier and account derivation secret are required");
+}
+const handlers = Object.freeze({
   "/functions/realDebrid": realDebrid,
   "/functions/realDebridAuth": realDebridAuth,
   "/functions/findRdLibrary": findRdLibrary,
   "/functions/multiDebrid": multiDebrid,
   "/functions/fetchAddonStreams": fetchAddonStreams,
 });
-const MAX_BODY = 128 * 1024;
 const rate = new Map();
-const deviceQueues = new Map();
-async function runHandler(handler, request, deviceId) {
-  if (!deviceId) return handler(request);
-  const previous = deviceQueues.get(deviceId) || Promise.resolve();
+const pending = new Map();
+const LIMIT = 220;
+const WINDOW = 60000;
+
+function reply(res,status,data,origin="") {
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin",origin);
+    res.setHeader("Access-Control-Allow-Headers","Authorization, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods","POST, OPTIONS");
+    res.setHeader("Access-Control-Max-Age","120");
+    res.setHeader("Vary","Origin");
+  }
+  res.setHeader("Cache-Control","private,no-store");
+  res.setHeader("Content-Type","application/json; charset=utf-8");
+  res.setHeader("X-Content-Type-Options","nosniff");
+  res.writeHead(status);
+  res.end(status===204?"":JSON.stringify(data));
+}
+function limited(key) {
+  const now=Date.now(), prev=rate.get(key);
+  const next=prev&&prev.until>now?prev:{count:0,until:now+WINDOW};
+  next.count++;
+  rate.set(key,next);
+  if (rate.size>5000) for(const [k,v] of rate) if(v.until<=now)rate.delete(k);
+  return next.count>LIMIT;
+}
+async function verifyIdentity(header) {
+  const match=/^Bearer ([A-Za-z0-9_-]{30,200})$/.exec(String(header||""));
+  if (!match) return null;
+  try {
+    const response=await fetch(VERIFY_URL,{
+      method:"GET",
+      headers:{Authorization:"Bearer "+match[1]},
+      signal:AbortSignal.timeout(5000),
+      cache:"no-store"
+    });
+    if (!response.ok) return null;
+    const user=await response.json();
+    if (!/^[0-9a-f-]{36}$/i.test(String(user?.id||""))) return null;
+    // The independently verified account receives one stable encrypted
+    // Real-Debrid credential store across all of its devices. Its private
+    // capability never goes to the client and is not logged.
+    const capability=createHmac("sha256",ACCOUNT_KEY)
+      .update("mg-account-rd-v1:"+user.id).digest("hex");
+    return await deviceClient("Device "+capability);
+  }catch {
+    return null;
+  }
+}
+async function exclusive(id,work) {
+  const previous=pending.get(id)||Promise.resolve();
   let release;
-  const current = new Promise(resolve => { release = resolve; });
-  deviceQueues.set(deviceId, current);
+  const current=new Promise(resolve=>release=resolve);
+  pending.set(id,current);
   await previous;
-  try { return await handler(request); }
-  finally {
-    release();
-    if (deviceQueues.get(deviceId) === current) deviceQueues.delete(deviceId);
-  }
+  try{return await work();}
+  finally{release();if(pending.get(id)===current)pending.delete(id);}
 }
-const RATE_WINDOW_MS = 60_000;
-const MAX_REQUESTS_PER_USER = 220;
-
-function allowedOrigin(origin, authorization = "") {
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  // Installed Android/Fire TV WebViews may send an opaque origin rather
-  // than the hosted app's URL. Only permit that origin for device-bound
-  // capabilities, never for user bearer sessions.
-  if (origin === "null") return /^Device [a-f0-9]{64}$/.test(authorization) || authorization === "preflight";
-  // Base44 preview/published app origins can change independently of
-  // Railway deploys. Restrict this exception to HTTPS Base44 hosts.
+async function serve(req,res) {
+  const origin=String(req.headers.origin||"");
+  if (origin&&!allowed.has(origin)) return reply(res,403,{error:"Origin not allowed"});
+  const path=String(req.url||"/").split("?")[0];
+  if (path==="/health"&&req.method==="GET") {
+    return reply(res,200,{status:"ready",service:"media-god-rd-independent",auth:"jaime-home"},origin);
+  }
+  if (!Object.hasOwn(handlers,path)) return reply(res,404,{error:"Not found"},origin);
+  if (req.method==="OPTIONS") return reply(res,204,{},origin);
+  if (req.method!=="POST") return reply(res,405,{error:"POST required"},origin);
+  const verified=await verifyIdentity(req.headers.authorization);
+  if (!verified) return reply(res,401,{error:"Sign in to your new Media God account"},origin);
+  if (limited(verified.user.id)) return reply(res,429,{error:"Too many requests. Try shortly."},origin);
+  let size=0,parts=[],body;
   try {
-    const url = new URL(origin);
-    return url.protocol === "https:" &&
-      /^[a-z0-9-]+\.base44\.app$/i.test(url.hostname) &&
-      url.origin === origin;
-  } catch { return false; }
-}
-function cors(origin, authorization = "") {
-  return {
-    ...(origin && (origin === "null" || allowedOrigin(origin, authorization))
-      ? {"Access-Control-Allow-Origin": origin} : {}),
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "3600",
-    "Vary": "Origin",
-  };
-}
-function respond(res, status, payload, origin = "", authorization = "") {
-  res.writeHead(status, {
-    ...cors(origin, authorization),
-    "Cache-Control": "private, no-store, max-age=0",
-    "Pragma": "no-cache",
-    "Content-Type": "application/json; charset=utf-8",
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
-  });
-  res.end(JSON.stringify(payload));
-}
-function limited(userId) {
-  const now = Date.now();
-  const previous = rate.get(userId);
-  const next = previous && previous.ends > now
-    ? {count: previous.count + 1, ends: previous.ends}
-    : {count: 1, ends: now + RATE_WINDOW_MS};
-  rate.set(userId, next);
-  if (rate.size > 5000) {
-    for (const [id, item] of rate) if (item.ends <= now) rate.delete(id);
-    if (rate.size > 5000) rate.clear();
+    for await(const item of req) {
+      size+=item.length;
+      if (size>131072) return reply(res,413,{error:"Request too large"},origin);
+      parts.push(item);
+    }
+    body=JSON.parse(Buffer.concat(parts).toString("utf8")||"{}");
+    if (!body||typeof body!=="object"||Array.isArray(body)) throw Error("Invalid JSON");
+  }catch{return reply(res,400,{error:"Invalid JSON"},origin);}
+  if (["rd_token","rd_refresh_token","rd_client_secret","user_id","guest_device_key","authorization","access_token"].some(k=>k in body)) {
+    return reply(res,400,{error:"Credentials cannot be supplied in requests"},origin);
   }
-  return next.count > MAX_REQUESTS_PER_USER;
-}
-// Authentication is still performed by Base44 User/me with the caller's
-// own Bearer token. Coalesce simultaneous checks for the SAME token, and
-// reuse a verified result for at most 15 seconds; invalid tokens never pass.
-const verifiedClient = createAccountVerificationCache({
-  appId: APP_ID,
-  createClient,
-});
-async function serve(req, res) {
-  const origin = String(req.headers.origin || "");
-  if (!allowedOrigin(origin, req.method === "OPTIONS" ? "preflight" : String(req.headers.authorization || ""))) {
-    return respond(res, 403, {error: "Origin not allowed"});
-  }
-  const path = (req.url || "/").split("?")[0];
-  if (path === "/health" && req.method === "GET") {
-    return respond(res, 200, {status: "ready", service: "media-god-rd", auth: "required"}, origin, String(req.headers.authorization || ""));
-  }
-  const handler = HANDLERS[path];
-  if (!handler) return respond(res, 404, {error: "Not found"}, origin);
-  if (req.method === "OPTIONS") {
-    res.writeHead(204, cors(origin, req.method === "OPTIONS" ? "preflight" : String(req.headers.authorization || ""))); res.end(); return;
-  }
-  if (req.method !== "POST") return respond(res, 405, {error: "POST required"}, origin);
-  const isDevice = String(req.headers.authorization || "").startsWith("Device ");
-  if (isDevice && limited("ip:" + String(req.headers["x-real-ip"] || req.socket.remoteAddress))) {
-    return respond(res, 429, {error: "Too many device requests. Retry shortly."}, origin);
-  }
-  const verified = isDevice
-    ? await deviceClient(req.headers.authorization)
-    : await verifiedClient(req.headers.authorization);
-  if (!verified) {
-    // Stage-only diagnostics; never log bearer/device secrets or user IDs.
-    console.warn("[media-god-rd-api] auth rejected before handler", {
-      path: Object.hasOwn(HANDLERS, path) ? path : "unknown",
-      mode: isDevice ? "device" : "account",
-    });
-    return respond(res, 401, {error: "Sign in to Media God to use Real-Debrid."}, origin);
-  }
-  if (limited(verified.user.id)) {
-    return respond(res, 429, {error: "Too many Real-Debrid requests. Retry shortly."}, origin);
-  }
-
-  let body = {};
+  const action=/^[a-z_]{1,40}$/i.test(String(body.action||""))?body.action:"unknown";
   try {
-    const chunks = []; let size = 0;
-    for await (const chunk of req) {
-      size += chunk.length;
-      if (size > MAX_BODY) return respond(res, 413, {error: "Request too large"}, origin);
-      chunks.push(chunk);
-    }
-    body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-    if (!body || Array.isArray(body) || typeof body !== "object") {
-      return respond(res, 400, {error: "Invalid request"}, origin);
-    }
-  } catch {
-    return respond(res, 400, {error: "Invalid JSON"}, origin);
-  }
-  // Do not accept a private RD credential, arbitrary account ID or guest
-  // impersonation from the caller: the account is resolved via auth.me.
-  if (["rd_token", "rd_refresh_token", "rd_client_secret", "user_id"].some(k => k in body)) {
-    return respond(res, 400, {error: "Credentials must not be supplied in request bodies."}, origin);
-  }
-  try {
-    const request = new Request("http://127.0.0.1" + path, {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(body),
+    const request=new Request("http://127.0.0.1"+path,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)
     });
-    Object.defineProperties(request, {
-      __mediaGodVerifiedClient: {value: verified.client},
-      __mediaGodVerifiedUserId: {value: verified.user.id},
-      __mediaGodVerifiedUser: {value: verified.user},
+    Object.defineProperties(request,{
+      __mediaGodVerifiedClient:{value:verified.client},
+      __mediaGodVerifiedUserId:{value:verified.user.id},
+      __mediaGodVerifiedUser:{value:verified.user}
     });
-    const result = await runHandler(handler, request, isDevice ? verified.user.id : "");
-    // Separate a *handler* 401 (e.g. a Real-Debrid credential or provider
-    // response) from the server's own account-verification 401 above. Never
-    // log user IDs, credentials, torrent hashes, filenames or playable URLs.
-    if (result.status === 401) {
-      console.warn("[media-god-rd-api] handler returned 401 after account verification", {
-        function: path.slice("/functions/".length),
-        action: /^[a-z_]{1,40}$/i.test(String(body.action || "")) ? body.action : "unknown",
-      });
+    const result=await exclusive(verified.user.id,()=>handlers[path](request));
+    if (result.status===401||result.status>=500) {
+      console.warn("[rd-independent] request rejected",{action,function:path.slice(11),status:result.status});
     }
-    if (result.status >= 500) {
-      const action = /^[a-z_]{1,40}$/i.test(String(body.action || ""))
-        ? String(body.action) : "unknown";
-      console.warn("[media-god-rd-api] upstream action failed", {
-        function: path.slice("/functions/".length),
-        action,
-        status: result.status,
-      });
-    }
-    const raw = await result.text();
-    if (raw.length > 2_000_000) {
-      return respond(res, 502, {error: "Real-Debrid response too large"}, origin);
-    }
-    let data = {};
-    try { data = raw ? JSON.parse(raw) : {}; }
-    catch { return respond(res, 502, {error: "Unexpected Real-Debrid response"}, origin); }
-    return respond(res, result.status, data, origin);
-  } catch {
-    // Never include a token, user ID or upstream URL in an error or log.
-    return respond(res, 502, {error: "Real-Debrid request unavailable. Retry or check your RD connection."}, origin);
+    const raw=await result.text();
+    if (raw.length>2000000) return reply(res,502,{error:"Response too large"},origin);
+    let data;
+    try{data=JSON.parse(raw||"{}");}
+    catch{return reply(res,502,{error:"Unexpected provider response"},origin);}
+    return reply(res,result.status,data,origin);
+  }catch{
+    return reply(res,502,{error:"Real-Debrid request unavailable. Retry or reconnect this account."},origin);
   }
 }
-http.createServer((req, res) => {
-  res.setTimeout(125_000);
-  void serve(req, res).catch(() =>
-    respond(res, 500, {error: "Unexpected Real-Debrid server error"}, String(req.headers.origin || "")));
-}).listen(Number(process.env.PORT || 3000), "0.0.0.0");
+http.createServer((req,res)=>{
+  res.setTimeout(125000);
+  void serve(req,res).catch(()=>reply(res,500,{error:"Server error"},String(req.headers.origin||"")));
+}).listen(Number(process.env.PORT||3000),"0.0.0.0");
