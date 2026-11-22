@@ -12,6 +12,7 @@ export const isTransientRealDebridServiceFailure = (error) => {
   const code = String(error?.code || "").trim().toUpperCase();
   if ([
     "RD_REQUEST_TIMEOUT", "NO_ACCOUNT_SESSION", "RD_CREDENTIAL_EXPIRED",
+    "RD_RATE_LIMITED", "RD_DISCOVERY_RATE_LIMITED",
     "NETWORK_ERROR", "ERR_NETWORK", "ETIMEDOUT", "ECONNRESET",
   ].includes(code)) {
     return true;
@@ -34,6 +35,12 @@ export const transientRealDebridMessage = (error) => {
   if (status === 403) {
     return "The playback server denied this request. Your source was not marked bad. " +
       "Retry after the connection is corrected.";
+  }
+  if (String(error?.code || "").toUpperCase() === "RD_RATE_LIMITED" ||
+      String(error?.code || "").toUpperCase() === "RD_DISCOVERY_RATE_LIMITED") {
+    return "Real-Debrid is temporarily rate limiting playback lookups. " +
+      "Media God kept the selected torrent and stopped automatic retries to avoid more requests. " +
+      "Try it again after the limit resets, or choose an already-ready source.";
   }
   if (status === 429) {
     return "Real-Debrid is temporarily rate-limiting requests. " +
