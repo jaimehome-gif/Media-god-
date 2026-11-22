@@ -50,7 +50,10 @@ const sourceReviewedFiles = {
   // Android 5–9 generic box recovery. Chromium 75 frame and route checks passed; physical box pending.
   "src/components/mg/OnlyFlixEmbedPlayer.jsx": "3c1f79778a5dd68abfd3c0c61630865b57383b4b7f7221e881e2478a7b2bd1f2",
   "src/components/mg/SafeEmbedStage.jsx": "e8d5cac75b1670f3bfdff402c0fff7043c9ae04e62b81c8982d4cdbc05018453",
-  "src/components/mg/fireTvCardPlay.js": "72efdfe72bd5e3bdbe3e18f9556756308f1a06001f3f0cfcc861ba3a5c4b460f",
+  // 2026-11-22 user-requested native-player route restoration after migration.
+  // Source reviewed with targeted tests; physical Android/Fire TV audio and picture
+  // still need verification. Original approved hash remains in recovery docs.
+  "src/components/mg/fireTvCardPlay.js": "4dda82ab63cb528a0677543f95e019e156bbab1e79c9f5427bb9ed95dd013540",
   // Explicit 14 November release instruction: reviewed wake recovery; physical
   // Fire Stick acceptance remains unverified. See FIRETV_WAKE_RELEASE_20261114.md.
   // Approved for live Fire Stick testing on 18 November. Physical acceptance is pending.
