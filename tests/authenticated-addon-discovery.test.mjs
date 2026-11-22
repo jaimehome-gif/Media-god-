@@ -82,7 +82,10 @@ test("source lookup is isolated to the verified account and never exposed by the
   const recovery = read("src/api/addonSourceRecovery.js");
   assert.match(client, /searchAddonSourcesWithPublicFallback\(payload/);
   assert.match(client, /readToken: readAccountSessionToken/);
-  assert.match(client, /invokeIndependentRealDebrid\('fetchAddonStreams', request, options\)/);
+  assert.match(client, /invokeAuthenticatedDebrid\('fetchAddonStreams', request, options\)/);
+  assert.match(client, /const invokeAuthenticatedDebrid = async/);
+  assert.match(client, /invokeIndependentRealDebrid\(name, payload, \{ token: sessionToken \}\)/);
+  assert.match(client, /confirmedMediaGodAccount\(\)/);
   assert.match(client, /searchPublic: invokeIndependentAddonSources/);
   assert.match(recovery, /if \(!sessionToken\) return recoverPublic\(\)/);
   assert.match(recovery, /personal\.data\.streams\.length > 0/);
