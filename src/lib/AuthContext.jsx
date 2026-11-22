@@ -1,12 +1,9 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
-import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import {
   hydrateAccountPreferences,
   installAccountPreferenceSync,
 } from '@/lib/accountPreferenceSync';
-import { mediaGodAuthReturnUrl } from '@/lib/mediaGodAuth';
 
 const AuthContext = createContext(null);
 
@@ -96,74 +93,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const checkAppState = async () => {
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-
-      const appClient = createAxiosClient({
-        baseURL: `/api/apps/public`,
-        headers: {
-          'X-App-Id': appParams.appId,
-        },
-        token: appParams.token,
-        interceptResponses: true,
-      });
-
-      try {
-        const publicSettings = await appClient.get(
-          `/prod/public-settings/by-id/${appParams.appId}`
-        );
-
-        setAppPublicSettings(publicSettings);
-
-        // Media God is public-with-optional-login. A 401 from /User/me here is
-        // a normal signed-out state and should display our own login/register
-        // screens, not Base44's workspace-member gate.
-        await checkUserAuth({ markAuthRequired: false });
-        setIsLoadingPublicSettings(false);
-      } catch (appError) {
-        console.error('App state check failed:', appError);
-
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-
-          if (reason === 'auth_required') {
-            setAuthError({
-              type: 'auth_required',
-              message: 'Authentication required',
-            });
-          } else if (reason === 'user_not_registered') {
-            setAuthError({
-              type: 'user_not_registered',
-              message: 'User not registered for this app',
-            });
-          } else {
-            setAuthError({
-              type: reason,
-              message: appError.message,
-            });
-          }
-        } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app',
-          });
-        }
-
-        setIsLoadingPublicSettings(false);
-        setIsLoadingAuth(false);
-        setAuthChecked(true);
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      setAuthError({
-        type: 'unknown',
-        message: error.message || 'An unexpected error occurred',
-      });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-      setAuthChecked(true);
-    }
+    // Independent Jaime Home identity: no old Base44 public-settings or
+    // workspace-member gate. The public catalogue is always accessible.
+    setIsLoadingPublicSettings(false);
+    setAppPublicSettings({ is_public: true });
+    await checkUserAuth({ markAuthRequired: false });
   };
 
   useEffect(() => {
@@ -192,7 +126,7 @@ export const AuthProvider = ({ children }) => {
     writeGuestMode(false);
 
     if (shouldRedirect) {
-      base44.auth.logout(mediaGodAuthReturnUrl('/login'));
+      base44.auth.logout('/login');
     } else {
       base44.auth.logout();
     }
@@ -200,7 +134,7 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = () => {
     if (typeof window !== 'undefined') {
-      window.location.assign(mediaGodAuthReturnUrl('/login'));
+      window.location.assign('/login');
     }
   };
 
