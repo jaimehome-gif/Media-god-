@@ -193,3 +193,105 @@ test("Railway Dockerfile packages every local Real-Debrid server import", () => 
       "Railway Dockerfile must copy " + filename);
   }
 });
+
+
+test("expiring RD credentials refresh before normal playback and update the verified cache", async () => {
+  const previousFetch = globalThis.fetch;
+  const user = {
+    id: "refresh-before-play",
+    rd_token: "expired-rd-access",
+    rd_refresh_token: "old-rd-refresh",
+    rd_client_id: "client-id",
+    rd_client_secret: "client-secret",
+    rd_token_expires_at: "2020-01-01T00:00:00Z",
+  };
+  const seen = [];
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const target = String(url);
+      seen.push({target, authorization: options.headers?.Authorization || ""});
+      if (target.includes("/oauth/v2/token")) {
+        return Response.json({access_token:"new-rd-access", refresh_token:"new-rd-refresh", expires_in:3600});
+      }
+      if (target.endsWith("/rest/1.0/user")) {
+        return Response.json({premium:1, points:20});
+      }
+      return Response.json({error:"Unexpected test URL"}, {status:500});
+    };
+    const res = await realDebrid(request("status", user));
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).valid, true);
+    assert.equal(user.rd_token, "new-rd-access", "successful refresh must update cached verified user");
+    assert.equal(user.rd_refresh_token, "new-rd-refresh");
+    assert.ok(seen.some(entry => entry.authorization === "Bearer new-rd-access"));
+    assert.ok(!seen.some(entry => entry.authorization === "Bearer expired-rd-access"));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("RD bad_token during addMagnet refreshes and retries the exact magnet only once", async () => {
+  const previousFetch = globalThis.fetch;
+  const user = {
+    id: "refresh-on-bad-token",
+    rd_token: "revoked-rd-access",
+    rd_refresh_token: "refresh-secret",
+    rd_client_id: "client-id",
+    rd_client_secret: "client-secret",
+    rd_token_expires_at: "2030-01-01T00:00:00Z",
+  };
+  const magnet = "magnet:?xt=urn:btih:0123456789012345678901234567890123456789";
+  const usedTokens = [];
+  let oauthCount = 0;
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      const target = String(url);
+      if (target.includes("/oauth/v2/token")) {
+        oauthCount += 1;
+        return Response.json({access_token:"recovered-rd-access", refresh_token:"refresh-rotated", expires_in:3600});
+      }
+      if (target.endsWith("/torrents/addMagnet")) {
+        usedTokens.push(options.headers?.Authorization);
+        if (options.headers?.Authorization === "Bearer revoked-rd-access") {
+          return Response.json({error:"bad_token"}, {status:401});
+        }
+        return Response.json({id:"new-rd-torrent"});
+      }
+      if (target.includes("/torrents/info/new-rd-torrent")) {
+        return Response.json({id:"new-rd-torrent",status:"magnet_conversion",files:[],links:[]});
+      }
+      return Response.json({error:"Unexpected test URL"}, {status:500});
+    };
+    const res = await realDebrid(request("add_magnet", user, {body:{magnet}}));
+    const payload = await res.json();
+    assert.equal(res.status, 200);
+    assert.notEqual(payload.error_code, "RD_CREDENTIAL_EXPIRED");
+    assert.deepEqual(usedTokens, ["Bearer revoked-rd-access", "Bearer recovered-rd-access"]);
+    assert.equal(oauthCount, 1);
+    assert.equal(user.rd_token, "recovered-rd-access");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("RD bad_token with no refresh credential stops source-cycling and protects the account", async () => {
+  const previousFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({error:"bad_token"}, {status:401});
+    const user = {id:"missing-refresh",rd_token:"revoked",rd_refresh_token:""};
+    const res = await realDebrid(request("add_magnet", user, {
+      body:{magnet:"magnet:?xt=urn:btih:0123456789012345678901234567890123456789"},
+    }));
+    const payload = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(payload.status, "failed");
+    assert.equal(payload.error_code, "RD_CREDENTIAL_EXPIRED");
+    assert.match(payload.error, /Reconnect Real-Debrid in Settings/);
+    assert.equal(user.rd_token, "revoked", "never delete credentials after an auth failure");
+    const transient = source("src/components/mg/realDebridTransientFailure.js");
+    assert.match(transient, /"RD_CREDENTIAL_EXPIRED"/);
+    assert.match(transient, /selected source has not been marked bad/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
