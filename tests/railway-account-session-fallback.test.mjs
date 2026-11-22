@@ -8,7 +8,7 @@ const source = readFileSync(
 ).replace(/^import .*;\r?\n/gm, "")
   .replace("export const base44 =", "const base44 =");
 
-function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'existing-account-token' } = {}) {
+function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'existing-account-token', legacyGuestKey = '', legacyGuestConnected = false, railwayConnected = true } = {}) {
   const calls = { railway: [], native: [], verified: 0 };
   const client = {
     auth: {
@@ -21,7 +21,13 @@ function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'e
     functions: {
       invoke: async (name, payload) => {
         calls.native.push({ name, payload });
-        return { data: { connected: true, provider: "native" } };
+        if (name === "realDebridAuth" && payload?.guest_device_key) {
+          return { data: {
+            connected: legacyGuestConnected, valid: legacyGuestConnected,
+            provider: "legacy-guest",
+          } };
+        }
+        return { data: { connected: true, valid: true, provider: "native" } };
       },
     },
   };
@@ -29,6 +35,7 @@ function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'e
     createClient: () => client,
     appParams: { appId: "test", token: "", functionsVersion: "", appBaseUrl: "" },
     railwayDeviceToken: () => "d".repeat(64),
+    readGuestDebridDeviceKey: () => legacyGuestKey,
     invokeIndependentMetadata: async () => ({data:{}}),
     invokeIndependentImdbResolver: async () => ({data:{}}),
     invokeIndependentAddonSources: async () => ({data:{}}),
@@ -43,7 +50,7 @@ function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'e
         error.status = railwayStatus;
         throw error;
       }
-      return { data: { connected: true, provider: "railway" } };
+      return { data: { connected: railwayConnected, valid: railwayConnected, provider: "railway" } };
     },
   };
   const result = vm.runInNewContext(source + "\nbase44;", globals, {
@@ -119,4 +126,53 @@ test("real guests without an account session retain the isolated Railway device 
   assert.equal(result.data.provider,"railway");
   assert.equal(calls.railway.length,1);
   assert.equal(calls.native.length,0);
+});
+
+test("previously connected Base44 guest survives Railway migration without a new login", async () => {
+  const key = "a".repeat(64);
+  const {client, calls} = createHarness({
+    sessionToken:"", signedIn:false, legacyGuestKey:key, legacyGuestConnected:true,
+    railwayConnected:false,
+  });
+  const status = await client.functions.invoke("realDebridAuth", {action:"status"});
+  assert.equal(status.data.provider, "legacy-guest");
+  assert.equal(calls.railway.length, 0, "do not try new empty Railway device storage");
+  const play = await client.functions.invoke("realDebrid", {action:"resolve_best"});
+  assert.equal(play.data.provider, "native");
+  assert.equal(calls.native.at(-1).payload.guest_device_key, key);
+  assert.equal(calls.native.at(-1).payload.action, "resolve_best");
+  assert.equal(calls.railway.length, 0);
+});
+
+test("legacy device must prove a valid connection before source playback fallback", async () => {
+  const {client, calls} = createHarness({
+    sessionToken:"", signedIn:false, railwayStatus:401,
+    legacyGuestKey:"b".repeat(64), legacyGuestConnected:false,
+  });
+  await assert.rejects(
+    client.functions.invoke("realDebrid", {action:"resolve_best"}),
+    error => error.status === 401,
+  );
+  assert.ok(calls.native.every(c => c.name === "realDebridAuth"));
+  assert.equal(calls.railway.length,1);
+});
+
+test("Railway signed-in status with no saved RD link can recover an old guest link", async () => {
+  const key = "c".repeat(64);
+  const {client, calls} = createHarness({
+    signedIn:true, legacyGuestKey:key, legacyGuestConnected:true,
+    railwayConnected:false,
+  });
+  const status = await client.functions.invoke("realDebridAuth", {action:"status"});
+  assert.equal(status.data.provider,"legacy-guest");
+  assert.equal(calls.railway.length,1);
+  const play = await client.functions.invoke("realDebrid", {action:"resolve_best"});
+  assert.equal(play.data.provider,"native");
+  assert.equal(calls.native.at(-1).payload.guest_device_key,key);
+});
+
+test("existing signed-in accounts are not sent a guest capability when no guest is linked", async () => {
+  const {client, calls} = createHarness({signedIn:true, railwayStatus:401});
+  await client.functions.invoke("realDebrid", {action:"status"});
+  assert.equal(calls.native[0].payload.guest_device_key,undefined);
 });
