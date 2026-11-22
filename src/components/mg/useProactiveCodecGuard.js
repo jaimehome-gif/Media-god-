@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { isSourceWebUndecodable } from "@/components/mg/mediaCompatibility";
+import { browserCannotDecodeResolvedRdAudio } from "@/components/mg/browserRdAudioCompatibility";
 
 /*
  * Proactive codec guard for the web player.
@@ -61,7 +62,8 @@ export function useProactiveCodecGuard({
       return;
     }
 
-    if (rdOverride?.audioRescue?.used === true || rdOverride?.videoRescue) {
+    if (rdOverride?.audioRescue?.used === true ||
+      rdOverride?.videoRescue?.used === true) {
       return;
     }
 
@@ -76,7 +78,15 @@ export function useProactiveCodecGuard({
 
     const label = sourceDisplayLabel(candidate, activeIdx);
 
-    if (!isSourceWebUndecodable(candidate, label)) {
+    // A Real-Debrid original fallback is only automatically skipped when
+    // inspection confirms that *every* audio track uses a codec unsupported
+    // by the browser. Native VLC and unknown audio metadata are unaffected.
+    const confirmedSilentBrowserAudio =
+      !nativeFireTvPlayer &&
+      browserCannotDecodeResolvedRdAudio(rdOverride);
+
+    if (!confirmedSilentBrowserAudio &&
+      !isSourceWebUndecodable(candidate, label)) {
       return;
     }
 
@@ -102,6 +112,32 @@ export function useProactiveCodecGuard({
 
     // Real-Debrid-backed files can be repaired in place (compatible transcode)
     // by the silent-audio guard, so don't throw away an otherwise good release.
+    if (confirmedSilentBrowserAudio) {
+      if (manualSourceLockActive()) {
+        setRdError(
+          "This original Real-Debrid file has audio your browser cannot decode. " +
+          "Try Fix audio, choose an AAC source, or use the native VLC player."
+        );
+        return;
+      }
+      // Preserve the source in the manual list: a native player may decode
+      // it, even if this browser cannot. Do not mark its torrent globally bad.
+      const nextIndex = findNextPlayableSource(activeIdx, { allowCaching: false });
+      if (nextIndex >= 0) {
+        switchToSource(nextIndex, {
+          preservePosition: true,
+          statusMessage:
+            "The selected file has no browser-supported audio track. Trying another ready source…",
+        });
+      } else {
+        setRdError(
+          "No compatible audio track was found in this file. " +
+          "Choose an AAC source or play it through native VLC."
+        );
+      }
+      return;
+    }
+
     if (
       manualSourceLockActive() ||
       rdOverride ||
