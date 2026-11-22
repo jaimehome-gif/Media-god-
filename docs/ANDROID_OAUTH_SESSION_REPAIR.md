@@ -31,3 +31,11 @@ On reopening the Android phone APK, the previously Google-signed-in user was sho
 3. Verify Real-Debrid status with one request and play one legally accessible cached or user-owned media file, observing audio and picture.
 4. Try a title with many source candidates; it must not produce a burst of hundreds of RD calls or claim unchecked torrents are known uncached.
 5. Verify Fire TV has unchanged navigation, playback controls, Live TV and update behaviour.
+
+## Protected playback source review — 22 November 2026
+This is a deliberately scoped update to the protected-media checksum guard, not a bypass.
+
+- `src/components/mg/VideoPlayer.jsx`: prior SHA-256 `8ccc99e6ce520e2156a6fa0ade784eb47e1475e3f1ee5e29c9680545747dade6`, reviewed new SHA-256 `12f0467d1f0ac3f9e321a9d9feceba610c177412665cbfebc64b659dfe04dd0c`. Source diff in `a360487d356c02815d65353c631269ecc0765392` changes only the timing, concurrency and per-title cap of *automatic* background torrent preparation (14 insertions, 5 removals).
+- `src/components/mg/MediaPlayerProvider.jsx`: prior SHA-256 `4ac9442105a010730d0fdc99f2b4bad707df405fb991d80e2d46c7d894c17110`, reviewed new SHA-256 `245ea498e38651c674adda47f8e5a0c20b6d05669354a07534f976b529c31b35`. Source diff in `d473a0d0441e244db0590f8b6dba4510f4ea954b` changes only the repeat pass, retry delay and cached launch probe limits (6 insertions, 6 removals).
+- Regression tests were revised to verify the new finite request/worker limits while retaining the original web-provider HTML isolation, source choice, native audio and Live TV checks.
+- The SHA-256 guard still checks **all** protected files and rejects any new undocumented drift. The prior baselines remain documented and available for rollback. This source review does not claim physical-device playback verification.
