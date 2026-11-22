@@ -187,10 +187,19 @@ export const AuthProvider = ({ children }) => {
             });
           }
         } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app',
-          });
+          const status = Number(appError?.status || appError?.response?.status || 0);
+          if (!status || status === 408 || status === 429 || status >= 500) {
+            // The public-settings endpoint can briefly fail after the migration
+            // even while Google OAuth is still valid. Check the account
+            // independently instead of sending everyone to the login screen.
+            await checkUserAuth({ markAuthRequired: false });
+            setAuthError(null);
+          } else {
+            setAuthError({
+              type: 'unknown',
+              message: appError.message || 'Failed to load app',
+            });
+          }
         }
 
         setIsLoadingPublicSettings(false);
@@ -243,6 +252,7 @@ export const AuthProvider = ({ children }) => {
 
 
   const continueAsGuest = () => {
+    authCheckSequenceRef.current += 1;
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(true);
@@ -253,6 +263,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = (shouldRedirect = true) => {
+    authCheckSequenceRef.current += 1;
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(false);
