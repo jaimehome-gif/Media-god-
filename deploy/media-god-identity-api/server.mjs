@@ -2,6 +2,7 @@ import http from "node:http";
 import { randomBytes, randomUUID, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import pg from "pg";
+import { createSocialOAuth } from "./socialOAuth.mjs";
 
 const { Pool } = pg;
 const scrypt = promisify(scryptCb);
@@ -126,6 +127,8 @@ const sqlSchema=[
 "CREATE INDEX IF NOT EXISTS identity_records_user_idx ON identity_records(user_id,entity,updated_at DESC)"
 ];
 for (const sql of sqlSchema) await pool.query(sql);
+const socialOAuth = createSocialOAuth({pool,issueSession});
+await socialOAuth.initialize();
 
 async function authentication(req,res,path,body,origin) {
   if (path==="/auth/config"&&req.method==="GET") return respond(res,200,{independent:true,email_verification_required:true,registration_ready:mailReady,previous_accounts_not_imported:true},origin);
@@ -271,7 +274,13 @@ async function handler(req,res) {
       return respond(res,200,{status:"ok",identity:"jaime-home",database:"connected",registration_ready:mailReady},origin);
     }
     if (path==="/"&&req.method==="GET") return respond(res,200,{service:"Media God Identity",base44:false},origin);
-    const body=["POST","PATCH"].includes(req.method)?await input(req):{};
+    // Apple's form_post must be read as URL-encoded body by the OAuth router,
+    // not parsed as JSON by the usual application request decoder.
+    const appleCallback = path==="/auth/oauth/apple/callback" && req.method==="POST";
+    const body=!appleCallback && ["POST","PATCH"].includes(req.method)?await input(req):{};
+    if (path==="/auth/providers" || path.startsWith("/auth/oauth/")) {
+      return await socialOAuth.handle(req,res,path,body,origin,respond);
+    }
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
     if (path.startsWith("/entities/")) return await entityRoute(req,res,path,body,origin);
     err(404,"Not found");
