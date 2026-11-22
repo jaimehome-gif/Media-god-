@@ -13,6 +13,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
+import VerifyEmail from '@/pages/VerifyEmail';
 import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { PlayerProvider } from '@/components/mg/PlayerProvider.jsx';
@@ -83,6 +84,7 @@ const AuthenticatedApp = () => {
       <Route path="/register" element={publicOnly(<Register />)} />
       <Route path="/forgot-password" element={publicOnly(<ForgotPassword />)} />
       <Route path="/reset-password" element={publicOnly(<ResetPassword />)} />
+      <Route path="/verify-email" element={publicOnly(<VerifyEmail />)} />
       <Route
         element={
           <ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />
