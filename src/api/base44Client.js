@@ -1,209 +1,183 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
-import { railwayDeviceToken } from './railwayDeviceToken.js';
-import { invokeIndependentMetadata, invokeIndependentImdbResolver, invokeIndependentAddonSources, invokeIndependentPublicFeature } from './independentMetadata.js';
-import { INDEPENDENT_RD_FUNCTIONS, invokeIndependentRealDebrid, readAccountSessionToken } from './independentRealDebrid.js';
-import { searchAddonSourcesWithPublicFallback } from './addonSourceRecovery.js';
-import { readGuestDebridDeviceKey } from '@/components/mg/guestDebridDevice';
+/**
+ * Compatibility facade for the independent Jaime Home service.
+ * The export name "base44" is retained temporarily so existing Media God
+ * components can migrate without rewriting every import in one release.
+ * This module does NOT import the Base44 SDK or call a Base44 endpoint.
+ */
+import {
+  invokeIndependentMetadata,
+  invokeIndependentImdbResolver,
+  invokeIndependentAddonSources,
+  invokeIndependentPublicFeature,
+} from "./independentMetadata.js";
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
-
-//Create a client with authentication required
-export const base44 = createClient({
-  appId,
-  token,
-  functionsVersion,
-  serverUrl: '',
-  requiresAuth: false,
-  appBaseUrl
-});
-
-const rawInvoke = base44.functions.invoke.bind(base44.functions);
-
-// Earlier Media God versions saved some Real-Debrid connections against a
-// device-specific Base44 guest key. Railway intentionally uses a different,
-// independently encrypted device capability. Probe the *existing* Base44
-// record without generating or copying credentials, then preserve it.
-let legacyGuestModeUntil = 0;
-let legacyGuestProbeUntil = 0;
-let legacyGuestConnected = false;
-let legacyGuestProbePromise = null;
-
-const legacyGuestPayload = (payload = {}) => {
-  const key = readGuestDebridDeviceKey();
-  return key ? { ...payload, guest_device_key: key } : payload;
+export const IDENTITY_API = "https://media-god-identity-api-production.up.railway.app";
+export const RD_API = "https://media-god-rd-independent-api-production.up.railway.app";
+const SESSION_KEY = "mg:jaime-home-session:v1";
+const AUTH_ERROR = "Sign in to your new Media God account. Previous Base44 sessions are not valid here.";
+const PUBLIC_FUNCTIONS = new Set(["getTmdbMovies","resolveImdb","resolveTvImdb","fetchAddonStreams","getEntertainmentNews","getSkipSegments","getFireTvApkLink"]);
+const PRIVATE_FUNCTIONS = new Set(["realDebrid","realDebridAuth","multiDebrid","findRdLibrary"]);
+const cleanName = n => String(n||"").trim();
+const storage = () => {
+  try { return typeof window === "undefined" ? null : window.localStorage; }
+  catch { return null; }
 };
-
-const verifiedLegacyGuestDebrid = async () => {
-  const key = readGuestDebridDeviceKey();
-  if (!key) return false;
-  if (Date.now() < legacyGuestProbeUntil) return legacyGuestConnected;
-  if (!legacyGuestProbePromise) {
-    legacyGuestProbePromise = rawInvoke('realDebridAuth', {
-      action: 'status',
-      guest_device_key: key,
-    })
-      .then(result => result?.data?.connected === true && result?.data?.valid === true)
-      .catch(() => false)
-      .then(connected => {
-        legacyGuestConnected = connected;
-        legacyGuestProbeUntil = Date.now() + (connected ? 120_000 : 20_000);
-        if (connected) legacyGuestModeUntil = Date.now() + 120_000;
-        return connected;
-      })
-      .finally(() => { legacyGuestProbePromise = null; });
-  }
-  return legacyGuestProbePromise;
+export const getIndependentSessionToken = () => storage()?.getItem(SESSION_KEY) || "";
+export const saveIndependentSessionToken = value => {
+  if (value) storage()?.setItem(SESSION_KEY,String(value));
+  else storage()?.removeItem(SESSION_KEY);
 };
-
-
-// A signed-in Media God account can work through Base44 while Railway's
-// independent auth check temporarily rejects its browser session. Keep
-// Railway as the primary route; only a 401 may activate the account-scoped
-// native backend fallback. Never treat 403, 429 or 5xx as authentication.
-let railwayAuthFallbackUntil = 0;
-let railwayAuthDeniedUntil = 0;
-let accountVerificationPromise = null;
-let accountVerifiedUntil = 0;
-let accountRejectedUntil = 0;
-
-// Both probes are handled by Base44 on its own authenticated origin. The
-// second confirms an existing RD connection on the *account* itself (never
-// a guest key), even if the WebView's User/me call is temporarily out of sync.
-// A response that is merely HTTP 200 but says "not connected" is not proof.
-const confirmedMediaGodAccount = async () => {
-  if (Date.now() < accountVerifiedUntil) return true;
-  if (Date.now() < accountRejectedUntil) return false;
-  if (!accountVerificationPromise) {
-    accountVerificationPromise = (async () => {
-      try {
-        if ((await base44.auth.me())?.id) return true;
-      } catch {
-        // A first-party RD status check may still use a valid signed-in
-        // SDK/cookie session while User/me is temporarily unavailable.
-      }
-      try {
-        const response = await rawInvoke('realDebridAuth', { action: 'status' });
-        return response?.data?.connected === true &&
-          response?.data?.valid === true;
-      } catch {
-        return false;
-      }
-    })()
-      .then(verified => {
-        if (verified) {
-          accountVerifiedUntil = Date.now() + 45_000;
-          accountRejectedUntil = 0;
-        } else {
-          accountRejectedUntil = Date.now() + 12_000;
-        }
-        return verified;
-      })
-      .finally(() => { accountVerificationPromise = null; });
-  }
-  return accountVerificationPromise;
+const asError = (response, data) => {
+  const error = new Error(String(data?.error || data?.message || "Media God service request failed"));
+  error.status = response.status;
+  error.code = data?.code || "REQUEST_FAILED";
+  error.response = { status: response.status, data };
+  return error;
 };
-
-const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
-  if (Date.now() < legacyGuestModeUntil && readGuestDebridDeviceKey()) {
-    // Base44 authenticates the existing guest key and looks up only its
-    // device-owned Real-Debrid connection. Railway never receives this key.
-    return rawInvoke(name, legacyGuestPayload(payload));
-  }
-  if (Date.now() < railwayAuthFallbackUntil) {
-    // A Base44-verified signed-in user can use their existing stored RD
-    // account while the Railway bearer-token handoff recovers.
-    return rawInvoke(name, payload);
-  }
-
-  // If Railway has just rejected the current account token, do not send
-  // hundreds of identical failing requests from the source qualification
-  // queue. Recheck a valid Base44 account or linked legacy guest first.
-  if (Date.now() < railwayAuthDeniedUntil) {
-    if (await confirmedMediaGodAccount()) {
-      railwayAuthFallbackUntil = Date.now() + 90_000;
-      return rawInvoke(name, payload);
-    }
-    if (await verifiedLegacyGuestDebrid()) {
-      return rawInvoke(name, legacyGuestPayload(payload));
-    }
-    const error = new Error(
-      'The Media God login session could not be verified. ' +
-      'The selected source is still available; your Real-Debrid account has not been disconnected.'
-    );
-    error.status = 401;
-    error.code = 'MG_ACCOUNT_SESSION_UNVERIFIED';
-    throw error;
-  }
-
-  const sessionToken = options.token || await readAccountSessionToken();
-  if (!sessionToken) {
-    if (await confirmedMediaGodAccount()) {
-      railwayAuthFallbackUntil = Date.now() + 90_000;
-      return rawInvoke(name, payload);
-    }
-    // On migration, an existing device guest account may still be linked in
-    // Base44 despite the new Railway device store starting empty.
-    if (await verifiedLegacyGuestDebrid()) {
-      return rawInvoke(name, legacyGuestPayload(payload));
-    }
-  }
-
+const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(),timeoutMs);
   try {
-    const result = sessionToken
-      ? await invokeIndependentRealDebrid(name, payload, { token: sessionToken })
-      : await invokeIndependentRealDebrid(name, payload, { deviceToken: railwayDeviceToken() });
-
-    // Railway can correctly authenticate a newly created device while its
-    // credentials are empty. A previously linked Base44 guest stays linked.
-    if (name === 'realDebridAuth' && (payload?.action || 'status') === 'status' &&
-        result?.data?.connected !== true && await verifiedLegacyGuestDebrid()) {
-      return rawInvoke(name, legacyGuestPayload(payload));
-    }
-    return result;
-  } catch (error) {
-    if (Number(error?.status) !== 401 && error?.code !== 'NO_ACCOUNT_SESSION') {
-      throw error;
-    }
-    if (Number(error?.status) === 401) railwayAuthDeniedUntil = Date.now() + 15_000;
-    if (await confirmedMediaGodAccount()) {
-      railwayAuthFallbackUntil = Date.now() + 90_000;
-      return rawInvoke(name, payload);
-    }
-    // A Railway 401 never grants account access. The legacy backend itself
-    // verifies that this device already owns a valid RD guest connection.
-    if (await verifiedLegacyGuestDebrid()) {
-      return rawInvoke(name, legacyGuestPayload(payload));
+    const response = await fetch(endpoint+path,{
+      method,
+      headers:{
+        ...(body!==undefined?{"Content-Type":"application/json"}:{}),
+        ...(token?{"Authorization":"Bearer "+token}:{})
+      },
+      ...(body!==undefined?{body:JSON.stringify(body)}:{}),
+      credentials:"omit",cache:"no-store",signal:controller.signal
+    });
+    const data = await response.json().catch(()=>({}));
+    if (!response.ok) throw asError(response,data);
+    return data;
+  } catch(error) {
+    if (error?.name==="AbortError") {
+      const e = new Error("Media God request timed out. Please retry.");
+      e.code="NETWORK_TIMEOUT";
+      throw e;
     }
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
 };
-
-
-base44.functions.invoke = async (name, payload = {}, ...rest) => {
-  // Public catalogue, search and metadata never use Base44 integration
-  // credits. This endpoint contains no personal data or credentials.
-  if (name === 'getTmdbMovies') {
-    return invokeIndependentMetadata(payload);
+const auth = {
+  async loginViaEmailPassword(email,password) {
+    const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
+    saveIndependentSessionToken(result.access_token);
+    return result;
+  },
+  async register({email,password,name}={}) {
+    return call(IDENTITY_API,"/auth/register",{method:"POST",body:{email,password,name},token:""});
+  },
+  async verifyEmail(verifyToken) {
+    return call(IDENTITY_API,"/auth/verify",{method:"POST",body:{token:verifyToken},token:""});
+  },
+  async resendOtp(email) {
+    return call(IDENTITY_API,"/auth/resend-verification",{method:"POST",body:{email},token:""});
+  },
+  async me() {
+    if (!getIndependentSessionToken()) {
+      const e=new Error(AUTH_ERROR);
+      e.status=401;
+      throw e;
+    }
+    return call(IDENTITY_API,"/auth/me");
+  },
+  async isAuthenticated() {
+    try { await auth.me(); return true; }
+    catch { return false; }
+  },
+  async updateMe(patch={}) {
+    return call(IDENTITY_API,"/auth/me",{method:"PATCH",body:patch});
+  },
+  async logout(returnTo) {
+    try {
+      if (getIndependentSessionToken()) await call(IDENTITY_API,"/auth/logout",{method:"POST",body:{}});
+    } catch { /* Always clear the local session. */ }
+    saveIndependentSessionToken("");
+    if (returnTo && typeof window!=="undefined") window.location.assign(returnTo);
+  },
+  setToken: saveIndependentSessionToken,
+  getAccessToken: getIndependentSessionToken,
+  async resetPasswordRequest(email) {
+    return call(IDENTITY_API,"/auth/reset-request",{method:"POST",body:{email},token:""});
+  },
+  async resetPassword({resetToken,newPassword}) {
+    return call(IDENTITY_API,"/auth/reset",{method:"POST",body:{token:resetToken,password:newPassword},token:""});
+  },
+  loginWithProvider() {
+    throw new Error("Social sign-in is being migrated. Use email and password for the new Media God account.");
   }
-  if (name === 'resolveImdb' || name === 'resolveTvImdb') {
-    return invokeIndependentImdbResolver(name, payload);
-  }
-  if (name === 'fetchAddonStreams' && !payload?.action) {
-    return searchAddonSourcesWithPublicFallback(payload, {
-      readToken: readAccountSessionToken,
-      searchPersonal: (request, options) =>
-        invokeAuthenticatedDebrid('fetchAddonStreams', request, options),
-      searchPublic: invokeIndependentAddonSources,
+};
+function requireSession() {
+  if (getIndependentSessionToken()) return;
+  const error=new Error(AUTH_ERROR);
+  error.status=401;
+  throw error;
+}
+function entityAccess(entity) {
+  const name = cleanName(entity);
+  const endpoint = "/entities/"+encodeURIComponent(name);
+  const list = async (filter={},sort="-updated_date",limit=100,skip=0) => {
+    requireSession();
+    const query = new URLSearchParams({
+      filter: JSON.stringify(filter||{}),
+      sort: String(sort||"-updated_date"),
+      limit: String(Math.min(500,Number(limit)||100)),
+      skip: String(Math.max(0,Number(skip)||0))
     });
+    return call(IDENTITY_API,endpoint+"?"+query.toString());
+  };
+  return {
+    list: (sort="-updated_date",limit=100,skip=0) => list({},sort,limit,skip),
+    filter: (filter={},sort="-updated_date",limit=100,skip=0) => list(filter,sort,limit,skip),
+    async get(id) {
+      const rows=await list({id}, "-updated_date",1);
+      return rows[0]||null;
+    },
+    create: data => { requireSession(); return call(IDENTITY_API,endpoint,{method:"POST",body:data}); },
+    update: (id,data) => { requireSession(); return call(IDENTITY_API,endpoint+"/"+encodeURIComponent(id),{method:"PATCH",body:data}); },
+    delete: id => { requireSession(); return call(IDENTITY_API,endpoint+"/"+encodeURIComponent(id),{method:"DELETE"}); },
+    bulkCreate: async rows => Promise.all((rows||[]).map(data=>entityAccess(name).create(data))),
+    // Shared real-time watch-party entities will need an independent
+    // authenticated subscription service before the new site is promoted.
+    subscribe: () => () => {},
+  };
+}
+const entities = new Proxy({}, {
+  get: (_target,name) => typeof name==="string" ? entityAccess(name) : undefined
+});
+async function invoke(name,payload={}) {
+  const functionName=cleanName(name);
+  if (functionName==="getTmdbMovies") return invokeIndependentMetadata(payload);
+  if (functionName==="resolveImdb"||functionName==="resolveTvImdb") {
+    return invokeIndependentImdbResolver(functionName,payload);
   }
-  if (name === 'getEntertainmentNews' || name === 'getSkipSegments' ||
-      name === 'getFireTvApkLink') {
-    return invokeIndependentPublicFeature(name, payload);
+  if (functionName==="getEntertainmentNews"||functionName==="getSkipSegments"||functionName==="getFireTvApkLink") {
+    return invokeIndependentPublicFeature(functionName,payload);
   }
-  // Both account and isolated guest-device requests run on Railway.
-  if (INDEPENDENT_RD_FUNCTIONS.has(String(name || ''))) {
-    return invokeAuthenticatedDebrid(name, payload);
+  if (functionName==="fetchAddonStreams") {
+    if (getIndependentSessionToken()) {
+      try {
+        const data=await call(RD_API,"/functions/fetchAddonStreams",{method:"POST",body:payload,timeoutMs:30000});
+        return {data};
+      } catch(error) {
+        if (![401,403,429,500,502,503,504].includes(error.status)) throw error;
+      }
+    }
+    return invokeIndependentAddonSources(payload);
   }
-  return rawInvoke(name, payload, ...rest);
-};
+  if (PRIVATE_FUNCTIONS.has(functionName)) {
+    requireSession();
+    const data=await call(RD_API,"/functions/"+functionName,{method:"POST",body:payload,timeoutMs:125000});
+    return {data};
+  }
+  if (!PUBLIC_FUNCTIONS.has(functionName)) {
+    const error=new Error(functionName+" is not yet available on the independent Media God backend.");
+    error.code="MIGRATION_PENDING_FUNCTION";
+    throw error;
+  }
+  throw new Error("Unsupported Media God function");
+}
+export const base44 = { auth, entities, functions:{invoke} };
