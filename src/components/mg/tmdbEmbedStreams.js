@@ -19,13 +19,24 @@ export const fetchTmdbEmbedStreams = async ({
     return { streams: [], attempted: false, error: "TMDB id is required." };
   }
 
+  let timeoutHandle;
   try {
-    const response = await base44.functions.invoke("fetchTmdbEmbedStreams", {
-      tmdb_id: id,
-      media_type: mediaType === "tv" ? "tv" : "movie",
-      ...(season != null ? { season } : {}),
-      ...(episode != null ? { episode } : {}),
-    });
+    // This is an optional provider. A stalled backend must not leave the
+    // otherwise-complete source panel showing "Checking" indefinitely.
+    const response = await Promise.race([
+      base44.functions.invoke("fetchTmdbEmbedStreams", {
+        tmdb_id: id,
+        media_type: mediaType === "tv" ? "tv" : "movie",
+        ...(season != null ? { season } : {}),
+        ...(episode != null ? { episode } : {}),
+      }),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error("Optional TMDB Embed lookup timed out.")),
+          6_000
+        );
+      }),
+    ]);
 
     const data = unwrap(response);
     return {
@@ -39,5 +50,7 @@ export const fetchTmdbEmbedStreams = async ({
       attempted: true,
       error: error?.message || "TMDB Embed lookup failed.",
     };
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 };
