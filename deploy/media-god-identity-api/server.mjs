@@ -228,6 +228,14 @@ async function entityRoute(req,res,path,body,origin) {
     const {rows}=await pool.query("SELECT * FROM identity_records WHERE user_id=$1 AND entity=$2 AND data @> $3::jsonb ORDER BY "+column+" "+direction+",id LIMIT $4 OFFSET $5",[user.id,type,JSON.stringify(filter),limit,skip]);
     return respond(res,200,rows.map(mapped),origin);
   }
+  if (req.method==="GET"&&id) {
+    const {rows}=await pool.query(
+      "SELECT * FROM identity_records WHERE id=$1 AND user_id=$2 AND entity=$3",
+      [id,user.id,type]
+    );
+    if (!rows.length) err(404,"Record not found");
+    return respond(res,200,mapped(rows[0]),origin);
+  }
   if (req.method==="POST"&&!id) {
     const data=safeData(body);
     const {rows}=await pool.query("INSERT INTO identity_records(id,user_id,entity,data) VALUES($1,$2,$3,$4::jsonb) RETURNING *",[randomUUID(),user.id,type,JSON.stringify({...data,created_by_id:user.id,created_by:user.email})]);
