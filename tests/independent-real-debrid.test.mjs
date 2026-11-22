@@ -113,8 +113,10 @@ test("a verified account is stable inside its RD handler despite a second User/m
   assert.notEqual(scoped,client);
   assert.deepEqual(await scoped.auth.me(),verifiedUser);
   assert.equal(secondaryReads,0,"never repeat authentication after server verification");
-  assert.equal(scoped.auth.updateMe,client.auth.updateMe,
-    "keep original user-scoped credential update");
+  assert.notEqual(scoped.auth.updateMe,client.auth.updateMe,
+    "wrap the existing user-scoped update to keep the verified cache current");
+  await scoped.auth.updateMe({rd_token:"updated-private-rd"});
+  assert.equal(verifiedUser.rd_token,"updated-private-rd");
   const originalFetch = globalThis.fetch;
   try {
     globalThis.fetch = async () => new Response(JSON.stringify({premium:1}), {
