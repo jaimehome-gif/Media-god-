@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -6,71 +6,264 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
-import IndependentSocialButtons from "@/components/mg/IndependentSocialButtons";
+import { SOCIAL_LOGIN_PROVIDERS } from "@/components/mg/SocialLoginSection";
 import { safeReturnTo } from "@/lib/authReturnTo";
 import { useAuth } from "@/lib/AuthContext";
 
+const FIRE_TV_RE = /(?:AFT[A-Z0-9]*|Fire TV|AmazonWebAppPlatform|Silk)/i;
+
+const isFireTv = () =>
+  typeof navigator !== "undefined" &&
+  FIRE_TV_RE.test(String(navigator.userAgent || ""));
+
+const isSelectKey = (event) => {
+  const key = String(event?.key || event?.code || "");
+  const code = Number(event?.keyCode || event?.which || 0);
+
+  return (
+    key === "Enter" ||
+    key === "NumpadEnter" ||
+    key === "Select" ||
+    key === "Accept" ||
+    code === 13 ||
+    code === 23 ||
+    code === 66
+  );
+};
+
 export default function Login() {
   const { continueAsGuest } = useAuth();
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-  React.useEffect(() => {
-    const reason=new URLSearchParams(window.location.search).get("social_error");
-    if(!reason)return;
-    const messages={
-      not_configured:"This social login is not yet connected. Choose another sign-in method.",
-      cancelled:"Social sign-in was cancelled. You can try again.",
-      invalid_session:"The social login session expired. Please try again from this screen.",
-      unavailable:"Social sign-in could not be completed. Please try again later."
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(null);
+  const [availableProviders, setAvailableProviders] = useState({});
+  const [socialStatus, setSocialStatus] = useState("loading");
+  useEffect(() => {
+    let active = true;
+    base44.auth.getSocialProviders().then(response => {
+      if (!active) return;
+      setAvailableProviders(Object.fromEntries(
+        (response?.providers || []).map(p => [p.id, p.configured === true])
+      ));
+      setSocialStatus("ready");
+    }).catch(() => { if (active) setSocialStatus("unavailable"); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    const socialError = new URLSearchParams(window.location.search).get("social_error");
+    if (!socialError) return;
+    const messages = {
+      cancelled: "Social sign-in cancelled.",
+      invalid_session: "Social sign-in expired. Please try again.",
+      not_configured: "That social provider has not been connected yet.",
+      unavailable: "Social sign-in couldn't be completed. Please try again."
     };
-    setError(messages[reason] || "Social login could not be completed.");
-    window.history.replaceState(null,"",window.location.pathname);
-  },[]);
+    setError(messages[socialError] || "Social sign-in couldn't be completed.");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+  const googleButtonRef = useRef(null);
+  const fireTv = isFireTv();
 
-  const submit=async e=>{
+  // Post-login destination (e.g. the MCP OAuth consent page sends users here
+  // with returnTo so the grant flow can resume). Same-origin paths only.
+  const returnTo = safeReturnTo();
+
+  useEffect(() => {
+    if (!fireTv) return undefined;
+
+    const focusGoogle = () => {
+      const button = googleButtonRef.current;
+
+      if (!(button instanceof HTMLElement) || button.disabled) {
+        document.getElementById("email")?.focus();
+        return;
+      }
+
+      try {
+        button.focus({ preventScroll: true });
+      } catch {
+        button.focus();
+      }
+    };
+
+    focusGoogle();
+    const timer = window.setTimeout(focusGoogle, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [fireTv]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);setError("");
+    setError("");
+    setLoading(true);
     try {
-      await base44.auth.loginViaEmailPassword(email,password);
-      window.location.assign(safeReturnTo());
-    }catch(err){setError(err?.message||"Could not sign in");}
-    finally{setLoading(false);}
+      await base44.auth.loginViaEmailPassword(email, password);
+      window.location.href = returnTo;
+    } catch (err) {
+      setError(err.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSocial = (provider) => {
+    setError("");
+    setSocialLoading(provider);
+
+    try {
+      if (!availableProviders[provider]) throw new Error("This sign-in provider is not connected yet.");
+      base44.auth.loginWithProvider(provider, window.location.origin);
+    } catch (err) {
+      setSocialLoading(null);
+      setError(err?.message || `Could not start ${provider} sign-in`);
+    }
+  };
+
+  const handleSkip = () => {
+    continueAsGuest();
+    window.location.replace("/");
+  };
+
+  const handleGoogleRemoteKey = (event) => {
+    if (!fireTv || !isSelectKey(event)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    handleSocial("google");
+  };
+
   return (
-    <AuthLayout icon={LogIn} title="Welcome to Media God"
-      subtitle="Sign in with your new Jaime Home account"
-      footer={<>New here? <Link to="/register" className="text-primary font-medium hover:underline">Create a new account</Link></>}>
-      <p className="mb-5 text-sm text-muted-foreground">
-        We've moved to a new, independent account system. Previous sign-ins cannot be used here.
-      </p>
-      {error&&<p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
-      <IndependentSocialButtons onError={setError} />
-      <form onSubmit={submit} className="space-y-4">
+    <AuthLayout
+      icon={LogIn}
+      title="Welcome back"
+      subtitle="Log in to your account"
+      footer={
+        <>
+          Don't have an account?{" "}
+          <Link
+            to={"/register" + (returnTo !== "/" ? "?returnTo=" + encodeURIComponent(returnTo) : "")}
+            className="text-primary font-medium hover:underline"
+          >
+            Create one
+          </Link>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
+        {SOCIAL_LOGIN_PROVIDERS.map(({ id, label, Icon }, index) => (
+          <Button
+            key={id}
+            ref={index === 0 ? googleButtonRef : undefined}
+            variant="outline"
+            className="w-full h-12 text-sm font-medium"
+            onClick={() => handleSocial(id)}
+            onKeyDown={id === "google" ? handleGoogleRemoteKey : undefined}
+            autoFocus={fireTv && index === 0}
+            disabled={socialLoading !== null || !availableProviders[id]}
+            data-mg-fire-tv-auth-primary={index === 0 && availableProviders[id] ? "true" : undefined}
+            title={!availableProviders[id] ? "Social sign-in awaiting provider configuration" : undefined}
+          >
+            {socialLoading === id ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Icon className="w-5 h-5 mr-2" />
+            )}
+            Continue with {label}
+          </Button>
+        ))}
+      </div>
+
+      {socialStatus === "ready" && !Object.values(availableProviders).some(Boolean) && (
+        <p role="status" className="mb-4 text-xs text-muted-foreground">
+          Google, Facebook, Microsoft and Apple sign-in will appear here as soon as the new account connections are activated.
+        </p>
+      )}
+      {socialStatus === "unavailable" && (
+        <p role="status" className="mb-4 text-xs text-muted-foreground">
+          Social sign-in status is temporarily unavailable.
+        </p>
+      )}
+      <div className="relative mb-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-3 text-muted-foreground">or</span>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">Email</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-            <Input id="email" type="email" autoComplete="username" value={email}
-              onChange={e=>setEmail(e.target.value)} className="pl-10 h-12" required/>
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              autoFocus={!fireTv}
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="pl-10 h-12"
+              required
+            />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-            <Input id="password" type="password" autoComplete="current-password" value={password}
-              onChange={e=>setPassword(e.target.value)} className="pl-10 h-12" required/>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link to="/forgot-password" className="text-xs text-primary hover:underline">
+              Forgot password?
+            </Link>
           </div>
-          <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pl-10 h-12"
+              required
+            />
+          </div>
         </div>
-        <Button className="w-full h-12" type="submit" disabled={loading}>
-          {loading?<><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Signing in…</>:"Sign in"}
+        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Logging in...
+            </>
+          ) : (
+            "Log in"
+          )}
         </Button>
       </form>
-      <Button type="button" variant="ghost" className="mt-5 w-full"
-        onClick={()=>{continueAsGuest();window.location.assign("/");}}>Browse without signing in</Button>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full h-11 font-medium"
+          onClick={handleSkip}
+        >
+          Skip for now
+        </Button>
+        <p className="mt-1 text-center text-xs text-muted-foreground">
+          We'll remember this on this device. You can sign in later from Settings.
+        </p>
+      </div>
     </AuthLayout>
   );
 }
