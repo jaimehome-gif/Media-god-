@@ -25,6 +25,34 @@ const PRIVATE_FIELDS = new Set([
   "user_id", "guest_device_key", "authorization", "access_token",
 ]);
 
+// Rate-limit coordination is per running WebView, never stored with user
+// credentials. After Railway reports 429, stop bulk source checks temporarily
+// instead of sending hundreds of immediate follow-up requests. Foreground
+// playback and the sign-in/refresh routes retain priority.
+let discoveryCooldownUntil = 0;
+let nextDiscoveryRequestAt = 0;
+const DISCOVERY_SPACING_MS = 650;
+const MAX_DISCOVERY_QUEUE_MS = 6000;
+const isLowPriorityDiscovery = (name, payload) =>
+  name === "fetchAddonStreams" ||
+  (name === "multiDebrid" && String(payload?.action || "") === "check_cache");
+const discoveryBusyError = () => {
+  const error = new Error("Source verification is temporarily rate limited. Saved sources remain available; retry shortly.");
+  error.status = 429;
+  error.code = "RD_DISCOVERY_RATE_LIMITED";
+  return error;
+};
+const reserveDiscoveryRequest = async () => {
+  if (Date.now() < discoveryCooldownUntil) throw discoveryBusyError();
+  const now = Date.now();
+  const due = Math.max(now, nextDiscoveryRequestAt);
+  const waitMs = due - now;
+  if (waitMs > MAX_DISCOVERY_QUEUE_MS) throw discoveryBusyError();
+  nextDiscoveryRequestAt = due + DISCOVERY_SPACING_MS;
+  if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+  if (Date.now() < discoveryCooldownUntil) throw discoveryBusyError();
+};
+
 export async function readAccountSessionToken({
   getToken = getAccessToken,
   timeoutMs = 1_800,
@@ -93,6 +121,8 @@ export async function invokeIndependentRealDebrid(name, payload = {}, {
   try {
     const operation = (async () => {
     const body = JSON.stringify(independentRdPayload(payload));
+    if (isLowPriorityDiscovery(name, payload)) await reserveDiscoveryRequest();
+    assertActive();
     const request = () => fetchImpl(
       `${INDEPENDENT_RD_ENDPOINT}/functions/${name}`,
       {
@@ -125,6 +155,15 @@ export async function invokeIndependentRealDebrid(name, payload = {}, {
         response = await request();
         assertActive();
       }
+    }
+    if (response.status === 429) {
+      // This cooldown covers *discovery* requests only. A user-initiated Play
+      // or account refresh must still reach the server for an exact verdict.
+      const retryAfter = Number(response?.headers?.get?.("retry-after") || 0);
+      const cooldownMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(90_000, Math.max(20_000, retryAfter * 1000))
+        : 30_000;
+      discoveryCooldownUntil = Math.max(discoveryCooldownUntil, Date.now() + cooldownMs);
     }
     let data = {};
     try { data = await response.json(); } catch {}
