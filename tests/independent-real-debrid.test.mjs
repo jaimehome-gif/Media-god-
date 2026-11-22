@@ -181,3 +181,15 @@ test("client redirects all main RD actions and cached-source checks to verified 
   const server = source("deploy/media-god-rd-api/server.mjs");
   assert.match(server, /"\/functions\/multiDebrid": multiDebrid/);
 });
+
+test("Railway Dockerfile packages every local Real-Debrid server import", () => {
+  const server = source("deploy/media-god-rd-api/server.mjs");
+  const dockerfile = source("deploy/media-god-rd-api/Dockerfile");
+  const localModules = [...server.matchAll(/from ["']\.\/([^"']+)["']/g)]
+    .map(match => match[1]);
+  assert.ok(localModules.includes("accountVerificationCache.mjs"));
+  for (const filename of localModules) {
+    assert.ok(dockerfile.includes(filename),
+      "Railway Dockerfile must copy " + filename);
+  }
+});
