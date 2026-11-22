@@ -62,6 +62,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
   }
 };
 const auth = {
+  async getRegistrationConfig() {
+    return call(IDENTITY_API,"/auth/config",{token:"",timeoutMs:8000});
+  },
   async loginViaEmailPassword(email,password) {
     const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
     saveIndependentSessionToken(result.access_token);
