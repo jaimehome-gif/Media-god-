@@ -62,13 +62,43 @@ const verifiedLegacyGuestDebrid = async () => {
 // Railway as the primary route; only a 401 may activate the account-scoped
 // native backend fallback. Never treat 403, 429 or 5xx as authentication.
 let railwayAuthFallbackUntil = 0;
+let railwayAuthDeniedUntil = 0;
 let accountVerificationPromise = null;
+let accountVerifiedUntil = 0;
+let accountRejectedUntil = 0;
 
+// Both probes are handled by Base44 on its own authenticated origin. The
+// second confirms an existing RD connection on the *account* itself (never
+// a guest key), even if the WebView's User/me call is temporarily out of sync.
+// A response that is merely HTTP 200 but says "not connected" is not proof.
 const confirmedMediaGodAccount = async () => {
+  if (Date.now() < accountVerifiedUntil) return true;
+  if (Date.now() < accountRejectedUntil) return false;
   if (!accountVerificationPromise) {
-    accountVerificationPromise = base44.auth.me()
-      .then(user => Boolean(user?.id))
-      .catch(() => false)
+    accountVerificationPromise = (async () => {
+      try {
+        if ((await base44.auth.me())?.id) return true;
+      } catch {
+        // A first-party RD status check may still use a valid signed-in
+        // SDK/cookie session while User/me is temporarily unavailable.
+      }
+      try {
+        const response = await rawInvoke('realDebridAuth', { action: 'status' });
+        return response?.data?.connected === true &&
+          response?.data?.valid === true;
+      } catch {
+        return false;
+      }
+    })()
+      .then(verified => {
+        if (verified) {
+          accountVerifiedUntil = Date.now() + 45_000;
+          accountRejectedUntil = 0;
+        } else {
+          accountRejectedUntil = Date.now() + 12_000;
+        }
+        return verified;
+      })
       .finally(() => { accountVerificationPromise = null; });
   }
   return accountVerificationPromise;
@@ -84,6 +114,26 @@ const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
     // A Base44-verified signed-in user can use their existing stored RD
     // account while the Railway bearer-token handoff recovers.
     return rawInvoke(name, payload);
+  }
+
+  // If Railway has just rejected the current account token, do not send
+  // hundreds of identical failing requests from the source qualification
+  // queue. Recheck a valid Base44 account or linked legacy guest first.
+  if (Date.now() < railwayAuthDeniedUntil) {
+    if (await confirmedMediaGodAccount()) {
+      railwayAuthFallbackUntil = Date.now() + 90_000;
+      return rawInvoke(name, payload);
+    }
+    if (await verifiedLegacyGuestDebrid()) {
+      return rawInvoke(name, legacyGuestPayload(payload));
+    }
+    const error = new Error(
+      'The Media God login session could not be verified. ' +
+      'The selected source is still available; your Real-Debrid account has not been disconnected.'
+    );
+    error.status = 401;
+    error.code = 'MG_ACCOUNT_SESSION_UNVERIFIED';
+    throw error;
   }
 
   const sessionToken = options.token || await readAccountSessionToken();
@@ -115,6 +165,7 @@ const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
     if (Number(error?.status) !== 401 && error?.code !== 'NO_ACCOUNT_SESSION') {
       throw error;
     }
+    if (Number(error?.status) === 401) railwayAuthDeniedUntil = Date.now() + 15_000;
     if (await confirmedMediaGodAccount()) {
       railwayAuthFallbackUntil = Date.now() + 90_000;
       return rawInvoke(name, payload);
