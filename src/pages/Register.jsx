@@ -1,287 +1,57 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import AuthLayout from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus, Mail, Lock, Loader2 } from "lucide-react";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import AuthLayout from "@/components/AuthLayout";
-import { SOCIAL_LOGIN_PROVIDERS } from "@/components/mg/SocialLoginSection";
-import { mediaGodAuthReturnUrl } from "@/lib/mediaGodAuth";
-import { toast } from "@/components/ui/use-toast";
-import { safeReturnTo } from "@/lib/authReturnTo";
-import { useAuth } from "@/lib/AuthContext";
+import { UserPlus, Loader2, Mail } from "lucide-react";
 
 export default function Register() {
-  const { continueAsGuest } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState(null);
-  const [showOtp, setShowOtp] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    setLoading(true);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [again,setAgain]=useState("");
+  const [pending,setPending]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const submit=async event=>{
+    event.preventDefault();
+    if(password!==again){setError("Passwords do not match");return;}
+    if(password.length<12){setError("Use at least 12 characters");return;}
+    setBusy(true);setError("");
     try {
-      await base44.auth.register({ email, password });
-      setShowOtp(true);
-    } catch (err) {
-      setError(err.message || "Registration failed");
-    } finally {
-      setLoading(false);
-    }
+      await base44.auth.register({email,password});
+      setPending(true);
+    }catch(err){setError(err?.message||"Could not create account");}
+    finally{setBusy(false);}
   };
-
-  const handleVerify = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const result = await base44.auth.verifyOtp({ email, otpCode });
-      if (result?.access_token) {
-        base44.auth.setToken(result.access_token);
-      }
-      window.location.href = safeReturnTo();
-    } catch (err) {
-      setError(err.message || "Invalid verification code");
-    } finally {
-      setLoading(false);
-    }
+  const resend=async()=>{
+    setBusy(true);setError("");
+    try { await base44.auth.resendOtp(email); }
+    catch(err){setError(err?.message||"Could not resend verification");}
+    finally{setBusy(false);}
   };
-
-  const handleResend = async () => {
-    setError("");
-    try {
-      await base44.auth.resendOtp(email);
-      toast({
-        title: "Code sent",
-        description: "Check your email for the new code.",
-      });
-    } catch (err) {
-      setError(err.message || "Failed to resend code");
-    }
-  };
-
-  const handleSkip = () => {
-    continueAsGuest();
-    window.location.replace("/");
-  };
-
-  const handleSocial = (provider) => {
-    setError("");
-    setSocialLoading(provider);
-
-    try {
-      base44.auth.loginWithProvider(
-        provider,
-        mediaGodAuthReturnUrl(safeReturnTo())
-      );
-    } catch (err) {
-      setSocialLoading(null);
-      setError(err?.message || `Could not start ${provider} sign-up`);
-    }
-  };
-
-  if (showOtp) {
-    return (
-      <AuthLayout
-        icon={Mail}
-        title="Verify your email"
-        subtitle={`We sent a code to ${email}`}
-      >
-        {error && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            {error}
-          </div>
-        )}
-        <div className="flex justify-center mb-6">
-          <InputOTP
-            maxLength={6}
-            value={otpCode}
-            onChange={setOtpCode}
-            autoFocus
-            autoComplete="one-time-code"
-          >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-        <Button
-          className="w-full h-12 font-medium"
-          onClick={handleVerify}
-          disabled={loading || otpCode.length < 6}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Verifying...
-            </>
-          ) : (
-            "Verify"
-          )}
-        </Button>
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          Didn't receive the code?{" "}
-          <button onClick={handleResend} className="text-primary font-medium hover:underline">
-            Resend
-          </button>
-        </p>
-        <Button
-          type="button"
-          variant="ghost"
-          className="mt-3 w-full h-11 font-medium"
-          onClick={handleSkip}
-        >
-          Skip for now
-        </Button>
-        <p className="mt-1 text-center text-xs text-muted-foreground">
-          We'll remember this on this device. You can sign in later from Settings.
-        </p>
-      </AuthLayout>
-    );
-  }
-
   return (
-    <AuthLayout
-      icon={UserPlus}
-      title="Create your account"
-      subtitle="Sign up to get started"
-      footer={
-        <>
-          Already have an account?{" "}
-          <Link
-            to={"/login" + (safeReturnTo() !== "/" ? "?returnTo=" + encodeURIComponent(safeReturnTo()) : "")}
-            className="text-primary font-medium hover:underline"
-          >
-            Log in
-          </Link>
-        </>
-      }
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
-        {SOCIAL_LOGIN_PROVIDERS.map(({ id, label, Icon }) => (
-          <Button
-            key={id}
-            variant="outline"
-            className="w-full h-12 text-sm font-medium"
-            onClick={() => handleSocial(id)}
-            disabled={socialLoading !== null}
-          >
-            {socialLoading === id ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Icon className="w-5 h-5 mr-2" />
-            )}
-            Continue with {label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="relative mb-6">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border" />
+    <AuthLayout icon={UserPlus} title={pending?"Check your email":"Create Media God account"}
+      subtitle={pending?"Verify your email to activate your new account":"Jaime Home independent registration"}
+      footer={<Link to="/login" className="text-primary font-medium hover:underline">Already registered? Sign in</Link>}>
+      {error&&<p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+      {pending?(
+        <div className="space-y-4 text-center">
+          <Mail className="mx-auto h-12 w-12 text-primary"/>
+          <p className="text-sm">We sent a verification link to <strong>{email}</strong>. Open it before signing in.</p>
+          <p className="text-sm text-muted-foreground">Each person needs a new Media God account. Your old login and Real-Debrid connection will not transfer automatically.</p>
+          <Button disabled={busy} variant="outline" onClick={resend} className="w-full">Resend verification</Button>
+          <Link to="/login" className="block text-primary underline">Back to sign in</Link>
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-3 text-muted-foreground">or</span>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          {error}
-        </div>
+      ):(
+        <form className="space-y-4" onSubmit={submit}>
+          <div><Label htmlFor="email">Email address</Label><Input id="email" type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required/></div>
+          <div><Label htmlFor="password">New password (at least 12 characters)</Label><Input id="password" type="password" autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)} minLength={12} required/></div>
+          <div><Label htmlFor="confirm">Confirm password</Label><Input id="confirm" type="password" autoComplete="new-password" value={again} onChange={e=>setAgain(e.target.value)} required/></div>
+          <Button type="submit" disabled={busy} className="w-full h-12">{busy?<><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Creating…</>:"Create account"}</Button>
+        </form>
       )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-10 h-12"
-              required
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 h-12"
-              required
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="confirm">Confirm Password</Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
-            <Input
-              id="confirm"
-              type="password"
-              autoComplete="new-password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pl-10 h-12"
-              required
-            />
-          </div>
-        </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Creating account...
-            </>
-          ) : (
-            "Create account"
-          )}
-        </Button>
-      </form>
-
-      <div className="mt-4 border-t border-border pt-4">
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full h-11 font-medium"
-          onClick={handleSkip}
-        >
-          Skip for now
-        </Button>
-        <p className="mt-1 text-center text-xs text-muted-foreground">
-          We'll remember this on this device. You can sign in later from Settings.
-        </p>
-      </div>
     </AuthLayout>
   );
 }
