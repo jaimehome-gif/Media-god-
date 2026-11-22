@@ -132,9 +132,9 @@ function entityAccess(entity) {
   return {
     list: (sort="-updated_date",limit=100,skip=0) => list({},sort,limit,skip),
     filter: (filter={},sort="-updated_date",limit=100,skip=0) => list(filter,sort,limit,skip),
-    async get(id) {
-      const rows=await list({id}, "-updated_date",1);
-      return rows[0]||null;
+    get: id => {
+      requireSession();
+      return call(IDENTITY_API,endpoint+"/"+encodeURIComponent(id));
     },
     create: data => { requireSession(); return call(IDENTITY_API,endpoint,{method:"POST",body:data}); },
     update: (id,data) => { requireSession(); return call(IDENTITY_API,endpoint+"/"+encodeURIComponent(id),{method:"PATCH",body:data}); },
