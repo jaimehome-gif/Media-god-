@@ -53,3 +53,10 @@ jobs:
           code=$(curl --silent --show-error --max-time 20 -o /tmp/unauthorized.json -w "%{http_code}" -X POST "$RD/functions/realDebridAuth" -H "Content-Type: application/json" --data '{"action":"status"}')
           test "$code" = "401"
           echo "RD requires an authenticated Jaime Home session (HTTP 401)"
+
+      - name: Check phone-sized login and registration pages in Chrome
+        run: |
+          npm ci --no-audit --no-fund
+          CHROME_BIN=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          export CHROME_BIN
+          node scripts/independent-ui-smoke.mjs
