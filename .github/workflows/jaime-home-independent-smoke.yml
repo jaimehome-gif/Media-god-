@@ -17,6 +17,26 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Preserve original working Media God player, downloads and TV
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main --depth=1
+          git diff --exit-code FETCH_HEAD HEAD -- \
+            src/components/mg/VideoPlayer.jsx \
+            src/components/mg/PlayerProvider.jsx \
+            src/components/mg/MediaPlayerProvider.jsx \
+            src/components/mg/StreamSourcesBox.js \
+            src/components/mg/automaticSourceOrder.js \
+            src/components/mg/smartSourceSelection.js \
+            src/components/mg/LiveTVView.jsx \
+            src/components/mg/DeviceDownloadsPanel.jsx \
+            src/components/mg/MediaDownloadPicker.jsx \
+            src/components/mg/SeasonDownloadPicker.jsx \
+            src/components/mg/ContinueWatchingRow.jsx \
+            src/components/mg/continueWatchingSync.js \
+            src/components/mg/WatchPartyView.jsx
+          echo "Verified: core Media God experience matches the original working code."
+
       - name: Confirm replacement code is syntactically valid
         run: |
           node --check deploy/media-god-identity-api/server.mjs
