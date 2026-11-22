@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
@@ -45,8 +45,10 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
+  const authCheckSequenceRef = useRef(0);
 
   const checkUserAuth = async ({ markAuthRequired = false } = {}) => {
+    const checkId = ++authCheckSequenceRef.current;
     setIsLoadingAuth(true);
 
     try {
@@ -78,6 +80,7 @@ export const AuthProvider = ({ children }) => {
         throw missingSession;
       }
 
+      if (checkId !== authCheckSequenceRef.current) return null;
       setUser(currentUser);
       setIsAuthenticated(true);
       setIsGuest(false);
@@ -93,6 +96,7 @@ export const AuthProvider = ({ children }) => {
 
       return currentUser;
     } catch (error) {
+      if (checkId !== authCheckSequenceRef.current) return null;
       const status = Number(error?.status || error?.response?.status || 0);
       const verifiedSessionRejected = status === 401 || status === 403;
 
@@ -128,7 +132,9 @@ export const AuthProvider = ({ children }) => {
 
       return null;
     } finally {
-      setIsLoadingAuth(false);
+      if (checkId === authCheckSequenceRef.current) {
+        setIsLoadingAuth(false);
+      }
     }
   };
 
@@ -218,7 +224,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let lastResumeCheck = 0;
     const recoverOnResume = () => {
-      if (isAuthenticated || readGuestMode()) return;
+      if (isAuthenticated || isLoadingAuth || readGuestMode()) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       if (Date.now() - lastResumeCheck < 8000) return;
       lastResumeCheck = Date.now();
@@ -232,7 +238,7 @@ export const AuthProvider = ({ children }) => {
       window.removeEventListener('focus', recoverOnResume);
       document.removeEventListener('visibilitychange', recoverOnResume);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoadingAuth]);
 
 
 
