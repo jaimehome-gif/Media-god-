@@ -3571,10 +3571,14 @@ export default function VideoPlayer({
    */
   useEffect(() => {
     const titleKey = rdMediaContextKey;
-    const BACKGROUND_CACHE_CONCURRENCY = 3;
-    const BACKGROUND_CACHE_START_DELAY_MS = 1_200;
-    const BACKGROUND_CACHE_STAGGER_MS = 700;
-    const BACKGROUND_CACHE_SLOT_RETRY_MS = 5_000;
+    // Cache discovery must not flood the user's RD account with hundreds
+    // of torrent jobs while they are trying to play a single title.
+    // Manual source selection and explicit downloads still work normally.
+    const BACKGROUND_CACHE_CONCURRENCY = 1;
+    const BACKGROUND_CACHE_MAX_PER_TITLE = 2;
+    const BACKGROUND_CACHE_START_DELAY_MS = 7_500;
+    const BACKGROUND_CACHE_STAGGER_MS = 2_000;
+    const BACKGROUND_CACHE_SLOT_RETRY_MS = 30_000;
 
     const abortAllBackgroundCacheJobs = () => {
       backgroundCacheControllersRef.current.forEach((controller) => {
@@ -3702,7 +3706,12 @@ export default function VideoPlayer({
         backgroundCacheControllersRef.current.size -
         backgroundCacheScheduledHashesRef.current.size
     );
-    const batch = candidates.slice(0, freeWorkerCount);
+    const remainingBackgroundBudget = Math.max(
+      0, BACKGROUND_CACHE_MAX_PER_TITLE - backgroundCacheAttemptedRef.current.size
+    );
+    const batch = candidates.slice(
+      0, Math.min(freeWorkerCount, remainingBackgroundBudget)
+    );
 
     if (batch.length === 0) {
       return undefined;
