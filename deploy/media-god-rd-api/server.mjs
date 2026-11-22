@@ -161,6 +161,18 @@ async function serve(req, res) {
       __mediaGodVerifiedUser: {value: verified.user},
     });
     const result = await runHandler(handler, request, isDevice ? verified.user.id : "");
+    // The client may get an upstream failure while the server remains healthy.
+    // Log only the whitelisted function path, action and HTTP status. Never
+    // log user IDs, tokens, torrent hashes, filenames or playable URLs.
+    if (result.status >= 500) {
+      const action = /^[a-z_]{1,40}$/i.test(String(body.action || ""))
+        ? String(body.action) : "unknown";
+      console.warn("[media-god-rd-api] upstream action failed", {
+        function: path.slice("/functions/".length),
+        action,
+        status: result.status,
+      });
+    }
     const raw = await result.text();
     if (raw.length > 2_000_000) {
       return respond(res, 502, {error: "Real-Debrid response too large"}, origin);
