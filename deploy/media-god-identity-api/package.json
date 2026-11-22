@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs"
+    "check": "node --check server.mjs && node --check socialOAuth.mjs"
   },
   "dependencies": {
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "jose": "^6.1.0"
   }
 }
