@@ -24,6 +24,7 @@ export default function RdBanner({
     dismissed,
     setDismissed,
   ] = useState(false);
+  const [verificationUnavailable, setVerificationUnavailable] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -44,43 +45,18 @@ export default function RdBanner({
             mounted
           ) {
             setHasRd(
-              Boolean(
-                response
-                  ?.data
-                  ?.connected ||
-                  response
-                    ?.data
-                    ?.valid
-              )
+              response?.data?.connected === true &&
+              response?.data?.valid === true
             );
+            setVerificationUnavailable(false);
           }
         } catch {
-          /*
-           * Backwards-compatible
-           * fallback for an existing
-           * manually saved RD token.
-           */
-          try {
-            const user =
-              await base44.auth.me();
-
-            if (
-              mounted
-            ) {
-              setHasRd(
-                Boolean(
-                  user?.rd_token
-                )
-              );
-            }
-          } catch {
-            if (
-              mounted
-            ) {
-              setHasRd(
-                false
-              );
-            }
+          // A saved rd_token only proves an old credential exists. It does not
+          // prove RD still accepts it or that Google authentication is active.
+          // Do not display a misleading Connected state after a failed check.
+          if (mounted) {
+            setVerificationUnavailable(true);
+            setHasRd(false);
           }
         }
       };
@@ -107,7 +83,8 @@ export default function RdBanner({
 
   if (
     hasRd ||
-    dismissed
+    dismissed ||
+    verificationUnavailable
   ) {
     return null;
   }
