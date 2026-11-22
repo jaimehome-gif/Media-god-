@@ -14,6 +14,7 @@ import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import VerifyEmail from '@/pages/VerifyEmail';
+import SocialOAuthCallback from '@/pages/SocialOAuthCallback';
 import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { PlayerProvider } from '@/components/mg/PlayerProvider.jsx';
@@ -85,6 +86,7 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={publicOnly(<ForgotPassword />)} />
       <Route path="/reset-password" element={publicOnly(<ResetPassword />)} />
       <Route path="/verify-email" element={publicOnly(<VerifyEmail />)} />
+      <Route path="/auth/callback" element={<SocialOAuthCallback />} />
       <Route
         element={
           <ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />
