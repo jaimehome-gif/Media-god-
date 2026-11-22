@@ -142,7 +142,8 @@ test("mismatched verified-user IDs never gain an authenticated RD client", () =>
 
 test("Railway RD service requires a real Base44 session, protects actions and excludes guest impersonation", () => {
   const server = source("deploy/media-god-rd-api/server.mjs");
-  assert.match(server, /client\.auth\.me\(\)/);
+  assert.match(server, /createAccountVerificationCache\(/);
+  assert.match(server, /const verifiedClient = createAccountVerificationCache/);
   assert.match(server, /if \(!verified\) \{/);
   assert.match(server, /return respond\(res, 401, \{error: "Sign in to Media God to use Real-Debrid\."\}/);
   assert.match(server, /credentials must not be supplied/i);
