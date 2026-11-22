@@ -40,6 +40,7 @@ jobs:
       - name: Confirm replacement code is syntactically valid
         run: |
           node --check deploy/media-god-identity-api/server.mjs
+          node --check deploy/media-god-identity-api/socialOAuth.mjs
           node --check deploy/media-god-rd-api/server.mjs
           node --check src/api/base44Client.js
       - name: Confirm new identity routes do not use the blocked service
@@ -69,6 +70,13 @@ jobs:
             echo
           done
           curl --fail --silent --show-error "$IDENTITY/auth/config" | jq -e '.independent == true and .email_verification_required == true'
+          curl --fail --silent --show-error "$IDENTITY/auth/providers" | jq -e '
+            (.providers | map(.id) | sort) == ["apple","facebook","google","microsoft"] and
+            (.providers | all(.configured | type == "boolean"))
+          '
+          invalid=$(curl --silent --show-error --max-time 20 -o /tmp/invalid-social.json -w "%{http_code}" -X POST "$IDENTITY/auth/oauth/exchange" -H "Content-Type: application/json" --data '{"ticket":"invalid"}')
+          test "$invalid" = "400"
+          echo "Four social provider routes present; malformed OAuth exchange rejected"
           curl --fail --silent --show-error "$SITE/" | grep -q 'Media God'
           code=$(curl --silent --show-error --max-time 20 -o /tmp/unauthorized.json -w "%{http_code}" -X POST "$RD/functions/realDebridAuth" -H "Content-Type: application/json" --data '{"action":"status"}')
           test "$code" = "401"
