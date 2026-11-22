@@ -8,7 +8,7 @@ const source = readFileSync(
 ).replace(/^import .*;\r?\n/gm, "")
   .replace("export const base44 =", "const base44 =");
 
-function createHarness({ railwayStatus = 200, signedIn = true } = {}) {
+function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'existing-account-token' } = {}) {
   const calls = { railway: [], native: [], verified: 0 };
   const client = {
     auth: {
@@ -34,7 +34,7 @@ function createHarness({ railwayStatus = 200, signedIn = true } = {}) {
     invokeIndependentAddonSources: async () => ({data:{}}),
     invokeIndependentPublicFeature: async () => ({data:{}}),
     searchAddonSourcesWithPublicFallback: async () => ({data:{}}),
-    readAccountSessionToken: async () => "existing-account-token",
+    readAccountSessionToken: async () => sessionToken,
     INDEPENDENT_RD_FUNCTIONS: new Set(["realDebrid", "realDebridAuth", "multiDebrid", "findRdLibrary", "fetchAddonStreams"]),
     invokeIndependentRealDebrid: async (name, payload) => {
       calls.railway.push({name, payload});
@@ -102,4 +102,21 @@ test("Railway 500 stays an upstream failure, not a false login problem", async (
     error => error.status === 500,
   );
   assert.equal(calls.native.length, 0);
+});
+
+test("signed-in Base44 account without exported bearer token keeps its existing RD account", async () => {
+  const { client, calls } = createHarness({sessionToken:"",signedIn:true});
+  const result = await client.functions.invoke("realDebridAuth", {action:"status"});
+  assert.equal(result.data.provider,"native");
+  assert.equal(calls.native.length,1);
+  assert.equal(calls.railway.length,0, "never impersonate an unrelated guest device");
+  assert.equal(calls.verified,1);
+});
+
+test("real guests without an account session retain the isolated Railway device route", async () => {
+  const { client, calls } = createHarness({sessionToken:"",signedIn:false});
+  const result = await client.functions.invoke("realDebridAuth",{action:"status"});
+  assert.equal(result.data.provider,"railway");
+  assert.equal(calls.railway.length,1);
+  assert.equal(calls.native.length,0);
 });
