@@ -3272,6 +3272,7 @@ async function addMagnet({
     return Response.json({
       status: "failed",
       error: failure.message,
+      error_code: addRes.status === 429 ? "RD_RATE_LIMITED" : "RD_ADD_MAGNET_FAILED",
       upstream_status: failure.upstream_status,
       upstream_error_code: failure.upstream_error_code,
       upstream_error: failure.upstream_error,
