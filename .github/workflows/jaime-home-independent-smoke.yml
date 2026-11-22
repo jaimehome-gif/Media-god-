@@ -89,6 +89,13 @@ jobs:
       - name: Check phone-sized login and registration pages in Chrome
         run: |
           npm ci --no-audit --no-fund
+          npm run build
+          node_modules/.bin/vite preview --host 127.0.0.1 --port 4173 >/tmp/media-god-preview.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/login -o /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/login -o /dev/null
           CHROME_BIN=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
           export CHROME_BIN
-          node scripts/independent-ui-smoke.mjs
+          STAGING_URL=http://127.0.0.1:4173 node scripts/independent-ui-smoke.mjs
