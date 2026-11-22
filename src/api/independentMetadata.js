@@ -6,7 +6,7 @@
 import { sharePendingPublicLookup } from "./publicRequestCoalescing.js";
 
 export const INDEPENDENT_METADATA_API_URL =
-  "https://media-god-metadata-api-production.up.railway.app/functions/getTmdbMovies";
+  "https://media-god-metadata-api-production-71e5c33c.up.railway.app/functions/getTmdbMovies";
 
 const MAX_LOCAL_BYTES = 240_000;
 const MAX_STORED_KEYS = 12;
