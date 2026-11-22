@@ -11,6 +11,22 @@ import { mediaGodAuthReturnUrl } from '@/lib/mediaGodAuth';
 const AuthContext = createContext(null);
 
 const GUEST_MODE_KEY = 'mg_guest_mode';
+const VERIFIED_LOGIN_HINT_KEY = 'mg_google_session_seen_v1';
+
+// A boolean hint only. This is never a session or permission grant: every
+// account request still needs Base44 to verify the current OAuth credentials.
+const readVerifiedLoginHint = () => {
+  if (typeof window === 'undefined') return false;
+  try { return window.localStorage.getItem(VERIFIED_LOGIN_HINT_KEY) === '1'; }
+  catch { return false; }
+};
+const writeVerifiedLoginHint = (enabled) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (enabled) window.localStorage.setItem(VERIFIED_LOGIN_HINT_KEY, '1');
+    else window.localStorage.removeItem(VERIFIED_LOGIN_HINT_KEY);
+  } catch {}
+};
 
 const readGuestMode = () => {
   if (typeof window === 'undefined') return false;
@@ -71,7 +87,16 @@ export const AuthProvider = ({ children }) => {
           throw firstError;
         }
         await new Promise((resolve) => window.setTimeout(resolve, 450));
-        currentUser = await base44.auth.me();
+        try {
+          currentUser = await base44.auth.me();
+        } catch (retryError) {
+          // Android WebView can wake before the persisted OAuth cookie or SDK
+          // session has finished restoring. A prior server-verified login is
+          // reason to allow one longer recovery attempt, never to grant access.
+          if (!readVerifiedLoginHint()) throw retryError;
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+          currentUser = await base44.auth.me();
+        }
       }
 
       if (!currentUser?.id) {
@@ -85,6 +110,7 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setIsGuest(false);
       writeGuestMode(false);
+      writeVerifiedLoginHint(true);
       setAuthError(null);
       setAuthChecked(true);
 
@@ -113,7 +139,9 @@ export const AuthProvider = ({ children }) => {
       // The public home catalogue is available when genuinely signed out;
       // private account actions continue requiring a valid server session.
       if (!markAuthRequired && status === 401) {
-        setIsGuest(true);
+        // An account that previously signed in should be prompted to
+        // restore Google OAuth, not silently converted into a permanent guest.
+        setIsGuest(!readVerifiedLoginHint());
         setAuthError(null);
       } else if (markAuthRequired && verifiedSessionRejected) {
         setAuthError({
@@ -253,6 +281,7 @@ export const AuthProvider = ({ children }) => {
 
   const continueAsGuest = () => {
     authCheckSequenceRef.current += 1;
+    writeVerifiedLoginHint(false);
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(true);
@@ -264,6 +293,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = (shouldRedirect = true) => {
     authCheckSequenceRef.current += 1;
+    writeVerifiedLoginHint(false);
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(false);
