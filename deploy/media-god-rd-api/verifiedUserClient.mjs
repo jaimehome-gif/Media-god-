@@ -18,5 +18,16 @@ export const createClientFromRequest = (request) => {
   const scopedClient = Object.create(client);
   scopedClient.auth = Object.create(client.auth);
   scopedClient.auth.me = async () => verifiedUser;
+  // A successful RD OAuth refresh writes new credentials through updateMe.
+  // Reflect that confirmed write in the server-verified user snapshot as well.
+  // Otherwise the short-lived User/me verification cache can keep returning
+  // the old Real-Debrid access token and cause immediate 401 bad_token errors.
+  scopedClient.auth.updateMe = async (patch) => {
+    const updated = await client.auth.updateMe(patch);
+    if (patch && typeof patch === "object" && !Array.isArray(patch)) {
+      Object.assign(verifiedUser, patch);
+    }
+    return updated;
+  };
   return scopedClient;
 };
