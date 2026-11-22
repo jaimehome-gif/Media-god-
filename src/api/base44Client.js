@@ -4,6 +4,7 @@ import { railwayDeviceToken } from './railwayDeviceToken.js';
 import { invokeIndependentMetadata, invokeIndependentImdbResolver, invokeIndependentAddonSources, invokeIndependentPublicFeature } from './independentMetadata.js';
 import { INDEPENDENT_RD_FUNCTIONS, invokeIndependentRealDebrid, readAccountSessionToken } from './independentRealDebrid.js';
 import { searchAddonSourcesWithPublicFallback } from './addonSourceRecovery.js';
+import { readGuestDebridDeviceKey } from '@/components/mg/guestDebridDevice';
 
 const { appId, token, functionsVersion, appBaseUrl } = appParams;
 
@@ -18,6 +19,43 @@ export const base44 = createClient({
 });
 
 const rawInvoke = base44.functions.invoke.bind(base44.functions);
+
+// Earlier Media God versions saved some Real-Debrid connections against a
+// device-specific Base44 guest key. Railway intentionally uses a different,
+// independently encrypted device capability. Probe the *existing* Base44
+// record without generating or copying credentials, then preserve it.
+let legacyGuestModeUntil = 0;
+let legacyGuestProbeUntil = 0;
+let legacyGuestConnected = false;
+let legacyGuestProbePromise = null;
+
+const legacyGuestPayload = (payload = {}) => {
+  const key = readGuestDebridDeviceKey();
+  return key ? { ...payload, guest_device_key: key } : payload;
+};
+
+const verifiedLegacyGuestDebrid = async () => {
+  const key = readGuestDebridDeviceKey();
+  if (!key) return false;
+  if (Date.now() < legacyGuestProbeUntil) return legacyGuestConnected;
+  if (!legacyGuestProbePromise) {
+    legacyGuestProbePromise = rawInvoke('realDebridAuth', {
+      action: 'status',
+      guest_device_key: key,
+    })
+      .then(result => result?.data?.connected === true && result?.data?.valid === true)
+      .catch(() => false)
+      .then(connected => {
+        legacyGuestConnected = connected;
+        legacyGuestProbeUntil = Date.now() + (connected ? 120_000 : 20_000);
+        if (connected) legacyGuestModeUntil = Date.now() + 120_000;
+        return connected;
+      })
+      .finally(() => { legacyGuestProbePromise = null; });
+  }
+  return legacyGuestProbePromise;
+};
+
 
 // A signed-in Media God account can work through Base44 while Railway's
 // independent auth check temporarily rejects its browser session. Keep
@@ -37,35 +75,56 @@ const confirmedMediaGodAccount = async () => {
 };
 
 const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
+  if (Date.now() < legacyGuestModeUntil && readGuestDebridDeviceKey()) {
+    // Base44 authenticates the existing guest key and looks up only its
+    // device-owned Real-Debrid connection. Railway never receives this key.
+    return rawInvoke(name, legacyGuestPayload(payload));
+  }
   if (Date.now() < railwayAuthFallbackUntil) {
-    // Raw Base44 function requests retain the existing signed-in session
-    // and account's stored RD credentials. No credential is sent to the page.
+    // A Base44-verified signed-in user can use their existing stored RD
+    // account while the Railway bearer-token handoff recovers.
     return rawInvoke(name, payload);
   }
 
   const sessionToken = options.token || await readAccountSessionToken();
-  // A valid account can have a Base44 cookie session but no exportable SDK
-  // bearer token (common in embedded Android browser sessions). Never route
-  // such a signed-in account as an empty, unrelated Railway guest device.
-  if (!sessionToken && await confirmedMediaGodAccount()) {
-    railwayAuthFallbackUntil = Date.now() + 90_000;
-    return rawInvoke(name, payload);
-  }
-  try {
-    if (sessionToken) {
-      return await invokeIndependentRealDebrid(name, payload, { token: sessionToken });
+  if (!sessionToken) {
+    if (await confirmedMediaGodAccount()) {
+      railwayAuthFallbackUntil = Date.now() + 90_000;
+      return rawInvoke(name, payload);
     }
-    return await invokeIndependentRealDebrid(name, payload, { deviceToken: railwayDeviceToken() });
+    // On migration, an existing device guest account may still be linked in
+    // Base44 despite the new Railway device store starting empty.
+    if (await verifiedLegacyGuestDebrid()) {
+      return rawInvoke(name, legacyGuestPayload(payload));
+    }
+  }
+
+  try {
+    const result = sessionToken
+      ? await invokeIndependentRealDebrid(name, payload, { token: sessionToken })
+      : await invokeIndependentRealDebrid(name, payload, { deviceToken: railwayDeviceToken() });
+
+    // Railway can correctly authenticate a newly created device while its
+    // credentials are empty. A previously linked Base44 guest stays linked.
+    if (name === 'realDebridAuth' && (payload?.action || 'status') === 'status' &&
+        result?.data?.connected !== true && await verifiedLegacyGuestDebrid()) {
+      return rawInvoke(name, legacyGuestPayload(payload));
+    }
+    return result;
   } catch (error) {
     if (Number(error?.status) !== 401 && error?.code !== 'NO_ACCOUNT_SESSION') {
       throw error;
     }
-    // A Railway 401 must not promote guests to account access.
-    if (!(await confirmedMediaGodAccount())) throw error;
-    // Briefly avoid the invalid Railway session while Base44 verifies the
-    // current account on its own origin. Probe Railway again afterwards.
-    railwayAuthFallbackUntil = Date.now() + 90_000;
-    return rawInvoke(name, payload);
+    if (await confirmedMediaGodAccount()) {
+      railwayAuthFallbackUntil = Date.now() + 90_000;
+      return rawInvoke(name, payload);
+    }
+    // A Railway 401 never grants account access. The legacy backend itself
+    // verifies that this device already owns a valid RD guest connection.
+    if (await verifiedLegacyGuestDebrid()) {
+      return rawInvoke(name, legacyGuestPayload(payload));
+    }
+    throw error;
   }
 };
 
