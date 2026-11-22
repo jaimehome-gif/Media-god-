@@ -26,6 +26,7 @@ export default function Register() {
     let active = true;
     base44.auth.getRegistrationConfig()
       .then(config => { if (active) setRegistrationReady(config?.registration_ready === true); })
+      .catch(() => { if (active) setRegistrationReady(false); })
       .finally(() => { if (active) setRegistrationChecked(true); });
     base44.auth.getSocialProviders()
       .then(config => { if (active) setAvailableProviders(
