@@ -11,7 +11,7 @@ export const isTransientRealDebridServiceFailure = (error) => {
   if (status > 0) return false;
   const code = String(error?.code || "").trim().toUpperCase();
   if ([
-    "RD_REQUEST_TIMEOUT", "NO_ACCOUNT_SESSION",
+    "RD_REQUEST_TIMEOUT", "NO_ACCOUNT_SESSION", "RD_CREDENTIAL_EXPIRED",
     "NETWORK_ERROR", "ERR_NETWORK", "ETIMEDOUT", "ECONNRESET",
   ].includes(code)) {
     return true;
@@ -22,6 +22,11 @@ export const isTransientRealDebridServiceFailure = (error) => {
 
 export const transientRealDebridMessage = (error) => {
   const status = Number(error?.status || error?.response?.status || 0);
+  if (String(error?.code || "").toUpperCase() === "RD_CREDENTIAL_EXPIRED") {
+    return "Real-Debrid rejected the saved connection. Media God tried to refresh it automatically. " +
+      "If the connection has expired or was revoked, reconnect Real-Debrid in Settings; " +
+      "the selected source has not been marked bad.";
+  }
   if (status === 401 || error?.code === "NO_ACCOUNT_SESSION") {
     return "Media God could not verify the current account session for this request. " +
       "Your Real-Debrid sources were not marked bad; retry the request.";
