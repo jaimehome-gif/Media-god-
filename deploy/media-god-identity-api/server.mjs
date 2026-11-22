@@ -214,6 +214,14 @@ async function entityRoute(req,res,path,body,origin) {
   const parts=/^\/entities\/([A-Za-z][A-Za-z0-9_]{0,62})(?:\/([a-f0-9-]{36}))?$/.exec(path);
   if (!parts || !entities.has(parts[1])) err(404,"Entity unavailable");
   const [,type,id]=parts, user=await requireUser(req);
+  if (req.method==="GET"&&id) {
+    const {rows}=await pool.query(
+      "SELECT * FROM identity_records WHERE id=$1 AND user_id=$2 AND entity=$3",
+      [id,user.id,type]
+    );
+    if (!rows.length) err(404,"Record not found");
+    return respond(res,200,mapped(rows[0]),origin);
+  }
   if (req.method==="GET"&&!id) {
     const args=new URL(req.url,"http://localhost").searchParams;
     let filter={};
