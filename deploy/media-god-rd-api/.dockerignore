@@ -12,3 +12,4 @@
 !fetchAddonStreams.mjs
 
 !deviceClient.mjs
+!accountVerificationCache.mjs
