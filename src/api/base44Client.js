@@ -44,6 +44,13 @@ const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
   }
 
   const sessionToken = options.token || await readAccountSessionToken();
+  // A valid account can have a Base44 cookie session but no exportable SDK
+  // bearer token (common in embedded Android browser sessions). Never route
+  // such a signed-in account as an empty, unrelated Railway guest device.
+  if (!sessionToken && await confirmedMediaGodAccount()) {
+    railwayAuthFallbackUntil = Date.now() + 90_000;
+    return rawInvoke(name, payload);
+  }
   try {
     if (sessionToken) {
       return await invokeIndependentRealDebrid(name, payload, { token: sessionToken });
