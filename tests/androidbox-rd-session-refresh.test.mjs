@@ -16,6 +16,10 @@ const functionCode = source.slice(begin).replace(
 const invoke = vm.runInNewContext(functionCode + "\n invokeIndependentRealDebrid;", {
   INDEPENDENT_RD_FUNCTIONS: new Set(["realDebrid", "realDebridAuth"]),
   INDEPENDENT_RD_ENDPOINT: "https://rd.example.test",
+  // SDK timeout and session tests isolate source throttling on purpose.
+  isLowPriorityDiscovery: () => false,
+  reserveDiscoveryRequest: async () => {},
+  discoveryCooldownUntil: 0,
   independentRdPayload: payload => Object.fromEntries(Object.entries(payload || {})
     .filter(([name]) => name !== "rd_token")),
   readAccountSessionToken: async () => "original-session",

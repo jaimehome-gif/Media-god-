@@ -88,8 +88,10 @@ test("protected source chooser remains unchanged; backend source recovery is iso
 test("scraper URLs still use an embedded web player and direct streams keep their native player", () => {
   const scraper=read("src/components/mg/fireTvCardPlay.js");
   const player=read("src/components/mg/MediaPlayerProvider.jsx");
-  assert.match(scraper,/Never pass an OnlyFlix\/VidCore webpage URL to LibVLC/);
+  assert.match(scraper,/OnlyFlix\/VidCore pages stay in their own embeds, never in native VLC/);
   assert.match(scraper,/player\.playOnlyFlix\(scraperMedia\)/);
+  assert.match(scraper,/const preferBespokePlayer = player\?\.hasRd === true/);
+  assert.match(scraper,/player\.play\(nativeRequest\)/);
   assert.match(player,/const playOnlyFlix = useCallback\(\(media\) => \{/);
   assert.match(player,/startEmbed\(url, media, "onlyflix"\)/);
 });

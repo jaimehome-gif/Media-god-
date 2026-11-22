@@ -17,6 +17,10 @@ const invoke = vm.runInNewContext(code + "\ninvokeIndependentRealDebrid;", {
     "realDebrid", "realDebridAuth", "multiDebrid", "fetchAddonStreams"
   ]),
   INDEPENDENT_RD_ENDPOINT: "https://rd.example.test",
+  // SDK timeout and session tests isolate source throttling on purpose.
+  isLowPriorityDiscovery: () => false,
+  reserveDiscoveryRequest: async () => {},
+  discoveryCooldownUntil: 0,
   independentRdPayload: data => Object.fromEntries(
     Object.entries(data || {}).filter(([key]) => key !== "rd_token")
   ),
