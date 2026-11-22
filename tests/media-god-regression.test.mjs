@@ -2371,25 +2371,27 @@ test("a six-row fast-start snapshot cannot replace 117 cached sources", () => {
   );
 });
 
-test("background caching runs multiple candidates and retries temporary slot blocks", () => {
+test("background cache limits automatic work while retaining slot recovery", () => {
   const playerSource = readFileSync(
     new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url),
     "utf8"
   );
 
   assert.match(playerSource, /backgroundCacheControllersRef\s*=\s*useRef\(new Map\(\)\)/);
-  assert.match(playerSource, /BACKGROUND_CACHE_CONCURRENCY\s*=\s*3/);
+  assert.match(playerSource, /BACKGROUND_CACHE_CONCURRENCY\s*=\s*1/);
   assert.match(
     playerSource,
     /const freeWorkerCount\s*=\s*Math\.max\([\s\S]{0,260}?BACKGROUND_CACHE_CONCURRENCY[\s\S]{0,260}?backgroundCacheControllersRef\.current\.size/
   );
-  assert.match(playerSource, /const batch\s*=\s*candidates\.slice\(0, freeWorkerCount\)/);
+  assert.match(playerSource, /BACKGROUND_CACHE_MAX_PER_TITLE\s*=\s*2/);
+  assert.match(playerSource, /const remainingBackgroundBudget\s*=\s*Math\.max\(/);
+  assert.match(playerSource, /Math\.min\(freeWorkerCount, remainingBackgroundBudget\)/);
   assert.match(playerSource, /batch\.forEach\(\(candidate, batchIndex\)/);
   assert.match(
     playerSource,
     /result\.accountBlocked\s*===\s*true[\s\S]{0,260}?backgroundCacheAttemptedRef\.current\.delete\(candidate\.hash\)/
   );
-  assert.match(playerSource, /BACKGROUND_CACHE_SLOT_RETRY_MS\s*=\s*5_000/);
+  assert.match(playerSource, /BACKGROUND_CACHE_SLOT_RETRY_MS\s*=\s*30_000/);
   assert.match(playerSource, /state:\s*"waiting-slot"/);
 });
 
@@ -2408,17 +2410,16 @@ test("background caching continues after foreground reaches ready", () => {
   );
 });
 
-test("background caching does not stop after five ready alternatives", () => {
+test("background cache retains the full candidate pool without exhausting RD quota", () => {
   const playerSource = readFileSync(
     new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url),
     "utf8"
   );
 
   assert.doesNotMatch(playerSource, /entry\.cachedCount\s*<\s*5/);
-  assert.match(
-    playerSource,
-    /const candidates\s*=\s*sortedSourceEntries[\s\S]{0,1800}?sourceNeedsCaching\(entry\.original\)[\s\S]{0,1800}?const batch\s*=\s*candidates\.slice\(0, freeWorkerCount\)/
-  );
+  assert.match(playerSource, /const candidates\s*=\s*sortedSourceEntries[\s\S]{0,2000}?sourceNeedsCaching\(entry\.original\)/);
+  assert.match(playerSource, /BACKGROUND_CACHE_MAX_PER_TITLE\s*=\s*2/);
+  assert.match(playerSource, /const batch\s*=\s*candidates\.slice\(/);
 });
 
 test("final player source pool comes directly from the full cache-annotated result", () => {
@@ -2848,7 +2849,7 @@ test("strict VOD autoplay keeps the full chooser and falls back to cached runtim
   assert.match(providerSource, /native-runtime-audio-rescue/);
   assert.match(
     providerSource,
-    /targetCount:\s*5[\s\S]{0,80}scanLimit:\s*20[\s\S]{0,80}timeBudgetMs:\s*6500/
+    /targetCount:\s*3[\s\S]{0,80}scanLimit:\s*12[\s\S]{0,80}timeBudgetMs:\s*6500/
   );
 });
 
@@ -3978,7 +3979,7 @@ test("authoritative IDs stay isolated and English autoplay never falls back blin
   assert.match(providerSource, /prioritiseEnglishAutoplayCandidates/);
   assert.match(
     providerSource,
-    /targetCount:\s*1,[\s\S]{0,120}?scanLimit:\s*40,[\s\S]{0,120}?timeBudgetMs:\s*10000/
+    /targetCount:\s*1,[\s\S]{0,120}?scanLimit:\s*16,[\s\S]{0,120}?timeBudgetMs:\s*10000/
   );
 });
 
