@@ -54,7 +54,29 @@ export const AuthProvider = ({ children }) => {
       // access token happened to arrive in this page URL. This recognises a
       // valid token restored from local storage after reopening the app and
       // also allows the platform to recognise any valid persisted session.
-      const currentUser = await base44.auth.me();
+      let currentUser;
+      try {
+        currentUser = await base44.auth.me();
+      } catch (firstError) {
+        // Google/Base44 OAuth can restore its persisted session just after a
+        // WebView wakes or the app returns from the identity provider. Do not
+        // turn one temporary User/me failure into an apparent Google logout.
+        // The second check still must authenticate on the backend; never
+        // reuse an old user as proof of permission.
+        const status = Number(firstError?.status || firstError?.response?.status || 0);
+        if (status !== 0 && status !== 401 && status !== 403 &&
+            status !== 429 && status < 500) {
+          throw firstError;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+        currentUser = await base44.auth.me();
+      }
+
+      if (!currentUser?.id) {
+        const missingSession = new Error('No verified Media God account session');
+        missingSession.status = 401;
+        throw missingSession;
+      }
 
       setUser(currentUser);
       setIsAuthenticated(true);
@@ -71,22 +93,37 @@ export const AuthProvider = ({ children }) => {
 
       return currentUser;
     } catch (error) {
-      setUser(null);
-      setIsAuthenticated(false);
+      const status = Number(error?.status || error?.response?.status || 0);
+      const verifiedSessionRejected = status === 401 || status === 403;
+
+      // A timeout, transient network error, or backend 429/5xx does not
+      // revoke Google authentication. Preserve the already verified user and
+      // let the next foreground/online check restore normal session status.
+      // A confirmed 401/403 still removes account-only access.
+      if (verifiedSessionRejected) {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
       setAuthChecked(true);
 
-      // The public home catalogue is available as soon as a signed-out
-      // visitor arrives. Account-only operations still require a real session.
-      if (!markAuthRequired && error?.status === 401) {
+      // The public home catalogue is available when genuinely signed out;
+      // private account actions continue requiring a valid server session.
+      if (!markAuthRequired && status === 401) {
         setIsGuest(true);
         setAuthError(null);
-      } else if (markAuthRequired && (error?.status === 401 || error?.status === 403)) {
+      } else if (markAuthRequired && verifiedSessionRejected) {
         setAuthError({
           type: 'auth_required',
           message: 'Authentication required',
         });
-      } else if (error?.status !== 401 && error?.status !== 403) {
-        console.error('User auth check failed:', error);
+      } else if (!verifiedSessionRejected) {
+        console.warn('Media God account check temporarily unavailable:', status || 'network');
+        // On a first-visit outage only, permit public catalogue browsing.
+        // Do not replace a previously signed-in account with guest mode.
+        if (!user && !isAuthenticated) {
+          setIsGuest(true);
+        }
+        setAuthError(null);
       }
 
       return null;
@@ -174,6 +211,30 @@ export const AuthProvider = ({ children }) => {
     if (!isAuthenticated) return undefined;
     return installAccountPreferenceSync();
   }, [isAuthenticated]);
+
+  // A lost connection while the mobile app is asleep must not strand a
+  // Google user on guest/login indefinitely. Recheck when the device returns,
+  // without silently signing in a deliberate Skip-for-now guest.
+  useEffect(() => {
+    let lastResumeCheck = 0;
+    const recoverOnResume = () => {
+      if (isAuthenticated || readGuestMode()) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (Date.now() - lastResumeCheck < 8000) return;
+      lastResumeCheck = Date.now();
+      void checkUserAuth({ markAuthRequired: false });
+    };
+    window.addEventListener('online', recoverOnResume);
+    window.addEventListener('focus', recoverOnResume);
+    document.addEventListener('visibilitychange', recoverOnResume);
+    return () => {
+      window.removeEventListener('online', recoverOnResume);
+      window.removeEventListener('focus', recoverOnResume);
+      document.removeEventListener('visibilitychange', recoverOnResume);
+    };
+  }, [isAuthenticated]);
+
+
 
   const continueAsGuest = () => {
     setUser(null);
