@@ -237,17 +237,19 @@ export async function invokeIndependentAddonSources(payload = {}, {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const response = await fetchImpl(
-        INDEPENDENT_METADATA_API_URL.replace(
-          "/functions/getTmdbMovies", "/functions/fetchAddonStreams"),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
-          credentials: "omit",
-          signal: controller.signal,
-        },
-      );
+      const options = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "omit",
+        signal: controller.signal,
+      };
+      const endpoint = INDEPENDENT_METADATA_API_URL.replace(
+        "/functions/getTmdbMovies", "/functions/fetchAddonStreams");
+      let response = await fetchImpl(endpoint, options);
+      if (response.status === 404 && globalThis.location?.origin === "https://underworldhub.co.uk") {
+        response = await fetchImpl("/api/apps/6a95b85c1b5a8657bf3906c8/functions/fetchAddonStreams", options);
+      }
       if (!response.ok) throw new Error(`Public source lookup HTTP ${response.status}`);
       const data = await response.json();
       if (!data || typeof data !== "object" || !Array.isArray(data.streams)) {
