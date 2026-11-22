@@ -8,7 +8,7 @@ const source = readFileSync(
 ).replace(/^import .*;\r?\n/gm, "")
   .replace("export const base44 =", "const base44 =");
 
-function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'existing-account-token', legacyGuestKey = '', legacyGuestConnected = false, railwayConnected = true } = {}) {
+function createHarness({ railwayStatus = 200, signedIn = true, firstPartyLinked = signedIn, sessionToken = 'existing-account-token', legacyGuestKey = '', legacyGuestConnected = false, railwayConnected = true } = {}) {
   const calls = { railway: [], native: [], verified: 0 };
   const client = {
     auth: {
@@ -21,11 +21,24 @@ function createHarness({ railwayStatus = 200, signedIn = true, sessionToken = 'e
     functions: {
       invoke: async (name, payload) => {
         calls.native.push({ name, payload });
-        if (name === "realDebridAuth" && payload?.guest_device_key) {
-          return { data: {
-            connected: legacyGuestConnected, valid: legacyGuestConnected,
-            provider: "legacy-guest",
-          } };
+        if (payload?.guest_device_key) {
+          if (!legacyGuestConnected) {
+            if (name === "realDebridAuth") {
+              return { data: { connected: false, valid: false, provider: "legacy-guest" } };
+            }
+            const error = new Error("Legacy device is not connected");
+            error.status = 401;
+            throw error;
+          }
+          return { data: { connected: true, valid: true,
+            provider: name === "realDebridAuth" ? "legacy-guest" : "native" } };
+        }
+        // The real Base44 functions check auth.me and refuse requests from
+        // users without a valid account or a previously linked guest key.
+        if (!firstPartyLinked) {
+          const error = new Error("No authenticated Media God account");
+          error.status = 401;
+          throw error;
         }
         return { data: { connected: true, valid: true, provider: "native" } };
       },
@@ -89,7 +102,8 @@ test("a guest cannot turn Railway's 401 into an authenticated Base44 request", a
     client.functions.invoke("realDebrid", {action:"status"}),
     error => error.status === 401,
   );
-  assert.equal(calls.native.length, 0);
+  assert.ok(calls.native.every(c => c.name === "realDebridAuth"),
+    "only first-party status verification may be attempted");
 });
 
 test("Railway 403 stays a permission denial, never an account fallback", async () => {
@@ -125,7 +139,7 @@ test("real guests without an account session retain the isolated Railway device 
   const result = await client.functions.invoke("realDebridAuth",{action:"status"});
   assert.equal(result.data.provider,"railway");
   assert.equal(calls.railway.length,1);
-  assert.equal(calls.native.length,0);
+  assert.ok(calls.native.every(c => c.name === "realDebridAuth"));
 });
 
 test("previously connected Base44 guest survives Railway migration without a new login", async () => {
@@ -175,4 +189,38 @@ test("existing signed-in accounts are not sent a guest capability when no guest 
   const {client, calls} = createHarness({signedIn:true, railwayStatus:401});
   await client.functions.invoke("realDebrid", {action:"status"});
   assert.equal(calls.native[0].payload.guest_device_key,undefined);
+});
+
+test("a first-party RD function can recover a verified existing account if User/me is out of sync", async () => {
+  const {client, calls} = createHarness({
+    signedIn:false,
+    firstPartyLinked:true,
+    railwayStatus:401,
+  });
+  const result = await client.functions.invoke("realDebridAuth",{action:"status"});
+  assert.equal(result.data.provider,"native");
+  assert.equal(calls.railway.length,1);
+  assert.equal(calls.native.filter(c => c.name === "realDebridAuth").length,2);
+  const playable = await client.functions.invoke("realDebrid",{action:"resolve_best"});
+  assert.equal(playable.data.provider,"native");
+  assert.equal(calls.railway.length,1,"recovered account does not repeat rejected Railway requests");
+  assert.ok(calls.native.every(c => !c.payload?.guest_device_key));
+});
+
+test("failed Railway account verification does not flood the backend on subsequent requests", async () => {
+  const {client, calls} = createHarness({
+    signedIn:false,
+    firstPartyLinked:false,
+    railwayStatus:401,
+  });
+  const fire = () => client.functions.invoke("realDebrid",{action:"resolve_best"});
+  await assert.rejects(fire(), error => error.status === 401);
+  const firstCount = calls.railway.length;
+  for (let index=0;index<8;index++) {
+    await assert.rejects(fire(), error => error.status === 401);
+  }
+  assert.equal(firstCount,1);
+  assert.equal(calls.railway.length,1,"authentication failures must not be retried for every candidate");
+  assert.ok(calls.native.every(c => c.name === "realDebridAuth"),
+    "no unverified guest or account can invoke RD resolution in Base44");
 });
