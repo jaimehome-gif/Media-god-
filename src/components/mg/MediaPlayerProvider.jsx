@@ -319,8 +319,8 @@ const stableDiscoveredSourceKey = (item) => {
 };
 
 const DEBRID_CACHE_BATCH_SIZE = 100;
-const DEBRID_CACHE_MAX_PASSES = 3;
-const DEBRID_CACHE_RETRY_DELAY_MS = 180;
+const DEBRID_CACHE_MAX_PASSES = 2;
+const DEBRID_CACHE_RETRY_DELAY_MS = 900;
 
 const waitForDebridCacheRetry = () =>
   new Promise((resolve) => {
@@ -2849,8 +2849,8 @@ export function PlayerProvider({
               mediaType,
               season,
               episode,
-              targetCount: 5,
-              scanLimit: 20,
+              targetCount: 3,
+              scanLimit: 12,
               timeBudgetMs: 6500,
             });
         }
@@ -3532,7 +3532,7 @@ export function PlayerProvider({
                   season,
                   episode,
                   targetCount: 1,
-                  scanLimit: 12,
+                  scanLimit: 8,
                   // TV must not sit on a five-second cached-only gate
                   // before trying the actual episode. Movies are unchanged.
                   timeBudgetMs: mediaType === "tv" ? 2400 : 5000,
@@ -3843,7 +3843,7 @@ export function PlayerProvider({
               season,
               episode,
               targetCount: 1,
-              scanLimit: 40,
+              scanLimit: 16,
               timeBudgetMs: 10000,
             });
 
