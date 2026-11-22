@@ -113,6 +113,7 @@ import {
   smartSourceFingerprint,
 } from "@/components/mg/smartSourceSelection";
 import { useProactiveCodecGuard } from "@/components/mg/useProactiveCodecGuard"; import { useSilentAudioGuard } from "@/components/mg/useSilentAudioGuard";
+import { isTransientRealDebridServiceFailure, transientRealDebridMessage } from "@/components/mg/realDebridTransientFailure";
 const SUCCESSFUL_VOD_PLAYBACK_SECONDS = 20;
 
 const isMagnet = (value) =>
@@ -6072,6 +6073,18 @@ export default function VideoPlayer({
                       ? "Real-Debrid has no free active torrent slot."
                       : "Real-Debrid could not start this uncached torrent.")
                 );
+                return;
+              }
+
+              // An expired session, API rate limit or backend outage is not
+              // evidence that this source is bad. Never burn through the
+              // candidate list because a shared service failed.
+              if (isTransientRealDebridServiceFailure(error)) {
+                setRdResolving(false);
+                setRdPolling(false);
+                setRdTorrentId(null);
+                setRdPreparation(null);
+                setRdError(transientRealDebridMessage(error));
                 return;
               }
 
