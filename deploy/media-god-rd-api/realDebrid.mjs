@@ -1,5 +1,6 @@
 import { createClientFromRequest } from "./verifiedUserClient.mjs";
 import { loadGuestDebridCredential } from "./guestDebrid.mjs";
+import { refreshStoredToken } from "./realDebridAuth.mjs";
 import {
   chooseRequestedTorrentFileForPlayback,
   chooseVideoFileForPlayback,
@@ -647,8 +648,8 @@ export default async function (req) {
       guestRecord ||
       {};
 
-    const token =
-      credentialOwner.rd_token;
+    let token =
+      String(credentialOwner.rd_token || "").trim();
 
     if (!token) {
       return Response.json(
@@ -704,6 +705,45 @@ export default async function (req) {
       "Content-Type":
         "application/x-www-form-urlencoded",
     };
+
+    // Signed-in users retain their Base44 Real-Debrid credentials after the
+    // Railway migration. Refresh an expiring OAuth token before playback, and
+    // refresh once on a provider 401 without discarding the selected source.
+    const refreshCredential = async () => {
+      const alreadyUpdated = String(credentialOwner.rd_token || "").trim();
+      if (alreadyUpdated && alreadyUpdated !== token) {
+        token = alreadyUpdated;
+      } else {
+        const result = await refreshStoredToken({
+          base44, user, guestRecord, guestDeviceHash,
+        });
+        if (!result?.refreshed || !result?.token || result.token === token) {
+          return false;
+        }
+        token = result.token;
+      }
+      authHeaders.Authorization = `Bearer ${token}`;
+      formHeaders.Authorization = `Bearer ${token}`;
+      return true;
+    };
+
+    const expiry = Date.parse(
+      String(credentialOwner.rd_token_expires_at || "")
+    );
+    if (
+      Number.isFinite(expiry) &&
+      expiry <= Date.now() + 120_000 &&
+      credentialOwner.rd_refresh_token &&
+      credentialOwner.rd_client_id &&
+      credentialOwner.rd_client_secret
+    ) {
+      try {
+        await refreshCredential();
+      } catch {
+        // A failed proactive refresh is checked again if RD rejects the
+        // playback request. Never erase existing credentials here.
+      }
+    }
 
     /*
      * ---------------------------------------------------------
@@ -865,6 +905,7 @@ export default async function (req) {
         authHeaders,
         formHeaders,
         base44,
+        refreshCredential,
       });
     }
 
@@ -884,6 +925,7 @@ export default async function (req) {
         authHeaders,
         formHeaders,
         base44,
+        refreshCredential,
         saveLink: true,
       });
     }
@@ -1060,6 +1102,7 @@ export default async function (req) {
         authHeaders,
         formHeaders,
         base44,
+        refreshCredential,
         saveLink: true,
       });
       const freshPayload = await freshResponse.json();
@@ -3114,6 +3157,7 @@ async function addMagnet({
   formHeaders,
   base44,
   saveLink = false,
+  refreshCredential = null,
 }) {
   let magnet =
     body.magnet;
@@ -3187,22 +3231,37 @@ async function addMagnet({
    * This works whether or not the magnet was already
    * present in the user's library.
    */
-  const addRes =
-    await rdFetch(
+  const submitMagnet = () =>
+    rdFetch(
       `${RD_BASE}/torrents/addMagnet`,
       {
         method: "POST",
-        headers:
-          formHeaders,
-        body:
-          `magnet=${encodeURIComponent(
-            magnet
-          )}`,
+        headers: formHeaders,
+        body: `magnet=${encodeURIComponent(magnet)}`,
       },
-      {
-        attempts: 3,
-      }
+      { attempts: 3 }
     );
+
+  let addRes = await submitMagnet();
+  if (addRes.status === 401 && typeof refreshCredential === "function") {
+    try {
+      // The old token is not evidence that this film/source is unavailable.
+      // Retry just this request, once, after the stored OAuth refresh.
+      if (await refreshCredential()) addRes = await submitMagnet();
+    } catch {
+      // Keep the existing account connection and offer reconnect guidance.
+    }
+  }
+
+  if (addRes.status === 401) {
+    return Response.json({
+      status: "failed",
+      error_code: "RD_CREDENTIAL_EXPIRED",
+      error: "Real-Debrid rejected the saved access token. Reconnect Real-Debrid in Settings if automatic refresh was unsuccessful.",
+      upstream_status: 401,
+      retryable: false,
+    });
+  }
 
   if (!addRes.ok) {
     const failure = await rdFailureDetails(
