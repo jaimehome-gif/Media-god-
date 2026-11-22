@@ -173,6 +173,10 @@ class MainActivity : FragmentActivity() {
                     currentTopLevelUrl = url.orEmpty()
                     super.onPageFinished(view, url)
                     injectMobileBootstrap()
+                    // Google/Base44 may set session cookies on the final OAuth
+                    // callback. Persist them before Android can kill WebView.
+                    // Do not copy credentials into app preferences or logs.
+                    runCatching { CookieManager.getInstance().flush() }
                     requestFocus()
                 }
             }
@@ -254,6 +258,9 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onPause() {
+        // A backgrounded/force-closed Android process must not lose the
+        // Base44 OAuth cookies that belong to this WebView profile.
+        runCatching { CookieManager.getInstance().flush() }
         webView.onPause()
         // Native owns all video/audio. Keep metadata/source prefetch timers
         // alive while that player is open so episode controls can arrive late.
@@ -262,6 +269,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { CookieManager.getInstance().flush() }
         if (nativeProgressReceiverRegistered) {
             runCatching { unregisterReceiver(nativeProgressReceiver) }
             nativeProgressReceiverRegistered = false
