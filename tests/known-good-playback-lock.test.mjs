@@ -54,6 +54,11 @@ const sourceReviewedFiles = {
   // Source reviewed with targeted tests; physical Android/Fire TV audio and picture
   // still need verification. Original approved hash remains in recovery docs.
   "src/components/mg/fireTvCardPlay.js": "4dda82ab63cb528a0677543f95e019e156bbab1e79c9f5427bb9ed95dd013540",
+  // 2026-11-22 Android OAuth cookie persistence repair after the user's
+  // repeated sign-out report. Source-reviewed only: physical restart test and
+  // new APK build are still required. See docs/ANDROID_OAUTH_SESSION_REPAIR.md.
+  "android-mobile/app/src/main/java/com/mediagod/mobile/MainActivity.kt": "cc6887052a47e8025fea3822cdfdd42457070dfd9794c5ab6e45feb1e2bdd02d",
+
   // Explicit 14 November release instruction: reviewed wake recovery; physical
   // Fire Stick acceptance remains unverified. See FIRETV_WAKE_RELEASE_20261114.md.
   // Approved for live Fire Stick testing on 18 November. Physical acceptance is pending.
