@@ -38,10 +38,14 @@ const updateCredentialOwner = async ({
     try {
       return await base44.auth.updateMe(patch);
     } catch (error) {
-      return await base44.asServiceRole.entities.User.update(
+      const updated = await base44.asServiceRole.entities.User.update(
         user.id,
         patch
       );
+      // Keep the server-verified user snapshot current after a successful
+      // service-role fallback. This is never done before the write succeeds.
+      Object.assign(user, patch);
+      return updated;
     }
   }
 
@@ -158,7 +162,7 @@ const requestToken = async ({
   return data;
 };
 
-const refreshStoredToken = async ({
+const refreshStoredTokenOnce = async ({
   base44,
   user,
   guestRecord,
@@ -225,6 +229,28 @@ const refreshStoredToken = async ({
       tokenData.access_token
     ),
   };
+};
+
+// Coalesce simultaneous expiry checks and Real-Debrid 401 recoveries for
+// the same verified account/device. OAuth refresh tokens may rotate; sending
+// several refreshes concurrently can invalidate the newest credential.
+const refreshInFlight = new Map();
+export const refreshStoredToken = async (args = {}) => {
+  const key = args.user?.id
+    ? `account:${String(args.user.id)}`
+    : args.guestDeviceHash
+      ? `device:${String(args.guestDeviceHash)}`
+      : "";
+  if (!key) return refreshStoredTokenOnce(args);
+  const pending = refreshInFlight.get(key);
+  if (pending) return pending;
+  const operation = refreshStoredTokenOnce(args);
+  refreshInFlight.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (refreshInFlight.get(key) === operation) refreshInFlight.delete(key);
+  }
 };
 
 const storedTokenNeedsRefresh = (
