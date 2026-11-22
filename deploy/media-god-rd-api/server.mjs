@@ -125,7 +125,14 @@ async function serve(req, res) {
   const verified = isDevice
     ? await deviceClient(req.headers.authorization)
     : await verifiedClient(req.headers.authorization);
-  if (!verified) return respond(res, 401, {error: "Sign in to Media God to use Real-Debrid."}, origin);
+  if (!verified) {
+    // Stage-only diagnostics; never log bearer/device secrets or user IDs.
+    console.warn("[media-god-rd-api] auth rejected before handler", {
+      path: Object.hasOwn(HANDLERS, path) ? path : "unknown",
+      mode: isDevice ? "device" : "account",
+    });
+    return respond(res, 401, {error: "Sign in to Media God to use Real-Debrid."}, origin);
+  }
   if (limited(verified.user.id)) {
     return respond(res, 429, {error: "Too many Real-Debrid requests. Retry shortly."}, origin);
   }
@@ -161,9 +168,15 @@ async function serve(req, res) {
       __mediaGodVerifiedUser: {value: verified.user},
     });
     const result = await runHandler(handler, request, isDevice ? verified.user.id : "");
-    // The client may get an upstream failure while the server remains healthy.
-    // Log only the whitelisted function path, action and HTTP status. Never
-    // log user IDs, tokens, torrent hashes, filenames or playable URLs.
+    // Separate a *handler* 401 (e.g. a Real-Debrid credential or provider
+    // response) from the server's own account-verification 401 above. Never
+    // log user IDs, credentials, torrent hashes, filenames or playable URLs.
+    if (result.status === 401) {
+      console.warn("[media-god-rd-api] handler returned 401 after account verification", {
+        function: path.slice("/functions/".length),
+        action: /^[a-z_]{1,40}$/i.test(String(body.action || "")) ? body.action : "unknown",
+      });
+    }
     if (result.status >= 500) {
       const action = /^[a-z_]{1,40}$/i.test(String(body.action || ""))
         ? String(body.action) : "unknown";
