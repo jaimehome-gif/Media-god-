@@ -112,31 +112,6 @@ export async function invokeIndependentMetadata(payload = {}, {
   } catch (error) {
     const saved = readCache(request, storage);
     if (saved) return { data: saved, stale: true };
-    // Cold visits on the public domain have no cached catalogue to show if
-    // the independent service rejects the browser origin or is unavailable.
-    if (globalThis.location?.origin === "https://underworldhub.co.uk") {
-      const data = await sharePendingPublicLookup(fetchImpl, "public-site-catalogue", request, async () => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const response = await fetchImpl("/api/apps/6a95b85c1b5a8657bf3906c8/functions/getTmdbMovies", {
-            method: "POST",
-            credentials: "omit",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(request),
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error("Public catalogue unavailable");
-          const result = await response.json();
-          if (!result || typeof result !== "object" || result.error) throw new Error("Invalid catalogue response");
-          return result;
-        } finally {
-          clearTimeout(timer);
-        }
-      }, { timeoutMs: timeoutMs + 1_000 });
-      saveCache(request, data, storage);
-      return { data };
-    }
     throw new Error("Catalogue temporarily unavailable; please retry", { cause: error });
   }
 }
@@ -247,9 +222,6 @@ export async function invokeIndependentAddonSources(payload = {}, {
       const endpoint = INDEPENDENT_METADATA_API_URL.replace(
         "/functions/getTmdbMovies", "/functions/fetchAddonStreams");
       let response = await fetchImpl(endpoint, options);
-      if (response.status === 404 && globalThis.location?.origin === "https://underworldhub.co.uk") {
-        response = await fetchImpl("/api/apps/6a95b85c1b5a8657bf3906c8/functions/fetchAddonStreams", options);
-      }
       if (!response.ok) throw new Error(`Public source lookup HTTP ${response.status}`);
       const data = await response.json();
       if (!data || typeof data !== "object" || !Array.isArray(data.streams)) {
