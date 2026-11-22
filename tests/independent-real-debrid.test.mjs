@@ -86,6 +86,60 @@ test("handlers cannot obtain a client without a verified user request", () => {
   assert.throws(() => createClientFromRequest(request), /Verified Media God account/);
 });
 
+test("a verified account is stable inside its RD handler despite a second User/me outage", async () => {
+  const verifiedUser = {id:"verified-stable",rd_token:"private-real-debrid-token"};
+  let secondaryReads = 0;
+  const client = {
+    auth: {
+      me: async () => {
+        secondaryReads += 1;
+        throw new Error("Base44 User/me briefly unavailable");
+      },
+      updateMe: async patch => ({...verifiedUser,...patch}),
+    },
+    entities: {RdLink:{filter:async()=>[]}},
+  };
+  const req = new Request("https://local.test/functions/realDebrid", {
+    method: "POST",
+    body: JSON.stringify({action:"status"}),
+    headers: {"Content-Type":"application/json"},
+  });
+  Object.defineProperties(req, {
+    __mediaGodVerifiedClient: {value:client},
+    __mediaGodVerifiedUser: {value:verifiedUser},
+    __mediaGodVerifiedUserId: {value:verifiedUser.id},
+  });
+  const scoped = createClientFromRequest(req);
+  assert.notEqual(scoped,client);
+  assert.deepEqual(await scoped.auth.me(),verifiedUser);
+  assert.equal(secondaryReads,0,"never repeat authentication after server verification");
+  assert.equal(scoped.auth.updateMe,client.auth.updateMe,
+    "keep original user-scoped credential update");
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({premium:1}), {
+      status:200,headers:{"Content-Type":"application/json"},
+    });
+    const result = await realDebrid(req);
+    assert.equal(result.status,200);
+    assert.equal((await result.json()).valid,true);
+    assert.equal(secondaryReads,0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("mismatched verified-user IDs never gain an authenticated RD client", () => {
+  const client = {auth:{me:async()=>({id:"actual-user"})}};
+  const req = new Request("https://local.test", {method:"POST"});
+  Object.defineProperties(req, {
+    __mediaGodVerifiedClient: {value:client},
+    __mediaGodVerifiedUser: {value:{id:"attacker"}},
+    __mediaGodVerifiedUserId: {value:"another-user"},
+  });
+  assert.throws(() => createClientFromRequest(req), /Verified Media God account/);
+});
+
 test("Railway RD service requires a real Base44 session, protects actions and excludes guest impersonation", () => {
   const server = source("deploy/media-god-rd-api/server.mjs");
   assert.match(server, /client\.auth\.me\(\)/);
