@@ -3,6 +3,8 @@ WORKDIR /srv
 COPY --chown=node:node package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 COPY --chown=node:node server.mjs realDebrid.mjs realDebridAuth.mjs findRdLibrary.mjs multiDebrid.mjs fetchAddonStreams.mjs regressionHelpers.js verifiedUserClient.mjs guestDebrid.mjs deviceClient.mjs accountVerificationCache.mjs ./
+# Fail the build if the verified-account module is absent from the runtime image.
+RUN test -f /srv/accountVerificationCache.mjs
 ENV NODE_ENV=production
 RUN mkdir -p /data/guest-rd && chown -R node:node /data
 RUN apk add --no-cache su-exec
