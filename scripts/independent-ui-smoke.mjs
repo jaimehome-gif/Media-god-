@@ -26,9 +26,22 @@ async function visit(path,expected) {
 }
 try {
   await visit('/login','Welcome to Media God');
-  assert.equal(await page.$$('input[type="password"]').then(x=>x.length),1,'login has password field');
+  assert.equal(await page.$('input[type="password"]').then(x=>x.length),1,'login has password field');
+  for (const provider of ['Google','Facebook','Microsoft','Apple']) {
+    const label=provider+' sign-in not yet configured';
+    assert.ok(await page.$('[aria-label="'+label+'"]') ||
+      await page.$('[aria-label="Continue with '+provider+'"]'),
+      provider+' choice must appear even when credentials are pending');
+  }
+  const browse=await page.evaluate(()=>document.body.innerText);
+  assert.match(browse,/Browse without signing in/, 'Original skip option preserved');
   await visit('/register','Create Media God account');
-  assert.equal(await page.$$('input[type="password"]').then(x=>x.length),2,'registration has confirm password');
+  assert.equal(await page.$('input[type="password"]').then(x=>x.length),2,'registration has confirm password');
+  for (const provider of ['Google','Facebook','Microsoft','Apple']) {
+    assert.ok(await page.evaluate((name)=>document.body.innerText.includes(name),provider),
+      provider+' sign-up must appear');
+  }
+  await visit('/auth/callback','Social login was interrupted');
   const brand=await page.title();
   assert.match(brand,/Media God/i,'staged browser title must not be Base44');
 }finally{
