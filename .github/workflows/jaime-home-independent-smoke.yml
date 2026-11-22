@@ -1,0 +1,55 @@
+name: Jaime Home Independent Migration Smoke
+on:
+  push:
+    branches: [rebuild/jaime-home-independent]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-god-independent-stage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Confirm replacement code is syntactically valid
+        run: |
+          node --check deploy/media-god-identity-api/server.mjs
+          node --check deploy/media-god-rd-api/server.mjs
+          node --check src/api/base44Client.js
+      - name: Confirm new identity routes do not use the blocked service
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const client=readFileSync('src/api/base44Client.js','utf8');
+          const backend=readFileSync('deploy/media-god-rd-api/server.mjs','utf8');
+          assert.doesNotMatch(client, /from ['"]@base44\/sdk/);
+          assert.doesNotMatch(client, /app\.base44\.com|\/api\/apps\/6a95b85c1b5a8657bf3906c8/);
+          assert.doesNotMatch(backend, /from ['"]@base44\/sdk/);
+          assert.match(backend, /IDENTITY_VERIFY_URL/);
+          assert.match(client, /mg:jaime-home-session:v1/);
+          NODE
+      - name: Check independent services (no user credentials)
+        env:
+          SITE: https://media-god-independent-web-production.up.railway.app
+          IDENTITY: https://media-god-identity-api-production.up.railway.app
+          RD: https://media-god-rd-independent-api-production.up.railway.app
+        run: |
+          set -euo pipefail
+          for url in "$SITE/" "$IDENTITY/health" "$RD/health"; do
+            echo "Checking $url"
+            curl --fail --silent --show-error --retry 4 --retry-delay 3 --max-time 25 "$url" -o /tmp/health_body
+            head -c 250 /tmp/health_body
+            echo
+          done
+          curl --fail --silent --show-error "$IDENTITY/auth/config" | jq -e '.independent == true and .email_verification_required == true'
+          curl --fail --silent --show-error "$SITE/" | grep -q 'Media God'
+          code=$(curl --silent --show-error --max-time 20 -o /tmp/unauthorized.json -w "%{http_code}" -X POST "$RD/functions/realDebridAuth" -H "Content-Type: application/json" --data '{"action":"status"}')
+          test "$code" = "401"
+          echo "RD requires an authenticated Jaime Home session (HTTP 401)"
