@@ -712,6 +712,22 @@ export default function DetailModal({
     mediaType,
   ]);
 
+  // The source panel restarts discovery when its alias-array props change.
+  // Keep equivalent aliases referentially stable across detail-page renders
+  // (including when catalogue records provide no aliases at all).
+  const sourceAlternateYearsKey = JSON.stringify(
+    asArray(safeItem.alternate_years ?? safeItem.alternateYears)
+  );
+  const sourceAlternateTitlesKey = JSON.stringify(
+    asArray(safeItem.search_aliases ?? safeItem.alternate_titles ?? safeItem.alternateTitles)
+  );
+  const sourceAlternateYears = useMemo(
+    () => JSON.parse(sourceAlternateYearsKey), [sourceAlternateYearsKey]
+  );
+  const sourceAlternateTitles = useMemo(
+    () => JSON.parse(sourceAlternateTitlesKey), [sourceAlternateTitlesKey]
+  );
+
   const streamingRegion = useMemo(() => detectStreamingRegion(), []);
 
   const resolvedMediaType =
@@ -1845,19 +1861,8 @@ export default function DetailModal({
               rdYear={
                 safeItem.year
               }
-              alternateYears={
-                asArray(
-                  safeItem.alternate_years ??
-                  safeItem.alternateYears
-                )
-              }
-              alternateTitles={
-                asArray(
-                  safeItem.search_aliases ??
-                  safeItem.alternate_titles ??
-                  safeItem.alternateTitles
-                )
-              }
+              alternateYears={sourceAlternateYears}
+              alternateTitles={sourceAlternateTitles}
               tmdbId={
                 itemId
               }
