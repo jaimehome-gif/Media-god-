@@ -266,9 +266,13 @@ async function entityRoute(req,res,path,body,origin) {
 async function handler(req,res) {
   const origin=String(req.headers.origin||"");
   try {
-    if (origin&&!origins.has(origin)) err(403,"Origin not allowed");
-    if (req.method==="OPTIONS") return respond(res,204,{},origin);
     const path=new URL(req.url||"/","http://localhost").pathname;
+    // Sign in with Apple sends a cross-site form_post from appleid.apple.com.
+    // This single server-to-server OAuth callback is verified using its
+    // one-use state, browser-binding cookie, signed ID token and nonce.
+    const appleCallback=path==="/auth/oauth/apple/callback" && req.method==="POST";
+    if (origin&&!origins.has(origin)&&!appleCallback) err(403,"Origin not allowed");
+    if (req.method==="OPTIONS") return respond(res,204,{},origin);
     if (path==="/health"&&req.method==="GET") {
       await pool.query("SELECT 1");
       return respond(res,200,{status:"ok",identity:"jaime-home",database:"connected",registration_ready:mailReady},origin);
