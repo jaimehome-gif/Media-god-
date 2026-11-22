@@ -43,5 +43,5 @@ test("Fire TV Menu reaches source choices and Fullscreen; Back restores picture 
   assert.match(stage, /window\.addEventListener\("mg:native-back", onFireTvBack, true\)/);
   assert.match(stage, /event\.stopImmediatePropagation\?\.\(\)/);
   assert.match(read("public/firetv-update.json"), /"versionName": "1\.4\.126"/);
-  assert.match(read("public/android-mobile-update.json"), /"versionName": "1\.0\.96"/);
+  assert.match(read("public/android-mobile-update.json"), /"versionName": "1\.0\.97"/);
 });

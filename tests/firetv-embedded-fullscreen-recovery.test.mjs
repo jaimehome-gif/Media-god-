@@ -54,8 +54,8 @@ test("Fire TV update is newer but phone and platform assets remain separate", ()
   assert.match(fire, /versionName = "1\.4\.126"/);
   assert.equal(fireManifest.versionCode, 131);
   assert.equal(fireManifest.versionName, "1.4.126");
-  assert.equal(phoneManifest.versionCode, 97);
-  assert.equal(phoneManifest.versionName, "1.0.96");
-  assert.match(phone, /versionCode = 97/);
-  assert.match(phone, /versionName = "1\.0\.96"/);
+  assert.equal(phoneManifest.versionCode, 98);
+  assert.equal(phoneManifest.versionName, "1.0.97");
+  assert.match(phone, /versionCode = 98/);
+  assert.match(phone, /versionName = "1\.0\.97"/);
 });
