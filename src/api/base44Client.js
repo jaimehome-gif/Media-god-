@@ -19,6 +19,50 @@ export const base44 = createClient({
 
 const rawInvoke = base44.functions.invoke.bind(base44.functions);
 
+// A signed-in Media God account can work through Base44 while Railway's
+// independent auth check temporarily rejects its browser session. Keep
+// Railway as the primary route; only a 401 may activate the account-scoped
+// native backend fallback. Never treat 403, 429 or 5xx as authentication.
+let railwayAuthFallbackUntil = 0;
+let accountVerificationPromise = null;
+
+const confirmedMediaGodAccount = async () => {
+  if (!accountVerificationPromise) {
+    accountVerificationPromise = base44.auth.me()
+      .then(user => Boolean(user?.id))
+      .catch(() => false)
+      .finally(() => { accountVerificationPromise = null; });
+  }
+  return accountVerificationPromise;
+};
+
+const invokeAuthenticatedDebrid = async (name, payload = {}, options = {}) => {
+  if (Date.now() < railwayAuthFallbackUntil) {
+    // Raw Base44 function requests retain the existing signed-in session
+    // and account's stored RD credentials. No credential is sent to the page.
+    return rawInvoke(name, payload);
+  }
+
+  const sessionToken = options.token || await readAccountSessionToken();
+  try {
+    if (sessionToken) {
+      return await invokeIndependentRealDebrid(name, payload, { token: sessionToken });
+    }
+    return await invokeIndependentRealDebrid(name, payload, { deviceToken: railwayDeviceToken() });
+  } catch (error) {
+    if (Number(error?.status) !== 401 && error?.code !== 'NO_ACCOUNT_SESSION') {
+      throw error;
+    }
+    // A Railway 401 must not promote guests to account access.
+    if (!(await confirmedMediaGodAccount())) throw error;
+    // Briefly avoid the invalid Railway session while Base44 verifies the
+    // current account on its own origin. Probe Railway again afterwards.
+    railwayAuthFallbackUntil = Date.now() + 90_000;
+    return rawInvoke(name, payload);
+  }
+};
+
+
 base44.functions.invoke = async (name, payload = {}, ...rest) => {
   // Public catalogue, search and metadata never use Base44 integration
   // credits. This endpoint contains no personal data or credentials.
@@ -32,7 +76,7 @@ base44.functions.invoke = async (name, payload = {}, ...rest) => {
     return searchAddonSourcesWithPublicFallback(payload, {
       readToken: readAccountSessionToken,
       searchPersonal: (request, options) =>
-        invokeIndependentRealDebrid('fetchAddonStreams', request, options),
+        invokeAuthenticatedDebrid('fetchAddonStreams', request, options),
       searchPublic: invokeIndependentAddonSources,
     });
   }
@@ -42,9 +86,7 @@ base44.functions.invoke = async (name, payload = {}, ...rest) => {
   }
   // Both account and isolated guest-device requests run on Railway.
   if (INDEPENDENT_RD_FUNCTIONS.has(String(name || ''))) {
-    const sessionToken = await readAccountSessionToken();
-    if (sessionToken) return invokeIndependentRealDebrid(name, payload, { token: sessionToken });
-    return invokeIndependentRealDebrid(name, payload, { deviceToken: railwayDeviceToken() });
+    return invokeAuthenticatedDebrid(name, payload);
   }
   return rawInvoke(name, payload, ...rest);
 };
