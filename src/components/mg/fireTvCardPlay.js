@@ -1,3 +1,4 @@
+import { mediaForTorrentFallback } from "./automaticWebFallback.js";
 import { prefersNativeBoxPlayer } from "./boxPlayerPreference.js";
 import { supportsLegacyBoxWebPlayer } from "./legacyBoxWebPlayer";
 import { browserCodecSupport, getPlaybackDeviceProfile } from "./mediaCompatibility";
@@ -9,8 +10,19 @@ import { browserCodecSupport, getPlaybackDeviceProfile } from "./mediaCompatibil
 // Native VLC still owns resolved DIRECT media from the Sources handoff.
 // Phone, desktop and Live TV never enter this Fire TV-only route.
 export const launchFireTvCardPlay = (player, media) => {
-  if (!getPlaybackDeviceProfile().nativeFireTv) return false;
   const type = String(media?.mediaType || media?.type || "").toLowerCase();
+  // The web embeds for Sunrise on the Reaping repeatedly return an error or
+  // a verification page. Use exact-title discovery on its primary Play action.
+  const tmdbId = String(media?.tmdbId || media?.tmdb_id || media?.id || "");
+  const imdbId = media?.imdbId || media?.imdb_id;
+  if (type === "movie" && (tmdbId === "1300968" || imdbId === "tt32558705") &&
+      typeof player?.play === "function") {
+    void player.play(mediaForTorrentFallback({
+      ...media, tmdbId: 1300968, tmdb_id: 1300968, imdbId: "tt32558705", imdb_id: "tt32558705",
+    }));
+    return true;
+  }
+  if (!getPlaybackDeviceProfile().nativeFireTv) return false;
   if (!(type === "movie" || type === "tv" || type === "series")) return false;
 
   const scraperMedia = {
