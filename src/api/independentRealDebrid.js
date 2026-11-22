@@ -10,7 +10,7 @@ import { resolveAccountToken } from "./accountSessionToken.js";
  * Guests use a separate device capability and encrypted Railway storage.
  */
 export const INDEPENDENT_RD_ENDPOINT =
-  "https://media-god-rd-api-production.up.railway.app";
+  "https://media-god-rd-api-production-15b0c56e.up.railway.app";
 
 export const INDEPENDENT_RD_FUNCTIONS = new Set([
   "realDebrid",
