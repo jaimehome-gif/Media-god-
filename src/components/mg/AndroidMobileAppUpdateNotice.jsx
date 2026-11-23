@@ -149,11 +149,16 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
     ),
   });
   const legacySigningError = isMobileUpdaterSignatureError(updateState.message);
+  // GitHub sometimes answers the native HttpURLConnection request with HTTP 404
+  // even when the published, signed asset is available to Chrome. The installed
+  // native downloader cannot be repaired by hosted JavaScript, so offer the
+  // browser-hosted release page without forcing an APK uninstall.
+  const nativeDownload404 = /update download failed with HTTP 404/i.test(updateState.message);
   // Mobile 1.0.93 may mistake unavailable archive-signing metadata for a
   // certificate mismatch. The old native updater cannot fix itself, so offer
   // official external installation while Android enforces signature checks.
   const showMobileInstaller = !installedOnFireTv &&
-    (legacySigningError || !nativeInfo?.selfUpdateSupported);
+    (legacySigningError || nativeDownload404 || !nativeInfo?.selfUpdateSupported);
 
   const canSelfUpdate = useMemo(
     () =>
@@ -229,7 +234,11 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
   };
 
   const openFallback = () => {
-    openOfficialUrl(release?.apkUrl || release?.releaseUrl || "");
+    // Use the release page, not the very same direct asset endpoint which
+    // just failed inside the native Android downloader.
+    openOfficialUrl(nativeDownload404
+      ? (release?.releaseUrl || release?.apkUrl || "")
+      : (release?.apkUrl || release?.releaseUrl || ""));
   };
   const openFireTvApk = () => openOfficialUrl(OFFICIAL_FIRE_TV_APK);
 
@@ -361,6 +370,15 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
           </div>
         )}
 
+        {nativeDownload404 && !installedOnFireTv && (
+          <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm leading-5 text-amber-100">
+            The built-in downloader received HTTP 404 from GitHub. Open the
+            official release page in your browser, expand Assets, and download
+            the Media-God-Android-Mobile.apk file. Install it over this app;
+            do not uninstall or clear its data.
+          </p>
+        )}
+
         {legacySigningError && !installedOnFireTv && (
           <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm leading-5 text-amber-100">
             The old Mobile updater could not confirm the APK signature. Some Android versions do not expose archive signing details. This does not prove the certificates differ. Do not uninstall Media God. Install the official signed APK over the existing app; Android itself will verify the certificate before replacing it. If Android rejects it, keep the original app installed.
@@ -373,7 +391,7 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
             onClick={openFallback}
             className="mt-4 min-h-12 w-full rounded-2xl bg-cyan-300 px-5 py-3 font-bold text-black outline-none hover:brightness-110 focus:ring-4 focus:ring-cyan-300/40"
           >
-            Open official Android Mobile APK
+            {nativeDownload404 ? "Open official Mobile release in browser" : "Open official Android Mobile APK"}
           </button>
         )}
 
