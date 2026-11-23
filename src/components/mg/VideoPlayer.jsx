@@ -9571,23 +9571,33 @@ export default function VideoPlayer({
       bestNonAioTorrentAutoplayCandidateIndex >= 0 &&
       bestNonAioTorrentAutoplayCandidateIndex !== activeIdx;
 
-    if (
+    // A user-selected direct source is authoritative. Previously the
+    // automatic English / provider handoff could still hold it on the HTML
+    // player while late discovery remained in the "searching" phase.
+    const explicitManualNativeSource = !isLive && (
+      manualSourceLockActive() ||
+      (source?.manualSourceSelection === true && (
+        active?.preferNativeVlc === true ||
+        Boolean(rdOverride?.src)
+      ))
+    );
+    if (!explicitManualNativeSource && (
       approvedStartupTakeoverPending ||
       englishStartupTakeoverPending ||
       aioStreamsStartupTakeoverPending
-    ) {
+    )) {
       return;
     }
 
-    // Native Sources reads the current web dropdown on demand. A qualified
-    // episode can therefore start while the remaining choices are discovered.
-    // Keep the existing complete-search behaviour for movies and unproven rows.
+    // A ready HTTP video selected from Sources can start the custom native
+    // LibVLC player immediately. Only automatic discovery remains gated.
+    // Live TV, webpages and unresolved magnets still use their own rules.
     const episodeReadyForNative = !isLive && playbackMediaType === "tv" && (
       activeStartupProven ||
       (Boolean(rdOverride?.src) && !rdResolving && !rdPolling && !rdPreparation)
     );
     if (!useNativePlayback || !nativePlaybackUrl ||
-        (sourceDiscoveryPending && !episodeReadyForNative)) {
+        (sourceDiscoveryPending && !episodeReadyForNative && !explicitManualNativeSource)) {
       return;
     }
 
