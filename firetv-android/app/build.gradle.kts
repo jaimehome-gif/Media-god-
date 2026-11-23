@@ -12,15 +12,15 @@ android {
         applicationId = "com.mediagod.firetv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 133
-        versionName = "1.4.128"
+        versionCode = 134
+        versionName = "1.4.129"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField(
             "String",
             "MEDIA_GOD_URL",
-            "\"https://underworldhub.co.uk/\""
+            "\"https://www.underworldhub.co.uk/\""
         )
     }
 

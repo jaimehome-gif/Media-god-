@@ -14,8 +14,8 @@ test("Fire TV edition preserves its own OAuth cookies across app restart", () =>
   assert.doesNotMatch(activity, /removeAllCookies|WebStorage\.getInstance\(\)\.deleteAllData/);
   const gradle = read("firetv-android/app/build.gradle.kts");
   assert.match(gradle, /applicationId = "com\.mediagod\.firetv"/);
-  assert.match(gradle, /versionCode = 133/);
-  assert.match(gradle, /versionName = "1\.4\.128"/);
+  assert.match(gradle, /versionCode = 134/);
+  assert.match(gradle, /versionName = "1\.4\.129"/);
 });
 
 test("Android WebView persists OAuth cookies without clearing app data", () => {
