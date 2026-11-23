@@ -1,5 +1,4 @@
 import http from "node:http";
-import { resolveMx } from "node:dns/promises";
 import { randomBytes, randomUUID, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import pg from "pg";
@@ -309,30 +308,4 @@ async function handler(req,res) {
 }
 http.createServer(handler).listen(port,"0.0.0.0",()=>{
   console.log("[identity] Jaime Home service started; email setup "+(mailReady?"ready":"pending"));
-  // One-time, read-only live mail routing check; safe to remove after verification.
-  const diagnostic=setTimeout(async()=>{
-    try {
-      const records=await resolveMx("underworldhub.co.uk");
-      console.log("[mail-mx-check] Public MX: "+(records.length?records.map(r=>r.priority+":"+r.exchange).join(","):"none"));
-      console.log("[mail-mx-check] Resend receiving MX published: "+records.some(r=>r.priority===10 && r.exchange.replace(/\.$/,"")==="receive-euw1.forge.rmta.net"));
-    } catch(e) {
-      console.log("[mail-mx-check] Public MX lookup: "+String(e.code||e.message).slice(0,100));
-    }
-    if(!process.env.RESEND_API_KEY)return;
-    const headers={Authorization:"Bearer "+process.env.RESEND_API_KEY};
-    try {
-      const r=await fetch("https://api.resend.com/domains",{headers,signal:AbortSignal.timeout(10000)});
-      if(!r.ok){console.log("[mail-mx-check] Resend domains API HTTP "+r.status);return;}
-      const info=await r.json();
-      const d=(info.data||[]).find(x=>x.name==="underworldhub.co.uk");
-      if(!d){console.log("[mail-mx-check] Domain not found in Resend");return;}
-      const detail=await fetch("https://api.resend.com/domains/"+encodeURIComponent(d.id),{headers,signal:AbortSignal.timeout(10000)});
-      if(detail.ok) {
-        const entry=await detail.json();
-        const inbound=(entry.records||[]).filter(x=>String(x.type).toUpperCase()==="MX" && String(x.value||x.content||"").includes("receive-euw1"));
-        console.log("[mail-mx-check] Resend domain status="+entry.status+" receiving="+String(entry.capabilities?.receiving||"unknown")+" incomingMX="+inbound.map(x=>x.status).join(","));
-      } else console.log("[mail-mx-check] Resend domain details HTTP "+detail.status);
-    } catch(e){console.log("[mail-mx-check] Resend status check: "+String(e.message||"error").slice(0,100));}
-  },2000);
-  diagnostic.unref?.();
 });
