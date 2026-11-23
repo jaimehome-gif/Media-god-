@@ -9,7 +9,7 @@ test("the two Android apps are independently versioned packages", () => {
   const tv = read("firetv-android/app/build.gradle.kts");
   const mobile = read("android-mobile/app/build.gradle.kts");
   assert.match(tv, /applicationId = "com\.mediagod\.firetv"/);
-  assert.match(tv, /versionName = "1\.4\.126"/);
+  assert.match(tv, /versionName = "1\.4\.127"/);
   assert.match(mobile, /applicationId = "com\.mediagod\.mobile"/);
   assert.match(mobile, /versionName = "1\.0\.97"/);
 });
