@@ -219,6 +219,9 @@ class MainActivity : Activity() {
                     currentTopLevelUrl = url.orEmpty()
                     super.onPageFinished(view, url)
                     injectFireTvBootstrap()
+                    // Persist OAuth cookies after the redirected login finishes.
+                    // This does not write session values into app preferences.
+                    runCatching { CookieManager.getInstance().flush() }
                     requestFocus()
                 }
             }
@@ -306,6 +309,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        runCatching { CookieManager.getInstance().flush() }
         fullscreenWakeRecovery.onPause()
         if (::appUpdater.isInitialized) {
             appUpdater.onHostPaused()
@@ -318,6 +322,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        runCatching { CookieManager.getInstance().flush() }
         exitEmbeddedFullscreen()
         if (nativeProgressReceiverRegistered) {
             runCatching { unregisterReceiver(nativeProgressReceiver) }

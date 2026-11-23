@@ -9,7 +9,7 @@ const apps = [
     dir: "firetv-android",
     packagePath: "com/mediagod/firetv",
     namespace: "com.mediagod.firetv",
-    expectedVersion: "1.4.126",
+    expectedVersion: "1.4.127",
     expectedMedia3: "1.8.0",
     expectedOrientation: "landscape",
   },

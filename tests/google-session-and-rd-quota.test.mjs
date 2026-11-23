@@ -5,6 +5,19 @@ import { readFileSync } from "node:fs";
 const read = (path) =>
   readFileSync(new URL("../" + path, import.meta.url), "utf8");
 
+test("Fire TV edition preserves its own OAuth cookies across app restart", () => {
+  const activity = read("firetv-android/app/src/main/java/com/mediagod/firetv/MainActivity.kt");
+  assert.match(activity, /override fun onPageFinished[\s\S]*?CookieManager\.getInstance\(\)\.flush\(\)/);
+  assert.match(activity, /override fun onPause[\s\S]*?CookieManager\.getInstance\(\)\.flush\(\)/);
+  assert.match(activity, /override fun onDestroy[\s\S]*?CookieManager\.getInstance\(\)\.flush\(\)/);
+  assert.match(activity, /setAcceptCookie\(true\)/);
+  assert.doesNotMatch(activity, /removeAllCookies|WebStorage\.getInstance\(\)\.deleteAllData/);
+  const gradle = read("firetv-android/app/build.gradle.kts");
+  assert.match(gradle, /applicationId = "com\.mediagod\.firetv"/);
+  assert.match(gradle, /versionCode = 132/);
+  assert.match(gradle, /versionName = "1\.4\.127"/);
+});
+
 test("Android WebView persists OAuth cookies without clearing app data", () => {
   const activity = read("android-mobile/app/src/main/java/com/mediagod/mobile/MainActivity.kt");
   assert.match(activity, /override fun onPageFinished[\s\S]*?CookieManager\.getInstance\(\)\.flush\(\)/);
