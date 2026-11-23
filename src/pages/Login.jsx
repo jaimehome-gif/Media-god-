@@ -104,7 +104,7 @@ export default function Login() {
       window.location.href = returnTo;
     } catch (err) {
       setError(err?.status === 401
-        ? "Email or password not recognised on the independent Media God account. If you just reset it, use the email address that received your reset link and the new password. Old Base44 accounts must be registered again."
+        ? "Email or password not recognised. You can use your existing email address with your new Media God account. Check your password using the eye icon, or reset it if necessary."
         : err.message || "Could not sign in");
     } finally {
       setLoading(false);
@@ -144,7 +144,7 @@ export default function Login() {
       subtitle="Sign in with the email and password you verified on Underworld Hub."
       footer={
         <>
-          Used Media God before the move, or joining for the first time?{" "}
+          Don’t have a Media God account yet?{" "}
           <Link
             to={"/register" + (returnTo !== "/" ? "?returnTo=" + encodeURIComponent(returnTo) : "")}
             className="text-primary font-medium hover:underline"
