@@ -30,34 +30,6 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
   await pool.query("CREATE TABLE IF NOT EXISTS support_messages (id UUID PRIMARY KEY, ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, author TEXT NOT NULL CHECK(author IN ('customer','support')), body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query("CREATE INDEX IF NOT EXISTS support_messages_ticket_idx ON support_messages(ticket_id,created_at)");
   await pool.query("CREATE TABLE IF NOT EXISTS support_inbound_messages (resend_email_id TEXT PRIMARY KEY, ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-  await pool.query("CREATE TABLE IF NOT EXISTS support_service_email_checks (name TEXT PRIMARY KEY, checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-  async function testMailSendingOnce() {
-    const address=String(process.env.SUPPORT_TEST_TO||"").trim().toLowerCase();
-    if (!emailRe.test(address) || address.length>254) return;
-    const runId = /^[a-z0-9-]{1,45}$/i.test(process.env.SUPPORT_TEST_RUN_ID || "")
-      ? process.env.SUPPORT_TEST_RUN_ID : "";
-    for (const [name,from,subject] of [
-      ["support_from",supportFrom,"Media God support reply delivery test"],
-      ["account_from",process.env.EMAIL_FROM,"Media God account email delivery test"]
-    ]) {
-      if (!from) continue;
-      const marker = runId ? runId+":"+name : name;
-      const previous=await pool.query("SELECT name FROM support_service_email_checks WHERE name=$1",[marker]);
-      if (previous.rows.length) continue;
-      try {
-        await emailSend(address, runId ? subject+" ("+runId+")" : "Media God email system test - "+name,
-          "This is an authorised test of Media God's independent email system. No action is required.\\n",{from});
-        await pool.query("INSERT INTO support_service_email_checks(name) VALUES($1) ON CONFLICT(name) DO NOTHING",[marker]);
-        console.log("[support] Outgoing email test accepted by Resend for "+marker);
-      } catch {
-        console.error("[support] Outgoing email test was not accepted for "+marker);
-      }
-    }
-  }
-  if (process.env.SUPPORT_TEST_TO) {
-    const run=setTimeout(()=>testMailSendingOnce().catch(()=>console.error("[support] Could not complete email diagnostic")),3500);
-    run.unref?.();
-  }
   const isAdmin = u => adminEmails.has(String(u?.email || "").toLowerCase());
   const admin = async req => {
     const user = await requireUser(req);
