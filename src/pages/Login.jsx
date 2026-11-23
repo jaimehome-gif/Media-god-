@@ -268,6 +268,14 @@ export default function Login() {
         ))}
       </div>
 
+      {!nativeMediaGodApp && Object.values(availableProviders).some(Boolean) && (
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">
+          Already have a Media God account? Sign in with your existing method
+          first, then use Settings → Connect sign-in methods before using a new
+          Facebook, Microsoft or Apple login. This keeps your saved data in
+          the same account.
+        </p>
+      )}
       {socialStatus === "ready" && !Object.values(availableProviders).some(Boolean) && (
         <p role="status" className="mb-4 text-xs text-muted-foreground">
           Use email sign-in while social sign-in is unavailable.
