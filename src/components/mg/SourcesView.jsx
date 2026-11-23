@@ -893,6 +893,7 @@ export default function SourcesView() {
             src: directUrl,
             url: directUrl,
             audioCodec: audio?.codec || audio?.Codec || "",
+            preferNativeVlc: true,
             playbackPriority: riskyAudio ? 5 : 30,
           }
         : null;
@@ -903,6 +904,7 @@ export default function SourcesView() {
             src: transcodeUrl,
             url: transcodeUrl,
             audioCodec: "aac",
+            preferNativeVlc: true,
             playbackPriority: riskyAudio ? 40 : 15,
           }
         : null;
@@ -967,6 +969,7 @@ export default function SourcesView() {
             url: magnet,
             magnet,
             addon: "Sources",
+            preferNativeVlc: true,
           },
         ],
       });
@@ -984,7 +987,7 @@ export default function SourcesView() {
             <h1 className="text-xl font-bold text-white 3xl:text-2xl">Sources</h1>
           </div>
           <p className="mt-1 max-w-3xl text-sm text-white/45">
-            Add Live TV playlists/direct feeds, magnets or torrent hashes, and personal Plex, Jellyfin or Emby servers. Magnet sources use Combined Debrid automatically; personal-server credentials stay on this device.
+            Add Live TV playlists/direct feeds, magnets or torrent hashes, and personal Plex, Jellyfin or Emby servers. Magnet sources use Combined Debrid automatically; playable personal-server files open in Media God’s built-in VLC player. Personal-server credentials stay on this device.
           </p>
         </div>
 
