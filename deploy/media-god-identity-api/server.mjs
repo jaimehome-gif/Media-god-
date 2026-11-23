@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import pg from "pg";
 import { createSocialOAuth } from "./socialOAuth.mjs";
 import { createBase44Bridge } from "./base44Bridge.mjs";
+import { createBase44Recovery } from "./base44Recovery.mjs";
 import { createSupport } from "./support.mjs";
 
 const { Pool } = pg;
@@ -149,6 +150,8 @@ const socialOAuth = createSocialOAuth({pool,issueSession,requireUser,limitRate})
 await socialOAuth.initialize();
 const base44Bridge = createBase44Bridge({pool,requireUser,issueSession,limitRate,respond});
 await base44Bridge.initialize();
+const base44Recovery = createBase44Recovery({pool,issueSession,emailSend,hashPass,sha,token,limitRate,respond});
+await base44Recovery.initialize();
 const support = await createSupport({pool,requireUser,emailSend,site});
 
 async function authentication(req,res,path,body,origin) {
@@ -341,6 +344,7 @@ async function handler(req,res) {
     if (path==="/auth/providers" || path.startsWith("/auth/oauth/") || path.startsWith("/auth/device/")) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
     }
+    if (path === "/auth/base44/recover/start" || path === "/auth/base44/recover/complete") return await base44Recovery.handle(req,res,path,body,origin);
     if (path === "/auth/base44/link" || path === "/auth/base44/exchange") return await base44Bridge.handle(req,res,path,body,origin);
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
     if (path.startsWith("/entities/")) return await entityRoute(req,res,path,body,origin);
