@@ -12,7 +12,7 @@ test("a measured film playhead takes priority over an older OnlyFlix bookmark", 
     mediaType: "movie", source_type: "embed", progress: 1574, duration: 7200,
     video_url: "mgembed:old-onlyflix",
   }), true);
-  assert.match(row, /if \(!hasSavedSeekPosition && bookmark && player\.playSavedEmbed/);
+  assert.match(row, /if \(!hasSavedSeekPosition && bookmark && !nativeResume && player\.playSavedEmbed/);
   assert.match(row, /!hasSavedSeekPosition && explicitOnlyFlixResume/);
   assert.match(row, /startTime:\s*Number\(item\.progress\s*\|\|\s*0\)/);
 });
