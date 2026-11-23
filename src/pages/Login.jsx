@@ -138,15 +138,15 @@ export default function Login() {
     <AuthLayout
       icon={LogIn}
       title="Welcome back"
-      subtitle="Log in to your account"
+      subtitle="Sign in with the email and password you verified on Underworld Hub."
       footer={
         <>
-          Don't have an account?{" "}
+          Used Media God before the move, or joining for the first time?{" "}
           <Link
             to={"/register" + (returnTo !== "/" ? "?returnTo=" + encodeURIComponent(returnTo) : "")}
             className="text-primary font-medium hover:underline"
           >
-            Create one
+            Create an Underworld Hub account
           </Link>
         </>
       }
@@ -177,7 +177,7 @@ export default function Login() {
 
       {socialStatus === "ready" && !Object.values(availableProviders).some(Boolean) && (
         <p role="status" className="mb-4 text-xs text-muted-foreground">
-          Google, Facebook, Microsoft and Apple sign-in will appear here as soon as the new account connections are activated.
+          Use email sign-in while social sign-in is unavailable.
         </p>
       )}
       {socialStatus === "unavailable" && (
