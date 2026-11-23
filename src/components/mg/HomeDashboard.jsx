@@ -1,5 +1,6 @@
 import useBrowseReturn from "@/components/mg/useBrowseReturn";
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodVod } from "@/components/mg/mediaGodVodLaunch";
 import { profiledLibrary } from "@/components/mg/householdProfiles";
 import { catalogueSourceChecker, showBrowseTitleWithSourceEvidence } from "@/components/mg/catalogueSourceCheckerClient";
 import { createRollingSourceChecks } from "@/components/mg/rollingSourceChecks";
@@ -999,12 +1000,9 @@ export default function HomeDashboard({ onOpenTvService }) {
   const watchFeatured = (item) => {
     const mediaType = mediaTypeOf(item);
 
-    /*
-     * The Home green Play button is an explicit movie playback action.
-     * Launch OnlyFlix directly so Fire TV never opens the generic source
-     * picker first. TV continues through the existing detail flow.
-     */
-    if (mediaType === "movie" && player?.playOnlyFlix) {
+    // Featured movies open Media God's own player on every platform.
+    // TV titles still go to the exact-episode selection screen.
+    if (mediaType === "movie" && player?.play) {
       const media = {
         ...item,
         id: item?.id ?? item?.tmdb_id ?? item?.tmdbId,
@@ -1015,9 +1013,7 @@ export default function HomeDashboard({ onOpenTvService }) {
       };
 
       if (launchFireTvCardPlay(player, media)) return;
-      if (player.playOnlyFlix(media)) {
-        return;
-      }
+      if (launchMediaGodVod(player, media)) return;
     }
 
     open(item, mediaType);
