@@ -30,8 +30,9 @@ test("every history card uses in-player source control rather than a second play
   assert.match(player, /<InPlayerSourceDrawer/);
 });
 
-test("normal Play keeps its existing OnlyFlix semantics distinct from Continue Watching", () => {
-  assert.match(row, /savedSourceType === "onlyflix"/);
-  assert.match(row, /explicitOnlyFlixResume/);
-  assert.match(row, /player\.playOnlyFlix\(/);
+test("OnlyFlix remains an explicit Web players backup, not automatic Resume", () => {
+  const resume = row.slice(row.indexOf("  const openDetail = async (item) => {"), row.indexOf("  // An explicit Players action"));
+  assert.doesNotMatch(resume, /player\.playOnlyFlix|player\.playSavedEmbed/);
+  assert.match(row, /const launched = player\.playOnlyFlix\?\.\(\{/);
+  assert.match(row, /data-mg-continue-player-options="true"/);
 });
