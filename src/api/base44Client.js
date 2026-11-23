@@ -68,6 +68,30 @@ const auth = {
   async getSocialProviders() {
     return call(IDENTITY_API,"/auth/providers",{token:"",timeoutMs:8000});
   },
+  async startDeviceSocialLogin(provider) {
+    return call(IDENTITY_API,"/auth/device/start",{
+      method:"POST",body:{provider},token:"",timeoutMs:15000
+    });
+  },
+  async pollDeviceSocialLogin(deviceToken) {
+    const result=await call(IDENTITY_API,"/auth/device/status",{
+      method:"POST",body:{device_token:deviceToken},token:"",timeoutMs:12000
+    });
+    if(result.status==="approved" && result.access_token){
+      saveIndependentSessionToken(result.access_token);
+    }
+    return result;
+  },
+  async verifyDeviceSocialLogin(userCode) {
+    return call(IDENTITY_API,"/auth/device/verify",{
+      method:"POST",body:{user_code:userCode},timeoutMs:10000
+    });
+  },
+  async approveDeviceSocialLogin(userCode) {
+    return call(IDENTITY_API,"/auth/device/approve",{
+      method:"POST",body:{user_code:userCode},timeoutMs:10000
+    });
+  },
   loginWithProvider(provider,returnTo) {
     if(!["google","facebook","microsoft","apple"].includes(provider)) {
       throw new Error("Unsupported social login provider");
