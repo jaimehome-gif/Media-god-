@@ -8,6 +8,7 @@ import React, {
 } from "react";
 
 import { ArrowLeft, Mic } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import Navbar from "@/components/mg/Navbar";
 import HomeDashboard from "@/components/mg/HomeDashboard";
@@ -507,6 +508,7 @@ class DetailErrorBoundary
 }
 
 function MediaGodApp() {
+  const navigate = useNavigate();
   const {
     isOpen:
       playerOpen,
@@ -1116,6 +1118,10 @@ function MediaGodApp() {
             onSelect={(
               nextView
             ) => {
+              if (nextView === "support") {
+                navigate("/support");
+                return;
+              }
               setSearchOpen(
                 false
               );
