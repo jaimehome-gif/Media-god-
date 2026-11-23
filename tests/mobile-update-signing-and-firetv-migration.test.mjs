@@ -27,6 +27,16 @@ test("Fire TV phone-edition installations get the dedicated TV APK, not the Mobi
   assert.match(dialog, /Keep the old Mobile app until you have tested the TV version/);
 });
 
+test("HTTP 404 native APK download shows a safe browser release fallback", () => {
+  const dialog = read("src/components/mg/AndroidMobileAppUpdateNotice.jsx");
+  assert.match(dialog, /nativeDownload404\s*=\s*\/update download failed with HTTP 404\/i/);
+  assert.match(dialog, /legacySigningError \|\| nativeDownload404 \|\| !nativeInfo\?\.selfUpdateSupported/);
+  assert.match(dialog, /nativeDownload404[\s\S]*?release\?\.releaseUrl \|\| release\?\.apkUrl/);
+  assert.match(dialog, /expand Assets/);
+  assert.match(dialog, /Open official Mobile release in browser/);
+  assert.match(dialog, /do not uninstall or clear its data/);
+});
+
 test("old false signing errors explain the safe manual path without ignoring Android signature enforcement", () => {
   assert.ok(isMobileUpdaterSignatureError("Downloaded APK signing identity does not match Media God Mobile."));
   assert.equal(isMobileUpdaterSignatureError("Update download failed: HTTP 500"), false);
