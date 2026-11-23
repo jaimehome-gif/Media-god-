@@ -12,6 +12,7 @@ import {
   Heart,
   Home as HomeIcon,
   LogOut,
+  LifeBuoy,
   Mic,
   MonitorPlay,
   Newspaper,
@@ -46,6 +47,7 @@ const NAV = [
   { id: "favorites", label: "Favorites", icon: Heart },
   { id: "downloads", label: "Downloads", icon: Download },
   { id: "addons", label: "Addons", icon: Puzzle },
+  { id: "support", label: "Support & Updates", icon: LifeBuoy },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
