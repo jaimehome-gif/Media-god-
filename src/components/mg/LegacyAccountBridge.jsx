@@ -74,7 +74,7 @@ export default function LegacyAccountBridge({ mode = "login" }) {
       <p className="mt-2 mb-3 text-xs text-muted-foreground">
         {linking
           ? "Enter your old Media God credentials to prove you own both accounts. This does not delete or overwrite either account."
-          : "Original accounts must be securely linked to Underworld Hub before they can sign in here. If you haven't linked yours, use your Underworld Hub login first and visit Settings."}
+          : "Sign in with your original Media God email and password. On your first visit, we will email a one-time verification code to link the accounts safely."}
       </p>
       {!challenge && <form onSubmit={submit} className="flex flex-col gap-2">
         <label className="text-xs" htmlFor={"legacy-email-" + mode}>Original account email</label>
@@ -87,7 +87,7 @@ export default function LegacyAccountBridge({ mode = "login" }) {
       </form>}
       {challenge && <form onSubmit={completeRecovery} className="flex flex-col gap-2">
         <label className="text-xs" htmlFor="legacy-email-code">Six-digit code from your email</label>
-        <input id="legacy-email-code" inputMode="numeric" type="text" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\\D/g, ""))} required className="rounded-md border border-white/20 bg-transparent p-2 text-sm" />
+        <input id="legacy-email-code" inputMode="numeric" type="text" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ""))} required className="rounded-md border border-white/20 bg-transparent p-2 text-sm" />
         <button type="submit" disabled={working} className="rounded-md border border-white/25 p-2 text-sm font-semibold disabled:opacity-50">{working ? "Checking code…" : "Verify email and recover account"}</button>
         <button type="button" onClick={() => { setChallenge(null); setCode(""); setPassword(""); setMessage(""); }} className="text-xs underline">Cancel recovery</button>
       </form>}
