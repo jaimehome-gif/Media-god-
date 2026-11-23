@@ -17,6 +17,6 @@ test("password reset returns to the verified independent website rather than the
   assert.match(reset, /base44\.auth\.resetPassword\(\{ resetToken, newPassword \}\)/);
   const login = read("src/pages/Login.jsx");
   assert.match(login, /Password updated\. Please sign in using your new password/);
-  assert.match(login, /You can use your existing email address with your new Media God account/);
+  assert.match(login, /You do not need a new account/);
   assert.doesNotMatch(login, /Old Base44 accounts must be registered again/);
 });
