@@ -171,8 +171,10 @@ export default function FireTvAppUpdateNotice({ enabled = true }) {
     updateState.status === "error" &&
     /signing identity does not match/i.test(updateState.message);
 
+  const nativeDownloadFailed = updateState.status === "error" &&
+    !/already running/i.test(updateState.message);
   const showDownloaderMigration =
-    !canSelfUpdate || signatureMigration || legacySignatureCheckError;
+    !canSelfUpdate || signatureMigration || legacySignatureCheckError || nativeDownloadFailed;
 
   const updateBusy = [
     "downloading",
