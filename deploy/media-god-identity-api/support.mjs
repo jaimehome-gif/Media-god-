@@ -105,6 +105,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
     const sender = String(email.from || event.data.from || "");
     const senderAddress = (sender.match(/<([^>]+)>/)?.[1] || sender).trim().toLowerCase();
     if (!emailRe.test(senderAddress) || senderAddress.length>254) return respond(res,200,{ok:true,ignored:true},origin);
+    if (["support@underworldhub.co.uk","no-reply@underworldhub.co.uk"].includes(senderAddress)) return respond(res,200,{ok:true,ignored:true},origin);
     const subject = clean(email.subject || event.data.subject || "Email support request",140) || "Email support request";
     const attachmentText = (email.attachments?.length||event.data.attachments?.length) ? "\n\n[Attachments are available in the Resend receiving dashboard.]" : "";
     const details = clean(email.text || "[Rich-text email: view the original in Resend Receiving]",4700) + attachmentText;
