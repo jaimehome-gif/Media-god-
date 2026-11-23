@@ -16,7 +16,7 @@ for (const platform of ["android-mobile", "firetv-android"]) {
     assert.ok(guard.includes('current.port == expected.port'));
     assert.ok(guard.includes('current.scheme.equals(expected.scheme, ignoreCase = true)'));
     assert.ok(guard.includes('expected.scheme.equals("https", ignoreCase = true)'));
-    assert.doesNotMatch(guard, /endsWith\\(/, "bridge trust must not accept attacker-controlled subdomains");
+    assert.ok(!guard.includes("endsWith("), "bridge trust must not accept attacker-controlled subdomains");
   });
 }
 
