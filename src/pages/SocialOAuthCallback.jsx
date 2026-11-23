@@ -20,7 +20,15 @@ export default function SocialOAuthCallback() {
     }
     let active = true;
     base44.auth.exchangeSocialTicket(ticket).then(() => {
-      if (active) window.location.replace("/");
+      if (!active) return;
+      let target = "/";
+      try {
+        if (window.sessionStorage.getItem("mg:social-return-path") === "/device-login") {
+          target = "/device-login";
+        }
+        window.sessionStorage.removeItem("mg:social-return-path");
+      } catch { /* Never trust arbitrary external redirect destinations. */ }
+      window.location.replace(target);
     }).catch(error => {
       if (!active) return;
       setStatus("error");
