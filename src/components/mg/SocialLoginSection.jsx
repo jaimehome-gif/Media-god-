@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { isNativeFireTvPlayerAvailable } from "@/components/mg/nativeFireTvBridge";
 import GoogleIcon from "@/components/GoogleIcon";
 
 export const FacebookIcon = ({ className = "w-5 h-5" }) => (
@@ -33,13 +35,76 @@ export const SOCIAL_LOGIN_PROVIDERS = [
 ];
 
 /*
- * Login.jsx and Register.jsx import the shared provider definitions above.
- * Settings used to render a second copy of the same social-login controls,
- * which duplicated the sign-in experience after a user was already logged in.
- * Keep the default export for backwards compatibility with SettingsView, but
- * deliberately render nothing there so social sign-in exists only on the
- * normal login/register screens.
+ * Linking is different from signing in. The existing verified Media God
+ * account authorises a two-minute one-time link intent; a provider OAuth
+ * callback can attach only its verified subject to that account.
+ * Never merge accounts based on Facebook/Apple/Microsoft email assertions.
  */
 export default function SocialLoginSection() {
-  return null;
+  const [account, setAccount] = useState(null);
+  const [providers, setProviders] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [linking, setLinking] = useState("");
+  const [error, setError] = useState("");
+  const nativeApp = isNativeFireTvPlayerAvailable();
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.allSettled([base44.auth.me(),base44.auth.getSocialProviders()])
+      .then(([identity,configuration]) => {
+        if (!mounted) return;
+        if (identity.status === "fulfilled") setAccount(identity.value);
+        if (configuration.status === "fulfilled") {
+          setProviders((configuration.value?.providers || []).filter(p => p.configured === true));
+        }
+      }).finally(() => { if (mounted) setReady(true); });
+    return () => { mounted = false; };
+  }, []);
+
+  if (!ready || !account) return null;
+
+  const linkProvider = async provider => {
+    if (linking) return;
+    setError("");
+    setLinking(provider);
+    try {
+      await base44.auth.connectSocialProvider(provider);
+      // The browser is redirected to the provider; its callback completes
+      // the same account link. Never mark it connected before that proof.
+    } catch (cause) {
+      setLinking("");
+      setError(cause?.message || "Could not start social account connection.");
+    }
+  };
+
+  return (
+    <section className="mb-6 rounded-xl border border-white/10 bg-mg-card p-4" aria-label="Connect social sign-in">
+      <h2 className="text-base font-semibold text-white">Connect sign-in methods</h2>
+      <p className="mt-1 text-xs leading-5 text-white/60">
+        Link other sign-in providers to the <strong className="text-white">{account.email}</strong> account
+        so your watch history and Real-Debrid settings stay with the same Media God user.
+      </p>
+      {nativeApp ? (
+        <p className="mt-3 text-xs text-amber-200">
+          Connect extra providers from Media God Settings at www.underworldhub.co.uk
+          in Chrome or another normal browser, then use browser approval to sign in on this device.
+        </p>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {SOCIAL_LOGIN_PROVIDERS.filter(p => providers.some(x => x.id === p.id)).map(({id,label,Icon}) => (
+            <button key={id} type="button"
+              onClick={() => void linkProvider(id)} disabled={Boolean(linking)}
+              className="flex min-h-11 items-center gap-2 rounded-lg border border-mg-green/30 bg-mg-green/10 px-3 py-2 text-sm font-semibold text-mg-green hover:bg-mg-green/20 disabled:opacity-50">
+              <Icon className="h-4 w-4"/>
+              {linking === id ? "Connecting…" : "Connect " + label}
+            </button>
+          ))}
+          {!providers.length && (
+            <p className="text-xs text-white/50">Social providers appear here when their independent Railway credentials are configured.</p>
+          )}
+        </div>
+      )}
+      {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
+    </section>
+  );
 }
