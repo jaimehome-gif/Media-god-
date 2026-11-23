@@ -1,0 +1,43 @@
+name: Media God Auth Bridge Validation
+
+on:
+  push:
+    branches:
+      - repair/base44-account-bridge-20261123
+    paths:
+      - 'deploy/media-god-identity-api/**'
+      - 'src/api/legacyBase44Bridge.js'
+      - 'src/components/mg/LegacyAccountBridge.jsx'
+      - 'src/pages/Login.jsx'
+      - 'src/components/mg/SettingsView.jsx'
+      - 'tests/base44-*.test.mjs'
+      - '.github/workflows/auth-bridge-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auth-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Verify bridge and identity API syntax
+        run: |
+          node --check deploy/media-god-identity-api/server.mjs
+          node --check deploy/media-god-identity-api/base44Bridge.mjs
+          node --check deploy/media-god-identity-api/base44Recovery.mjs
+          node --check src/api/legacyBase44Bridge.js
+      - name: Run focused security tests
+        run: node --test tests/base44-account-bridge.test.mjs tests/base44-recovery.test.mjs
+      - name: Compile website
+        run: npm run build
+      - name: Check identity API production Docker build
+        run: docker build -t media-god-auth-bridge-check deploy/media-god-identity-api

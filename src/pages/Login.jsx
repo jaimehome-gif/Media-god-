@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import LegacyAccountBridge from "@/components/mg/LegacyAccountBridge";
 import PasswordVisibilityInput from "@/components/mg/PasswordVisibilityInput";
 import { SOCIAL_LOGIN_PROVIDERS } from "@/components/mg/SocialLoginSection";
 import { safeReturnTo } from "@/lib/authReturnTo";
@@ -366,6 +367,7 @@ export default function Login() {
           We'll remember this on this device. You can sign in later from Settings.
         </p>
       </div>
+      <LegacyAccountBridge mode="login" />
       <div className="mt-4 text-center"><Link to="/support" className="text-sm font-medium text-primary hover:underline">Need help? Contact Media God Support</Link></div>
     </AuthLayout>
   );
