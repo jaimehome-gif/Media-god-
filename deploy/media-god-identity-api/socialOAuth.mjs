@@ -7,6 +7,11 @@ const sha = x => createHash("sha256").update(String(x)).digest("hex");
 const b64u = x => createHash("sha256").update(String(x)).digest("base64url");
 const COOKIE = "mg_oauth_browser";
 const MAX_OAUTH_BODY=20000;
+const DEVICE_ALPHABET="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const deviceCode=()=>Array.from(randomBytes(8),n=>DEVICE_ALPHABET[n%DEVICE_ALPHABET.length]).join("");
+const normalDeviceCode=raw=>String(raw||"").toUpperCase().replace(/[\s-]/g,"");
+const validDeviceCode=code=>/^[A-HJ-NP-Z2-9]{8}$/.test(code);
+
 const scopes = {
   google:"openid email profile",
   microsoft:"openid email profile",
@@ -213,16 +218,84 @@ export async function associateSocialAccount(pool,person) {
   finally{conn.release();}
 }
 
-export function createSocialOAuth({pool,issueSession}) {
+export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
   async function initialize() {
     await pool.query("CREATE TABLE IF NOT EXISTS identity_social_accounts(provider TEXT NOT NULL,subject TEXT NOT NULL,user_id UUID NOT NULL REFERENCES identity_accounts(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(provider,subject),UNIQUE(user_id,provider))");
     await pool.query("CREATE TABLE IF NOT EXISTS identity_oauth_states(state_hash TEXT PRIMARY KEY,browser_hash TEXT NOT NULL,provider TEXT NOT NULL,verifier TEXT NOT NULL,nonce TEXT NOT NULL,return_origin TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL)");
     await pool.query("CREATE TABLE IF NOT EXISTS identity_oauth_tickets(ticket_hash TEXT PRIMARY KEY,user_id UUID NOT NULL REFERENCES identity_accounts(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL)");
+    // Explicit approval binds an existing website session to a short-lived
+    // random app token. The app never handles a Google OAuth WebView.
+    await pool.query("CREATE TABLE IF NOT EXISTS identity_device_logins(token_hash TEXT PRIMARY KEY,code_hash TEXT UNIQUE NOT NULL,provider TEXT NOT NULL,approved_user UUID REFERENCES identity_accounts(id) ON DELETE CASCADE,approved_at TIMESTAMPTZ,expires_at TIMESTAMPTZ NOT NULL)");
+
   }
   const providers=()=>SOC.map(id=>({id,configured:configured(id)}));
   async function handle(req,res,path,body,origin,respond) {
     if(path==="/auth/providers"&&req.method==="GET") {
       return respond(res,200,{providers:providers()},origin);
+    }
+    if(path==="/auth/device/start"&&req.method==="POST") {
+      const provider=String(body?.provider||"").trim().toLowerCase();
+      if(!SOC.includes(provider)||!configured(provider)) {
+        return respond(res,503,{error:"This social provider is not yet configured"},origin);
+      }
+      limitRate(req,"device-start");
+      await pool.query("DELETE FROM identity_device_logins WHERE expires_at<NOW()");
+      // A code has no permissions itself; only an authenticated owner on the
+      // website can approve it. The unguessable token stays on the APK.
+      for(let attempt=0;attempt<4;attempt++){
+        const code=deviceCode(), deviceToken=safeToken();
+        const added=await pool.query(
+          "INSERT INTO identity_device_logins(token_hash,code_hash,provider,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL '10 minutes') ON CONFLICT DO NOTHING RETURNING token_hash",
+          [sha(deviceToken),sha(code),provider]);
+        if(added.rows.length) return respond(res,200,{
+          user_code:code,device_token:deviceToken,expires_in:600,interval:3,
+          verification_url:site+"/device-login",provider,
+        },origin);
+      }
+      return respond(res,503,{error:"Could not reserve a sign-in code. Try again."},origin);
+    }
+    if(path==="/auth/device/status"&&req.method==="POST") {
+      const deviceToken=String(body?.device_token||"");
+      if(!/^[A-Za-z0-9_-]{40,100}$/.test(deviceToken)){
+        return respond(res,400,{error:"Invalid sign-in session"},origin);
+      }
+      const consumed=await pool.query(
+        "DELETE FROM identity_device_logins WHERE token_hash=$1 AND expires_at>NOW() AND approved_user IS NOT NULL RETURNING approved_user",
+        [sha(deviceToken)]);
+      if(consumed.rows[0]){
+        const user=await pool.query("SELECT * FROM identity_accounts WHERE id=$1 AND verified_at IS NOT NULL",
+          [consumed.rows[0].approved_user]);
+        if(!user.rows[0]) return respond(res,401,{error:"Account not verified"},origin);
+        return respond(res,200,{status:"approved",...(await issueSession(user.rows[0]))},origin);
+      }
+      const pending=await pool.query(
+        "SELECT provider FROM identity_device_logins WHERE token_hash=$1 AND approved_user IS NULL AND expires_at>NOW()",
+        [sha(deviceToken)]);
+      return pending.rows[0]
+        ? respond(res,200,{status:"pending"},origin)
+        : respond(res,410,{error:"Device sign-in expired or already completed"},origin);
+    }
+    if(path==="/auth/device/verify"&&req.method==="POST") {
+      const owner=await requireUser(req);
+      limitRate(req,"device-verify",owner.id);
+      const code=normalDeviceCode(body?.user_code);
+      if(!validDeviceCode(code)) return respond(res,400,{error:"Enter the eight-character code from Media God"},origin);
+      const check=await pool.query(
+        "SELECT provider FROM identity_device_logins WHERE code_hash=$1 AND approved_user IS NULL AND expires_at>NOW()",
+        [sha(code)]);
+      if(!check.rows[0]) return respond(res,404,{error:"Code not found or expired. Request a new code in the app."},origin);
+      return respond(res,200,{ready:true,provider:check.rows[0].provider},origin);
+    }
+    if(path==="/auth/device/approve"&&req.method==="POST") {
+      const owner=await requireUser(req);
+      limitRate(req,"device-approve",owner.id);
+      const code=normalDeviceCode(body?.user_code);
+      if(!validDeviceCode(code)) return respond(res,400,{error:"Invalid device code"},origin);
+      const claimed=await pool.query(
+        "UPDATE identity_device_logins SET approved_user=$2,approved_at=NOW() WHERE code_hash=$1 AND approved_user IS NULL AND expires_at>NOW() RETURNING provider",
+        [sha(code),owner.id]);
+      if(!claimed.rows[0]) return respond(res,404,{error:"Code already used or expired"},origin);
+      return respond(res,200,{ok:true,provider:claimed.rows[0].provider},origin);
     }
     const routes=/^\/auth\/oauth\/(google|facebook|microsoft|apple)\/(start|callback)$/.exec(path);
     if(routes) {
