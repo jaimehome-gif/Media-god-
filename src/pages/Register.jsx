@@ -9,6 +9,7 @@ import AuthLayout from "@/components/AuthLayout";
 import PasswordVisibilityInput from "@/components/mg/PasswordVisibilityInput";
 import { SOCIAL_LOGIN_PROVIDERS } from "@/components/mg/SocialLoginSection";
 import { safeReturnTo } from "@/lib/authReturnTo";
+import { isNativeFireTvPlayerAvailable } from "@/components/mg/nativeFireTvBridge";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Register() {
@@ -73,6 +74,12 @@ export default function Register() {
 
     try {
       if (!availableProviders[provider]) throw new Error("This social provider has not been connected yet.");
+      // Native Google/other OAuth cannot run inside Android WebView.
+      // The sign-in page provides a browser-approved device pairing flow.
+      if (isNativeFireTvPlayerAvailable()) {
+        window.location.assign("/login");
+        return;
+      }
       base44.auth.loginWithProvider(provider, window.location.origin);
     } catch (err) {
       setSocialLoading(null);
