@@ -27,7 +27,8 @@ const configured = provider => {
   const upper=provider.toUpperCase();
   if (!SOC.includes(provider)) return false;
   if (provider==="apple") return Boolean(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID &&
-    process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY);
+    process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY &&
+    process.env.APPLE_REDIRECT_URI==="https://auth.underworldhub.co.uk/auth/oauth/apple/callback");
   return Boolean(process.env[upper+"_CLIENT_ID"] && process.env[upper+"_CLIENT_SECRET"]);
 };
 // Align OAuth errors and interrupted sign-ins with the verified independent
