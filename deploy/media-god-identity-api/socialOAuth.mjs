@@ -131,11 +131,24 @@ async function verifiedIdentity(provider,tokens,config,nonce) {
     if (payload.nonce!==nonce) throw Error("OAuth nonce mismatch");
     if (!payload.sub || typeof payload.sub!=="string") throw Error("Provider subject missing");
     const verifiedEmail=payload.email_verified===true || payload.email_verified==="true";
-    return sanitizeProfile({
+    const profile=sanitizeProfile({
       email:payload.email||"",
       emailVerified:verifiedEmail,
       name:payload.name||[payload.given_name,payload.family_name].filter(Boolean).join(" ")
     },provider,payload.sub);
+    // Email linking is allowed only for a Google-issued, cryptographically
+    // verified, nonce-bound identity. Gmail addresses are controlled by Google;
+    // Workspace domains are trusted only when Google asserts their hosted
+    // domain in the signed ID token. A Google login using a third-party
+    // consumer email must not claim an existing password account by email.
+    const domain=profile.verifiedEmail.split("@")[1]||"";
+    const hostedDomain=String(payload.hd||"").trim().toLowerCase();
+    return {
+      ...profile,
+      trustedGoogleMailbox:provider==="google" && Boolean(profile.verifiedEmail) &&
+        (domain==="gmail.com" || domain==="googlemail.com" ||
+          (Boolean(hostedDomain) && hostedDomain===domain)),
+    };
   }
   // Facebook Login is OAuth (not OpenID Connect): verify the exchanged token
   // is valid, belongs to our Meta app, and names the same person returned by
@@ -167,12 +180,21 @@ async function associate(pool,person) {
       "SELECT a.* FROM identity_social_accounts s JOIN identity_accounts a ON a.id=s.user_id WHERE s.provider=$1 AND s.subject=$2",
       [person.provider,person.subject]);
     if(linked.rows[0]){await conn.query("COMMIT");return linked.rows[0];}
-    // Never silently merge with an existing account based on an email
-    // assertion. If already registered under another login method, create a
-    // distinct provider-bound account with a reserved synthetic address.
+    // Verified Google-owned mailboxes may sign into the SAME already
+    // verified Media God account as email/password. Never associate by an
+    // unverified email, Facebook, or a third-party Google account address.
+    // A provider subject already bound to another account is handled above
+    // without silently moving its data or its existing sessions.
     const synthetic="social-"+sha(person.provider+":"+person.subject).slice(0,40)+"@login.media-god.invalid";
     let account=null;
-    if(person.verifiedEmail) {
+    if(person.trustedGoogleMailbox && person.verifiedEmail) {
+      await conn.query("SELECT pg_advisory_xact_lock(hashtext($1))",["trusted-google-email:"+person.verifiedEmail]);
+      const existing=await conn.query(
+        "SELECT * FROM identity_accounts WHERE email=$1 AND verified_at IS NOT NULL FOR UPDATE",
+        [person.verifiedEmail]);
+      account=existing.rows[0]||null;
+    }
+    if(!account && person.verifiedEmail) {
       const real=await conn.query(
         "INSERT INTO identity_accounts(id,email,password_hash,full_name,verified_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(email) DO NOTHING RETURNING *",
         [randomUUID(),person.verifiedEmail,"social-only:"+sha(safeToken()),person.fullName]);
