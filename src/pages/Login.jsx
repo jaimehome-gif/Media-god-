@@ -264,6 +264,7 @@ export default function Login() {
           We'll remember this on this device. You can sign in later from Settings.
         </p>
       </div>
+      <div className="mt-4 text-center"><Link to="/support" className="text-sm font-medium text-primary hover:underline">Need help? Contact Media God Support</Link></div>
     </AuthLayout>
   );
 }
