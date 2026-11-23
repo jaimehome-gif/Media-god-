@@ -138,18 +138,15 @@ async function verifiedIdentity(provider,tokens,config,nonce) {
       emailVerified:verifiedEmail,
       name:payload.name||[payload.given_name,payload.family_name].filter(Boolean).join(" ")
     },provider,payload.sub);
-    // Email linking is allowed only for a Google-issued, cryptographically
-    // verified, nonce-bound identity. Gmail addresses are controlled by Google;
-    // Workspace domains are trusted only when Google asserts their hosted
-    // domain in the signed ID token. A Google login using a third-party
-    // consumer email must not claim an existing password account by email.
+    // Only Gmail/Googlemail addresses may be joined automatically after
+    // Google verifies the signed ID token, email_verified and OAuth nonce.
+    // Workspace and other third-party email addresses can be reassigned, so
+    // they must use an explicit account-link flow rather than auto-merging.
     const domain=profile.verifiedEmail.split("@")[1]||"";
-    const hostedDomain=String(payload.hd||"").trim().toLowerCase();
     return {
       ...profile,
       trustedGoogleMailbox:provider==="google" && Boolean(profile.verifiedEmail) &&
-        (domain==="gmail.com" || domain==="googlemail.com" ||
-          (Boolean(hostedDomain) && hostedDomain===domain)),
+        (domain==="gmail.com" || domain==="googlemail.com"),
     };
   }
   // Facebook Login is OAuth (not OpenID Connect): verify the exchanged token
@@ -182,7 +179,7 @@ export async function associateSocialAccount(pool,person) {
       "SELECT a.* FROM identity_social_accounts s JOIN identity_accounts a ON a.id=s.user_id WHERE s.provider=$1 AND s.subject=$2",
       [person.provider,person.subject]);
     if(linked.rows[0]){await conn.query("COMMIT");return linked.rows[0];}
-    // Verified Google-owned mailboxes may sign into the SAME already
+    // Verified Google-owned Gmail mailboxes may sign into the SAME already
     // verified Media God account as email/password. Never associate by an
     // unverified email, Facebook, or a third-party Google account address.
     // A provider subject already bound to another account is handled above
