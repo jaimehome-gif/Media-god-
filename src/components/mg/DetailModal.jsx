@@ -1,4 +1,5 @@
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodVod } from "@/components/mg/mediaGodVodLaunch";
 import { profiledLibrary } from "@/components/mg/householdProfiles";
 import React, {
   useEffect,
@@ -1301,14 +1302,10 @@ export default function DetailModal({
       return;
     }
 
-    if (
-      player.playOnlyFlix &&
-      player.playOnlyFlix(
-        onlyFlixMedia
-      )
-    ) {
+    // On the website, open Media God's web VideoPlayer rather than
+    // embedding OnlyFlix. Installed APKs still resolve native VLC playback.
+    if (launchMediaGodVod(player, onlyFlixMedia)) {
       onClose?.();
-
       return;
     }
 

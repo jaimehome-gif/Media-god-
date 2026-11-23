@@ -1,4 +1,5 @@
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodVod } from "@/components/mg/mediaGodVodLaunch";
 import { profiledLibrary } from "@/components/mg/householdProfiles";
 import { watchContinueWatchingChanges } from "@/components/mg/continueWatchingSync";
 import React, {
@@ -281,10 +282,8 @@ export default function RecentlyWatchedRow({ onOpenDetail }) {
     const meta = parseContentKey(item);
     const tmdbId = await resolveTmdbIdQuickly(meta);
 
-    /*
-     * Movies launch straight into the OnlyFlix embed from the card for instant
-     * playback. TV still opens Details so the user can pick the exact episode.
-     */
+    // Recently Watched should use Media God's primary player.
+    // TV still opens Details to select the exact episode.
     if (meta.mediaType !== "tv" && launchFireTvCardPlay(player, {
       id: tmdbId || undefined,
       tmdbId: tmdbId || undefined,
@@ -296,19 +295,17 @@ export default function RecentlyWatchedRow({ onOpenDetail }) {
       mediaType: "movie",
       type: "movie",
     })) return;
-    if (meta.mediaType !== "tv" && player.playOnlyFlix) {
-      if (player.playOnlyFlix({
-        id: tmdbId || undefined,
-        tmdbId: tmdbId || undefined,
-        tmdb_id: tmdbId || undefined,
-        imdbId: meta.imdbId || item.imdb_id,
-        title: meta.title,
-        year: meta.year,
-        poster: item.poster_url || "",
-        mediaType: "movie",
-        type: "movie",
-      })) return;
-    }
+    if (meta.mediaType !== "tv" && launchMediaGodVod(player, {
+      id: tmdbId || undefined,
+      tmdbId: tmdbId || undefined,
+      tmdb_id: tmdbId || undefined,
+      imdbId: meta.imdbId || item.imdb_id,
+      title: meta.title,
+      year: meta.year,
+      poster: item.poster_url || "",
+      mediaType: "movie",
+      type: "movie",
+    })) return;
 
     if (onOpenDetail) {
       onOpenDetail({

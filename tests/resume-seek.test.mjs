@@ -102,9 +102,10 @@ test('Continue Watching never silently selects OnlyFlix for a missing source', (
   const rowCode = readFileSync(
     new URL('../src/components/mg/ContinueWatchingRow.jsx', import.meta.url), 'utf8'
   );
-  assert.match(rowCode, /const explicitOnlyFlixResume\s*=\s*savedSourceType === "onlyflix"/);
-  assert.match(rowCode, /\/onlyflix\/i\.test\(savedUrl\)/);
-  assert.doesNotMatch(rowCode, /if \(!isTv && !hasPreviouslySelectedAlternateSource && player\.playOnlyFlix\)/);
+  const resumeHandler = rowCode.slice(rowCode.indexOf("  const openDetail = async (item) => {"), rowCode.indexOf("  // An explicit Players action"));
+  assert.doesNotMatch(resumeHandler, /player\.playOnlyFlix/);
+  assert.doesNotMatch(resumeHandler, /player\.playSavedEmbed/);
+  assert.match(rowCode, /const launched = player\.playOnlyFlix\?\.\(\{/);
   assert.match(rowCode, /verifiedPlaybackPolicy: "strict",\s*sources: \[\]/);
 });
 

@@ -1,4 +1,5 @@
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodVod } from "@/components/mg/mediaGodVodLaunch";
 import React from "react";
 import { Play, Plus, Check } from "lucide-react";
 import { Image } from "@/components/ui/image";
@@ -44,11 +45,8 @@ export default function MediaCard({
       rdTitle: item.title,
     };
 
-    /*
-     * Movies launch straight into the OnlyFlix embed from the card play button
-     * for instant playback. TV still opens Details first so the user can pick
-     * the exact season and episode before playing.
-     */
+    // Movies use Media God's player on web and the native app.
+    // TV opens Details to select the exact season and episode first.
     if (onOpen && (detailsOnly || mediaType === "tv")) {
       onOpen({ ...item, id: tmdbId, media_type: mediaType, mediaType,
         type: mediaType === "tv" ? "tv" : "movie" });
@@ -56,9 +54,7 @@ export default function MediaCard({
     }
 
     if (mediaType === "movie" && launchFireTvCardPlay(player, media)) return;
-    if (mediaType === "movie" && player.playOnlyFlix) {
-      if (player.playOnlyFlix(media)) return;
-    }
+    if (mediaType === "movie" && launchMediaGodVod(player, media)) return;
 
     if (onOpen) {
       onOpen({

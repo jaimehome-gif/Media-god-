@@ -1,4 +1,5 @@
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodVod } from "@/components/mg/mediaGodVodLaunch";
 import { activeHouseholdProfileId, PROFILE_CHANGED_EVENT, profiledLibrary } from "@/components/mg/householdProfiles";
 import React, {
   useEffect,
@@ -948,12 +949,10 @@ export default function EpisodeSelector({
         includeAddonNames,
       };
 
-      // Fresh episodes use the embedded player and source-switching tabs.
-      // If OnlyFlix lacks an embed, try VidCore before falling into torrents.
-      // Resume stays on the seek-aware source pipeline.
+      // Fresh episodes and Resume use the same branded Media God player.
+      // The exact episode and saved seek time are preserved.
       if (!startTime && launchFireTvCardPlay(player, baseRequest)) return;
-      if (!startTime && player.playOnlyFlix?.(baseRequest)) return;
-      if (!startTime && player.playVidCore?.(baseRequest)) return;
+      if (launchMediaGodVod(player, baseRequest)) return;
 
       player.play({
         ...baseRequest,

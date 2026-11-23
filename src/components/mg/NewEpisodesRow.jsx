@@ -332,41 +332,9 @@ export default function NewEpisodesRow({
   const playEpisode = (item) => {
     if (!item || item.airDate > todayKey) return;
 
-    /*
-     * A new-episode card uses the same direct OnlyFlix launch as films.
-     * Fall back to the existing episode-source pipeline if no embed exists.
-     */
+    // New episodes always open the Media God player and search the exact
+    // season/episode. Web embeds remain an explicit backup, not default Play.
     if (launchFireTvCardPlay(player, {
-      id: item.tmdbId,
-      tmdbId: item.tmdbId,
-      title: item.showTitle,
-      year: item.year,
-      poster: item.poster,
-      mediaType: "tv",
-      type: "series",
-      season: item.season,
-      episode: item.episode,
-      rdTitle: item.showTitle,
-      rdYear: item.year,
-    })) return;
-
-    if (player.playOnlyFlix?.({
-      id: item.tmdbId,
-      tmdbId: item.tmdbId,
-      title: item.showTitle,
-      year: item.year,
-      poster: item.poster,
-      mediaType: "tv",
-      type: "series",
-      season: item.season,
-      episode: item.episode,
-      rdTitle: item.showTitle,
-      rdYear: item.year,
-    })) return;
-
-    // Keep the fast web-player launch: only if OnlyFlix could not build
-    // this exact episode, try VidCore before the torrent discovery pipeline.
-    if (player.playVidCore?.({
       id: item.tmdbId,
       tmdbId: item.tmdbId,
       title: item.showTitle,

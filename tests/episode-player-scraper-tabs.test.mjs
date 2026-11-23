@@ -59,16 +59,17 @@ test("episode cards offer source lists without replacing Resume, Review or Play"
   assert.match(selector, /episode=\{episodeNumber\}/);
   assert.match(selector, /resumeAt=\{hasResume \? Number\(progressRecord\?\.progress \|\| 0\) : 0\}/);
   assert.match(selector, /asPositiveInt\(item\?\.tmdb_id\) \|\|/);
-  assert.match(selector, /if \(!startTime && player\.playOnlyFlix\?\.\(baseRequest\)\) return/);
-  assert.match(selector, /if \(!startTime && player\.playVidCore\?\.\(baseRequest\)\) return/);
+  assert.match(selector, /launchMediaGodVod\(player, baseRequest\)/);
+  assert.doesNotMatch(selector, /player\.playOnlyFlix\?\.\(/);
+  assert.doesNotMatch(selector, /player\.playVidCore\?\.\(/);
   assert.match(selector, /onClick=\{\(\) =>\s*playEpisode\(/);
   assert.match(selector, /<MediaReviews/);
   const newEpisodes = read("src/components/mg/NewEpisodesRow.jsx");
-  assert.match(newEpisodes, /player\.playVidCore\?\.\(\{/);
+  assert.match(newEpisodes, /void player\.play\(\{/);
   const details = read("src/components/mg/DetailModal.jsx");
   assert.match(details, /<EpisodeSelector[\s\S]*tmdb_id: itemId,\s*tmdbId: itemId/);
-  assert.match(details, /player\.playOnlyFlix\s*&&/);
-  // User-approved movie routing is deliberately not modified.
+  assert.match(details, /launchMediaGodVod\(player, onlyFlixMedia\)/);
+  // Provider backups stay available as explicit alternatives; the main Play is first-party.
   const core = read("src/components/mg/MediaPlayerProvider.jsx");
   assert.match(core, /const playVidCore = useCallback/);
 });

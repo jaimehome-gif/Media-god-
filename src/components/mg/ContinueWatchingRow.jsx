@@ -25,7 +25,7 @@ import MediaDownloadPicker from "@/components/mg/MediaDownloadPicker";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import { Image } from "@/components/ui/image";
 import { restoreResumeSource } from "./resumeSource";
-import { hasSeekableHistoryPosition } from "./resumeHistoryPolicy";
+
 import { isIpBoundHostedProvider, isElfHostedUrl } from "@/components/mg/ipBoundVodSafety";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
@@ -423,26 +423,15 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
      * first. A saved mgsource descriptor carries the stable torrent/magnet and
      * file/provider identity, not just the short-lived resolved stream URL.
      */
-    const hasSavedSeekPosition = hasSeekableHistoryPosition(item);
-    const bookmark = readEmbedBookmark(item);
-    // Old OnlyFlix/embed bookmarks carry no dependable seek control.
-    // History merges may combine a measured native position with a newer
-    // embedded bookmark. If real progress exists, reopen a seekable source
-    // through Media God's normal player instead of returning to OnlyFlix.
-    if (!hasSavedSeekPosition && bookmark && !nativeResume && player.playSavedEmbed?.({
-      id: tmdbId || undefined, tmdbId: tmdbId || undefined,
-      title: meta.title, year: meta.year, poster: item.poster_url || "",
-      mediaType: meta.mediaType, type: isTv ? "series" : "movie",
-      season: meta.season || undefined, episode: meta.episode || undefined,
-    }, bookmark)) return;
-
+    // Resume always uses Media God's first-party player on web and APKs.
+    // Old embedded bookmarks are historical metadata, never a decoder URL.
+    // The explicit "Web players" button below still opens provider backups.
     const savedUrl = String(item.video_url || "").trim();
     const savedSourceType = String(item.source_type || "").toLowerCase();
     const hasSavedSource =
       /^(rd|torrent|debrid|file)$/i.test(savedSourceType) &&
       (savedUrl.startsWith("mgsource:") || /^https?:\/\//i.test(savedUrl));
-    const hasPreviouslySelectedAlternateSource =
-      /^(rd|torrent|debrid|file)$/i.test(savedSourceType);
+
 
     if (hasSavedSource) {
       let savedSource = null;
@@ -541,27 +530,9 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
       }
     }
 
-    // A previous non-OnlyFlix selection must never be silently replaced by
-    // OnlyFlix, even if an older record is missing its serialised source URL.
-    // In that recovery case, let the normal source resolver try again.
-    // Only a recorded, explicit OnlyFlix URL can reopen that web player.
-    // Incomplete/stale history must resolve a playable source instead of
-    // silently replacing the viewer's last torrent with OnlyFlix.
-    const explicitOnlyFlixResume =
-      savedSourceType === "onlyflix" && /onlyflix/i.test(savedUrl);
-    if (!isTv && !hasSavedSeekPosition && !nativeResume && explicitOnlyFlixResume && !hasPreviouslySelectedAlternateSource && player.playOnlyFlix) {
-      if (player.playOnlyFlix({
-        id: tmdbId || undefined,
-        tmdbId: tmdbId || undefined,
-        tmdb_id: tmdbId || undefined,
-        imdbId: meta.imdbId || item.imdb_id,
-        title: meta.title,
-        year: meta.year,
-        poster: item.poster_url || "",
-        mediaType: "movie",
-        type: "movie",
-      })) return;
-    }
+    // Never switch Resume to OnlyFlix as a default, even for older records.
+    // Rediscover playable video when the bookmark does not contain a durable
+    // file identity; the saved position remains in the request below.
 
     // A TV resume must not route through Choose Episode: that is a fresh
     // Play action, which loses the saved seek point. Both films and episodes
