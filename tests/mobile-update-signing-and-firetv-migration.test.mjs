@@ -31,7 +31,7 @@ test("old false signing errors explain the safe manual path without ignoring And
   assert.ok(isMobileUpdaterSignatureError("Downloaded APK signing identity does not match Media God Mobile."));
   assert.equal(isMobileUpdaterSignatureError("Update download failed: HTTP 500"), false);
   const dialog = read("src/components/mg/AndroidMobileAppUpdateNotice.jsx");
-  assert.match(dialog, /legacySigningError \|\| !nativeInfo\?\.selfUpdateSupported/);
+  assert.match(dialog, /legacySigningError \|\| nativeDownload404 \|\| !nativeInfo\?\.selfUpdateSupported/);
   assert.match(dialog, /Android itself will verify the certificate before replacing it/);
   assert.match(dialog, /Open official Android Mobile APK/);
   const kotlin = read("android-mobile/app/src/main/java/com/mediagod/mobile/AppUpdater.kt");
