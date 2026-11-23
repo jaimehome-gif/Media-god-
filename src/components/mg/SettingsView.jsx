@@ -31,6 +31,7 @@ import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import SocialLoginSection from "@/components/mg/SocialLoginSection";
+import LegacyAccountBridge from "@/components/mg/LegacyAccountBridge";
 import MultiDebridSettings from "@/components/mg/MultiDebridSettings";
 import PlaybackAdvancedSettings from "@/components/mg/PlaybackAdvancedSettings";
 import { nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
@@ -1883,6 +1884,7 @@ export default function SettingsView() {
         </div>
       </div>
 
+      <LegacyAccountBridge mode="link" />
       <SocialLoginSection />
 
       <PlaybackAdvancedSettings />
