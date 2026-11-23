@@ -1,9 +1,9 @@
 {
   "channel": "fire-tv",
-  "versionCode": 133,
-  "versionName": "1.4.128",
+  "versionCode": 134,
+  "versionName": "1.4.129",
   "title": "Media God Fire TV",
-  "message": "Media God 1.4.128 improves in-place updates and checks release signing compatibility.",
+  "message": "Opens the independent Media God account service on www.underworldhub.co.uk.",
   "apkUrl": "https://github.com/jaimehome-gif/Media-god-/releases/download/firetv-latest/Media-God-Fire-TV.apk",
   "downloaderCode": "4738952",
   "downloaderAddress": "https://underworldhub.co.uk/tv.html",

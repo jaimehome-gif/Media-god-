@@ -1,9 +1,9 @@
 {
   "channel": "android-mobile",
-  "versionCode": 99,
-  "versionName": "1.0.98",
+  "versionCode": 100,
+  "versionName": "1.0.99",
   "title": "Media God Mobile",
-  "message": "Media God 1.0.98 improves in-place updates and checks release signing compatibility.",
+  "message": "Opens the independent Media God account service on www.underworldhub.co.uk.",
   "apkUrl": "https://github.com/jaimehome-gif/Media-god-/releases/download/android-mobile-latest/Media-God-Android-Mobile.apk",
   "downloaderCode": "",
   "releaseUrl": "https://github.com/jaimehome-gif/Media-god-/releases/tag/android-mobile-latest"

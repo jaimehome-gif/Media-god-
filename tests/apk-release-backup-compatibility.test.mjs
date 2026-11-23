@@ -42,8 +42,8 @@ test("matching prior APK SHAs still use paired immutable rollback archive", () =
 
 test("Android and Fire TV APK versions increased and remain in sync with manifests", () => {
   for (const [folder, manifestFile, versionCode, versionName] of [
-    ["android-mobile", "android-mobile-update.json", 99, "1.0.98"],
-    ["firetv-android", "firetv-update.json", 133, "1.4.128"],
+    ["android-mobile", "android-mobile-update.json", 100, "1.0.99"],
+    ["firetv-android", "firetv-update.json", 134, "1.4.129"],
   ]) {
     const gradle = readFileSync(new URL("../" + folder + "/app/build.gradle.kts", import.meta.url), "utf8");
     const manifest = JSON.parse(readFileSync(new URL("../public/" + manifestFile, import.meta.url), "utf8"));

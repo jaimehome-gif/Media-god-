@@ -12,15 +12,15 @@ android {
         applicationId = "com.mediagod.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 99
-        versionName = "1.0.98"
+        versionCode = 100
+        versionName = "1.0.99"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField(
             "String",
             "MEDIA_GOD_URL",
-            "\"https://underworldhub.co.uk/\""
+            "\"https://www.underworldhub.co.uk/\""
         )
     }
 
