@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { resolveMx } from "node:dns/promises";
 
 // Temporary, disposable QA of production endpoints. Runs exactly once for the
 // preconfigured test alias, and never reveals email tokens or passwords.
@@ -9,6 +10,43 @@ export function runEmailE2E({ port, pool, getToken, clearToken }) {
   if (run!=="mgqa-20261123e2e" || stage!=="register" ||
       email!=="jaime.home+mgqa-20261123e2e@gmail.com") return;
 
+  async function diagnoseInbound() {
+    try {
+      const records=await resolveMx("underworldhub.co.uk");
+      console.log("[inbound-qa] Published MX records: "+(records.length?records.map(r=>r.priority+":"+r.exchange).join(","):"NONE"));
+    } catch(e) {
+      console.log("[inbound-qa] MX lookup: "+String(e.code||e.message).slice(0,90));
+    }
+    if(!process.env.RESEND_API_KEY) return;
+    const headers={Authorization:"Bearer "+process.env.RESEND_API_KEY};
+    try {
+      const r=await fetch("https://api.resend.com/emails/receiving",{headers,signal:AbortSignal.timeout(12000)});
+      if(!r.ok) console.log("[inbound-qa] Resend receiving list HTTP "+r.status);
+      else {
+        const json=await r.json();
+        const rows=Array.isArray(json.data)?json.data:[];
+        const ours=rows.filter(x=>(Array.isArray(x.to)?x.to:[]).some(t=>String(t).toLowerCase()==="support@underworldhub.co.uk"));
+        const test=ours.filter(x=>/Media God|MG support/i.test(String(x.subject||"")));
+        console.log("[inbound-qa] Resend recent incoming emails (page): "+rows.length+", to support: "+ours.length+", test subjects: "+test.length);
+      }
+    } catch(e) {console.log("[inbound-qa] Resend receiving lookup: "+String(e.message||"error").slice(0,100));}
+    try {
+      const r=await fetch("https://api.resend.com/domains",{headers,signal:AbortSignal.timeout(12000)});
+      if(!r.ok) {console.log("[inbound-qa] Resend domains list HTTP "+r.status);return;}
+      const json=await r.json();
+      const domain=Array.isArray(json.data)?json.data.find(x=>x.name==="underworldhub.co.uk"):null;
+      if(!domain){console.log("[inbound-qa] Resend domain not listed");return;}
+      console.log("[inbound-qa] Resend domain status="+domain.status+", receive status="+JSON.stringify(domain.capabilities?.receiving||"unknown"));
+      const d=await fetch("https://api.resend.com/domains/"+encodeURIComponent(domain.id),{headers,signal:AbortSignal.timeout(12000)});
+      if(d.ok) {
+        const info=await d.json();
+        const mx=(info.records||[]).filter(x=>String(x.type).toUpperCase()==="MX");
+        console.log("[inbound-qa] Resend expected MX: "+mx.map(x=>[x.name,x.value||x.content,x.priority,x.status].filter(v=>v!==undefined).join(":")).join(","));
+      }
+    } catch(e) {console.log("[inbound-qa] Resend domain lookup: "+String(e.message||"error").slice(0,100));}
+  }
+  const diagnostic=setTimeout(()=>diagnoseInbound().catch(()=>{}),1800);
+  diagnostic.unref?.();
   async function test() {
     const client=await pool.connect();
     let locked=false, ticketId="";
