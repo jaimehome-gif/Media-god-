@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CheckCircle2, Download, ExternalLink, History, Loader2,
   RefreshCw, ShieldCheck, Smartphone, Tv
@@ -7,6 +8,8 @@ import { fetchLatestNativeRelease } from "@/components/mg/nativeReleaseInfo";
 
 const RELEASES_URL = "https://github.com/jaimehome-gif/Media-god-/releases";
 const RELEASES_API = "https://api.github.com/repos/jaimehome-gif/Media-god-/releases?per_page=30";
+let historyCache = null;
+let historyCacheExpiry = 0;
 const PLATFORM = [
   { id: "android-mobile", name: "Android phones & tablets", icon: Smartphone },
   { id: "fire-tv", name: "Amazon Fire TV & Android TV", icon: Tv }
@@ -21,14 +24,15 @@ const formatDate = value => {
 
 const validPublishedPair = release => {
   if (!release || release.draft || release.prerelease || !release.published_at) return false;
-  if (!/^stable-[a-z0-9]+$/i.test(String(release.tag_name || ""))) return false;
+  if (!/^apk-[a-f0-9]{40}$/i.test(String(release.tag_name || ""))) return false;
   const files = Array.isArray(release.assets) ? release.assets : [];
   return ["Media-God-Android-Mobile.apk", "Media-God-Fire-TV.apk"].every(
     name => files.some(file => file.name === name && file.state === "uploaded" && Number(file.size) > 1_000_000)
   );
 };
 
-async function publishedHistory() {
+async function publishedHistory(force = false) {
+  if (!force && historyCache && historyCacheExpiry > Date.now()) return historyCache;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 6500);
   try {
@@ -40,7 +44,7 @@ async function publishedHistory() {
     if (!response.ok) throw new Error("Published release history is unavailable");
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error("Invalid release history");
-    return data.filter(validPublishedPair)
+    const verified = data.filter(validPublishedPair)
       .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))
       .slice(0, 5)
       .map(release => ({
@@ -49,6 +53,9 @@ async function publishedHistory() {
         date: release.published_at,
         url: release.html_url
       }));
+    historyCache = verified;
+    historyCacheExpiry = Date.now() + 10 * 60 * 1000;
+    return verified;
   } finally {
     window.clearTimeout(timeout);
   }
@@ -66,7 +73,7 @@ export default function SupportReleaseCenter() {
     const [mobile, fireTv, recent] = await Promise.allSettled([
       fetchLatestNativeRelease("android-mobile", { force }),
       fetchLatestNativeRelease("fire-tv", { force }),
-      publishedHistory()
+      publishedHistory(force)
     ]);
     setReleases({
       "android-mobile": mobile.status === "fulfilled" ? mobile.value : null,
@@ -85,10 +92,10 @@ export default function SupportReleaseCenter() {
   useEffect(() => {
     refresh();
     const checkVisible = () => {
-      if (document.visibilityState === "visible") refresh(true);
+      if (document.visibilityState === "visible") refresh(false);
     };
     const interval = window.setInterval(() => {
-      if (document.visibilityState !== "hidden") refresh(true);
+      if (document.visibilityState !== "hidden") refresh(false);
     }, 5 * 60 * 1000);
     document.addEventListener("visibilitychange", checkVisible);
     return () => {
@@ -185,9 +192,9 @@ export default function SupportReleaseCenter() {
       <div id="support-release-history" className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
         <div className="flex items-center gap-2">
           <History className="h-5 w-5 text-mg-green" />
-          <h3 className="text-lg font-semibold text-white">Recent published updates</h3>
+          <h3 className="text-lg font-semibold text-white">Previous verified APK builds</h3>
         </div>
-        <p className="mt-1 text-sm text-white/55">Automatically collected from the official Media God releases, newest first.</p>
+        <p className="mt-1 text-sm text-white/55">Historical signed build archives, newest first. For the current installation, use the verified download buttons above.</p>
         {history.length ? (
           <ul className="mt-4 divide-y divide-white/10">
             {history.map(item => (
@@ -197,15 +204,18 @@ export default function SupportReleaseCenter() {
                   <p className="text-xs text-white/45">{formatDate(item.date)}</p>
                 </div>
                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-1 rounded-md px-2 text-xs text-mg-green hover:underline">
-                  Release notes <ExternalLink className="h-3.5 w-3.5" />
+                  Archive details <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </li>
             ))}
           </ul>
         ) : <p className="mt-3 text-sm text-white/55">{checking ? "Loading release history…" : historyError ? "Release history is temporarily unavailable." : "No matching published release history found."}</p>}
         <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-mg-green hover:underline">
-          View all official updates <ExternalLink className="h-4 w-4"/>
+          All official APK releases <ExternalLink className="h-4 w-4"/>
         </a>
+        <Link to="/support/updates" className="mt-2 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-mg-green hover:underline">
+          Read the complete Media God development update history
+        </Link>
       </div>
     </section>
   );
