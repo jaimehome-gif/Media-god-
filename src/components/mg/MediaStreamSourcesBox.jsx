@@ -27,7 +27,7 @@ import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import { isFireTvRuntime } from "@/components/mg/runtimePlatform";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
-import { isNativeFireTvPlayerAvailable } from "@/components/mg/nativeFireTvBridge";
+import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
 import { buildVidCoreEmbedUrl } from "@/components/mg/vidCoreEmbed";
 import { buildTwoEmbedEmbedUrl, buildCineSrcEmbedUrl, buildMultiEmbedEmbedUrl } from "@/components/mg/extraEmbedProviders"; import { buildOnlyFlixEmbedUrl, buildOnlyFlixTitlePageUrl } from "@/components/mg/onlyFlixEmbed";
@@ -317,6 +317,16 @@ export default function StreamSourcesBox({
     Boolean(
       player?.hasDebrid
     );
+
+  // Older installed APKs trusted only the apex host. After Google OAuth
+  // a Media God WebView may be on www, where MediaGodNative is visible but
+  // its top-level host guard rejects play(). Offer a voluntary first-party
+  // navigation instead of opening a silent HTML embed or resetting data.
+  const blockedNativeOnWww =
+    typeof window !== "undefined" &&
+    window.location.hostname === "www.underworldhub.co.uk" &&
+    isNativeFireTvPlayerAvailable() &&
+    nativeFireTvAppInfo()?.native === false;
 
   const [
     liveMatches,
@@ -1948,6 +1958,24 @@ export default function StreamSourcesBox({
         Web-player backups are separate and may not support VLC or all audio codecs. Sources may vary in language,
         audio availability and picture quality.
       </p>
+
+      {blockedNativeOnWww && mediaType !== "live" && (
+        <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="status">
+          <p className="font-semibold">Media God's native VLC connection is blocked on the www address.</p>
+          <p className="mt-1">This older APK may open a silent web player instead. Reopen the original app address to restore native playback. You may need to sign in again; your account data stays on the server.</p>
+          <button
+            type="button"
+            onClick={() => {
+              const current = new URL(window.location.href);
+              current.hostname = "underworldhub.co.uk";
+              window.location.assign(current.toString());
+            }}
+            className="mt-2 min-h-10 rounded-md border border-amber-300/50 px-3 py-2 font-semibold text-amber-100"
+          >
+            Reopen Media God for native VLC
+          </button>
+        </div>
+      )}
 
       {!loading && nonVlcBackupCount > 0 && (
         <button

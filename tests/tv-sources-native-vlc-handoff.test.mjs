@@ -219,3 +219,11 @@ test("native VLC never attempts an HTML scraper without a debrid account", async
   await page.run();
   assert.equal(page.captured.length, 0);
 });
+
+test("legacy APK with blocked www bridge offers deliberate first-party recovery", () => {
+  assert.match(sourceBox, /window\.location\.hostname === "www\.underworldhub\.co\.uk"/);
+  assert.match(sourceBox, /nativeFireTvAppInfo\(\)\?\.native === false/);
+  assert.match(sourceBox, /Reopen Media God for native VLC/);
+  assert.match(sourceBox, /current\.hostname = "underworldhub\.co\.uk"/);
+  assert.match(sourceBox, /window\.location\.assign\(current\.toString\(\)\)/);
+});
