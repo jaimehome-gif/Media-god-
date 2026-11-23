@@ -335,6 +335,7 @@ export default function StreamSourcesBox({
     );
 
   const [visibleSourceCount, setVisibleSourceCount] = useState(24);
+  const [showNonVlcBackups, setShowNonVlcBackups] = useState(false);
 
   useEffect(() => {
     setVisibleSourceCount(24);
@@ -1812,6 +1813,32 @@ export default function StreamSourcesBox({
 
   ];
 
+  // External/embed players and HTML watch pages are not VLC media streams.
+  // Keep them available for explicit troubleshooting, but never present them
+  // as equivalent playback choices alongside direct files/Combined Debrid.
+  const isNonVlcBackup = row =>
+    row?.webpageSource === true ||
+    ["vidsrc", "vidcore", "onlyflix", "twoembed", "cinesrc",
+      "multiembed", "webtor", "webtorrent"].includes(row?.kind);
+  const nonVlcBackupCount = mediaType === "live" || torrentOnly
+    ? 0 : rows.filter(isNonVlcBackup).length;
+  const primarySourceRows = mediaType === "live"
+    ? rows
+    : rows.filter(row => !isNonVlcBackup(row));
+  const displayedSourceRows = torrentOnly
+    ? rows.filter(row =>
+        row.kind === "rd" || row.kind === "paste" ||
+        (row.kind === "addon-stream" && row.selectableTorrentSource))
+    : mediaType !== "live"
+      ? [
+          ...primarySourceRows.filter(row =>
+            row.kind === "rd" || row.kind === "addon-stream"),
+          ...primarySourceRows.filter(row =>
+            row.kind !== "rd" && row.kind !== "addon-stream"),
+          ...(showNonVlcBackups ? rows.filter(isNonVlcBackup) : [])
+        ]
+      : rows;
+
   const iconFor = (
     kind
   ) => {
@@ -1909,6 +1936,18 @@ export default function StreamSourcesBox({
         audio availability and picture quality.
       </p>
 
+      {!loading && nonVlcBackupCount > 0 && (
+        <button
+          type="button"
+          aria-expanded={showNonVlcBackups}
+          onClick={() => setShowNonVlcBackups(value => !value)}
+          className="mb-2 flex min-h-11 w-full items-center justify-between rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/10"
+        >
+          <span>{showNonVlcBackups ? "Hide" : "Show"} web-player backups ({nonVlcBackupCount}) — not VLC</span>
+          <ExternalLink className="h-4 w-4" />
+        </button>
+      )}
+
       {loading ? (
         <div className="flex flex-col gap-1.5">
           {Array.from({
@@ -1930,19 +1969,7 @@ export default function StreamSourcesBox({
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {(torrentOnly
-            ? rows.filter((row) => row.kind === "rd" || row.kind === "paste" ||
-                (row.kind === "addon-stream" && row.selectableTorrentSource))
-            : mediaType !== "live"
-              // Put VLC-playable direct sources and torrents first for films
-              // AND TV. Keep HTML embeds only as labelled optional backups.
-              ? [
-                  ...rows.filter((row) => row.kind === "rd" ||
-                    (row.kind === "addon-stream" && !row.webpageSource)),
-                  ...rows.filter((row) => row.kind !== "rd" &&
-                    !(row.kind === "addon-stream" && !row.webpageSource)),
-                ]
-              : rows).map(
+          {displayedSourceRows.map(
             (
               row
             ) => (
