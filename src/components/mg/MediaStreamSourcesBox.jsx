@@ -27,6 +27,7 @@ import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import { isFireTvRuntime } from "@/components/mg/runtimePlatform";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
+import { isNativeFireTvPlayerAvailable } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
 import { buildVidCoreEmbedUrl } from "@/components/mg/vidCoreEmbed";
 import { buildTwoEmbedEmbedUrl, buildCineSrcEmbedUrl, buildMultiEmbedEmbedUrl } from "@/components/mg/extraEmbedProviders"; import { buildOnlyFlixEmbedUrl, buildOnlyFlixTitlePageUrl } from "@/components/mg/onlyFlixEmbed";
@@ -980,7 +981,11 @@ export default function StreamSourcesBox({
 
           sources:
             [],
-          completeSources: visibleAddonStreams,
+          // Combined Debrid is a Sources action: resolved VOD files use our
+          // built-in VLC player, not an external or embedded web decoder.
+          completeSources: mediaType === "live"
+            ? visibleAddonStreams
+            : visibleAddonStreams.map((item) => ({ ...item, preferNativeVlc: true })),
         });
       } catch (error) {
         setMessage(
@@ -1049,6 +1054,14 @@ export default function StreamSourcesBox({
       const onlyFlixPage = sourceKind.provider === "onlyflix";
       const vidCorePage = sourceKind.provider === "vidcore";
       const webScraperPage = sourceKind.kind === "webpage";
+      // A scraper watch/iframe page is HTML, not a media stream. In Android
+      // and Fire TV APKs, never launch a silent third-party embedded player
+      // from a source that was selected for Media God VLC playback. Dedicated
+      // labelled web-player backups remain available as an explicit choice.
+      if (isNativeFireTvPlayerAvailable() && mediaType !== "live" && webScraperPage) {
+        setMessage("This source is a web-player page rather than a direct video file. Choose a direct stream or Combined Debrid above to play using Media God VLC. Separate web-player backups are still listed below.");
+        return;
+      }
       if (isTvBox && mediaType !== "live" && webScraperPage) {
         const embedMedia = {
           id: tmdbId, tmdbId, imdbId: resolvedImdb || imdbId || "",
@@ -1146,9 +1159,11 @@ export default function StreamSourcesBox({
           nonMediaSource,
 
         sources: [
-          stream,
+          mediaType === "live" ? stream : { ...stream, preferNativeVlc: true },
         ],
-        completeSources: visibleAddonStreams,
+        completeSources: mediaType === "live"
+          ? visibleAddonStreams
+          : visibleAddonStreams.map((item) => ({ ...item, preferNativeVlc: true })),
       });
     };
 
@@ -1885,8 +1900,8 @@ export default function StreamSourcesBox({
 
       <p className="text-[10px] text-white/45 leading-relaxed mb-2.5 px-1">
         Choose a torrent or direct video source to play it in Media God
-        (using VLC in the Android and Fire Stick apps). Web-player links
-        use their own separate players. Sources may vary in language,
+        using the built-in VLC player in Android and Fire Stick apps.
+        Web-player backups are separate and may not support VLC or all audio codecs. Sources may vary in language,
         audio availability and picture quality.
       </p>
 
