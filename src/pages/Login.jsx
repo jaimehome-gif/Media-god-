@@ -102,7 +102,9 @@ export default function Login() {
       await base44.auth.loginViaEmailPassword(email, password);
       window.location.href = returnTo;
     } catch (err) {
-      setError(err.message || "Invalid email or password");
+      setError(err?.status === 401
+        ? "Email or password not recognised on the independent Media God account. If you just reset it, use the email address that received your reset link and the new password. Old Base44 accounts must be registered again."
+        : err.message || "Could not sign in");
     } finally {
       setLoading(false);
     }
@@ -194,6 +196,9 @@ export default function Login() {
         </div>
       </div>
 
+      {new URLSearchParams(window.location.search).get("reset") === "success" && (
+        <p role="status" className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-foreground">Password updated. Please sign in using your new password and the email address that received the reset link.</p>
+      )}
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}
