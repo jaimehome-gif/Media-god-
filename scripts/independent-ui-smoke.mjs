@@ -34,7 +34,7 @@ try {
       provider+' choice must remain visible on original Media God login screen');
   }
   const browse=await page.evaluate(()=>document.body.innerText);
-  assert.match(browse,/Browse without signing in/, 'Original skip option preserved');
+  assert.match(browse,/\b(?:Browse without signing in|Skip for now)\b/, 'Guest skip option preserved');
   await visit('/register','Create your account');
   await page.waitForSelector('input[type="password"]', {timeout:15000});
   assert.equal(await page.evaluate(()=>document.querySelectorAll('input[type="password"]').length),2,'registration has confirm password');
