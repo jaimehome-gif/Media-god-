@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { LifeBuoy, ArrowLeft, Mail, Send, RefreshCw, Inbox } from "lucide-react";
+import { LifeBuoy, ArrowLeft, Mail, Send, RefreshCw, Inbox, Download, TicketCheck, ShieldCheck } from "lucide-react";
+import SupportReleaseCenter from "@/components/mg/SupportReleaseCenter";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-function Shell({title,description,children}) {
+function Shell({title,description,children,wide=false}) {
   return <main className="min-h-screen bg-background text-foreground p-4 sm:p-8">
-    <div className="mx-auto max-w-2xl">
+    <div className={wide ? "mx-auto max-w-6xl" : "mx-auto max-w-2xl"}>
       <Link to="/" className="inline-flex items-center gap-2 text-sm text-primary hover:underline mb-5">
         <ArrowLeft className="w-4 h-4"/> Media God
       </Link>
@@ -41,8 +42,42 @@ export function SupportPage() {
     } catch(ex){setError(ex?.message||"Support temporarily unavailable. Please try again.");}
     finally{setBusy(false);}
   };
-  return <Shell title="Contact Media God Support" description="Tell us about a problem with the website, Android app, Fire Stick, account or playback. No login is required.">
-    <form onSubmit={submit} className="space-y-4">
+  return <Shell wide title="Support, updates & downloads" description="Everything you need for Media God in one place: official installers, latest releases and help from our support team.">
+    <div className="grid gap-3 sm:grid-cols-3">
+      <a href="#support-ticket-form" className="flex min-h-24 items-start gap-3 rounded-xl border border-mg-green/30 bg-mg-green/10 p-4 hover:border-mg-green/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-green">
+        <TicketCheck className="mt-0.5 h-5 w-5 shrink-0 text-mg-green" />
+        <span><strong className="block text-sm text-white">Open a support ticket</strong><span className="mt-1 block text-xs leading-5 text-white/60">Report a problem without signing in</span></span>
+      </a>
+      <a href="#support-downloads" className="flex min-h-24 items-start gap-3 rounded-xl border border-white/15 bg-white/[0.04] p-4 hover:border-mg-green/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-green">
+        <Download className="mt-0.5 h-5 w-5 shrink-0 text-mg-green" />
+        <span><strong className="block text-sm text-white">Latest app downloads</strong><span className="mt-1 block text-xs leading-5 text-white/60">Verified Android and Fire TV installers</span></span>
+      </a>
+      <Link to="/support/inbox" className="flex min-h-24 items-start gap-3 rounded-xl border border-white/15 bg-white/[0.04] p-4 hover:border-mg-green/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-green">
+        <Inbox className="mt-0.5 h-5 w-5 shrink-0 text-mg-green" />
+        <span><strong className="block text-sm text-white">Staff ticket inbox</strong><span className="mt-1 block text-xs leading-5 text-white/60">For authorised Media God support administrators</span></span>
+      </Link>
+    </div>
+    <section aria-labelledby="support-contact-title" className="rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+      <h2 id="support-contact-title" className="flex items-center gap-2 text-xl font-bold text-white"><Mail className="h-5 w-5 text-mg-green" /> Contact the team</h2>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Email support</h3>
+          <a href="mailto:support@underworldhub.co.uk" className="mt-1 block break-all text-sm text-mg-green hover:underline">support@underworldhub.co.uk</a>
+          <p className="mt-1 text-xs leading-5 text-white/60">Messages to this address create a support ticket automatically. Our staff can reply from the ticket inbox.</p>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-white">Account and verification emails</h3>
+          <span className="mt-1 block break-all text-sm text-white/80">no-reply@underworldhub.co.uk</span>
+          <p className="mt-1 text-xs leading-5 text-white/60">Used to send verification and password-reset links. This is a sending-only address; use the support email above for help.</p>
+        </div>
+      </div>
+      <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-white/50"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-mg-green" /> Each ticket has a private link emailed to the customer. Keep that link private to read messages and reply without needing to log in.</p>
+    </section>
+    <SupportReleaseCenter />
+    <section id="support-ticket-form" aria-labelledby="support-ticket-title" className="scroll-mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+      <h2 id="support-ticket-title" className="text-xl font-bold text-white">Send a support request</h2>
+      <p className="mb-5 mt-1 text-sm text-white/60">Tell us what happened. We will create your ticket and email you a private link to follow its progress.</p>
+      <form onSubmit={submit} className="space-y-4">
       <TextField id="support-name" label="Your name (optional)" value={data.name} onChange={v=>set("name",v)} maxLength={100} autoComplete="name"/>
       <TextField id="support-email" label="Email address" type="email" value={data.email} onChange={v=>set("email",v)} required maxLength={254} autoComplete="email" placeholder="you@example.com"/>
       <div className="space-y-1.5"><Label htmlFor="support-category">Problem type</Label>
@@ -62,7 +97,8 @@ export function SupportPage() {
         {busy?"Submitting…":"Send support request"}
       </Button>
       <p className="text-xs text-muted-foreground">We'll email your ticket link. You can also use that link to reply to our support team directly on this website.</p>
-    </form>
+      </form>
+    </section>
   </Shell>;
 }
 function Thread({ticket}) {
