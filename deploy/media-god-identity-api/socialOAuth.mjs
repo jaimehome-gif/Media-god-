@@ -25,7 +25,9 @@ const configured = provider => {
     process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY);
   return Boolean(process.env[upper+"_CLIENT_ID"] && process.env[upper+"_CLIENT_SECRET"]);
 };
-const site = String(process.env.PUBLIC_SITE_URL || "https://underworldhub.co.uk").replace(/\/+$/,"");
+// Align OAuth errors and interrupted sign-ins with the verified independent
+// website. The non-www address is still hosted separately during DNS migration.
+const site = String(process.env.SITE_LINK_ORIGIN || "https://www.underworldhub.co.uk").replace(/\/+$/,"");
 const identity = String(process.env.SOCIAL_CALLBACK_BASE_URL ||
   "https://media-god-identity-api-production.up.railway.app").replace(/\/+$/,"");
 const allowedOrigins = new Set(String(process.env.SOCIAL_RETURN_ORIGINS ||
