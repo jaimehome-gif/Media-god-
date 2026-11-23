@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import {
   hydrateAccountPreferences,
@@ -43,8 +43,12 @@ export const AuthProvider = ({ children }) => {
   const [authChecked, setAuthChecked] = useState(false);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
 
+  const authGeneration = useRef(0);
+  const [retryNeeded, setRetryNeeded] = useState(false);
+
   const checkUserAuth = async ({ markAuthRequired = false } = {}) => {
-    setIsLoadingAuth(true);
+    const generation = ++authGeneration.current;
+    if (!base44.auth.getAccessToken()) setIsLoadingAuth(true);
 
     try {
       // Always ask the Media God backend instead of relying only on whether an
@@ -53,6 +57,8 @@ export const AuthProvider = ({ children }) => {
       // also allows the platform to recognise any valid persisted session.
       const currentUser = await base44.auth.me();
 
+      if (generation !== authGeneration.current) return null;
+      setRetryNeeded(false);
       setUser(currentUser);
       setIsAuthenticated(true);
       setIsGuest(false);
@@ -68,6 +74,15 @@ export const AuthProvider = ({ children }) => {
 
       return currentUser;
     } catch (error) {
+      if (generation !== authGeneration.current) return null;
+      if (error?.status !== 401 && error?.status !== 403 && base44.auth.getAccessToken()) {
+        setRetryNeeded(true);
+        setAuthError(null);
+        setAuthChecked(true);
+        if (!user) setIsGuest(true);
+        return null;
+      }
+      setRetryNeeded(false);
       setUser(null);
       setIsAuthenticated(false);
       setAuthChecked(true);
@@ -88,7 +103,7 @@ export const AuthProvider = ({ children }) => {
 
       return null;
     } finally {
-      setIsLoadingAuth(false);
+      if (generation === authGeneration.current) setIsLoadingAuth(false);
     }
   };
 
@@ -109,7 +124,24 @@ export const AuthProvider = ({ children }) => {
     return installAccountPreferenceSync();
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!retryNeeded) return;
+    const retry = () => {
+      if (!document.hidden && navigator.onLine) void checkUserAuth();
+    };
+    const timer = window.setInterval(retry, 30000);
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', retry);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', retry);
+    };
+  }, [retryNeeded]);
+
   const continueAsGuest = () => {
+    authGeneration.current++;
+    setRetryNeeded(false);
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(true);
@@ -120,6 +152,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = (shouldRedirect = true) => {
+    authGeneration.current++;
+    setRetryNeeded(false);
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(false);

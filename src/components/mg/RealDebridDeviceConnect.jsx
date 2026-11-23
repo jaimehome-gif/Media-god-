@@ -98,6 +98,7 @@ export default function RealDebridDeviceConnect({
           unwrap(response);
 
         setStatus(next);
+        setError("");
 
         if (
           !quiet &&
@@ -116,16 +117,7 @@ export default function RealDebridDeviceConnect({
             "Could not check Real-Debrid."
           );
 
-        setStatus({
-          connected:
-            false,
-          valid:
-            false,
-        });
-
-        if (!quiet) {
-          setError(text);
-        }
+        setError(text);
 
         return null;
       } finally {
@@ -508,7 +500,7 @@ export default function RealDebridDeviceConnect({
           </h2>
 
           <p className="mt-1 max-w-2xl text-xs leading-5 text-white/50 3xl:text-sm">
-            Link your own Real-Debrid account without signing in to Media God or pasting an API token. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection for this device.
+            Link your own Real-Debrid account to your signed-in Media God account. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection across your devices.
           </p>
         </div>
 
@@ -524,7 +516,7 @@ export default function RealDebridDeviceConnect({
           </span>
         ) : (
           <span className="text-xs text-white/40">
-            Not connected
+            {status ? "Not connected" : "Status unavailable"}
           </span>
         )}
       </div>

@@ -55,33 +55,7 @@ export default function RdBanner({
             );
           }
         } catch {
-          /*
-           * Backwards-compatible
-           * fallback for an existing
-           * manually saved RD token.
-           */
-          try {
-            const user =
-              await base44.auth.me();
-
-            if (
-              mounted
-            ) {
-              setHasRd(
-                Boolean(
-                  user?.rd_token
-                )
-              );
-            }
-          } catch {
-            if (
-              mounted
-            ) {
-              setHasRd(
-                false
-              );
-            }
-          }
+          if (mounted) setHasRd("unavailable");
         }
       };
 

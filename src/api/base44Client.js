@@ -194,7 +194,9 @@ async function invoke(name,payload={}) {
   }
   if (PRIVATE_FUNCTIONS.has(functionName)) {
     requireSession();
-    const data=await call(RD_API,"/functions/"+functionName,{method:"POST",body:payload,timeoutMs:125000});
+    const accountPayload = { ...payload };
+    delete accountPayload.guest_device_key;
+    const data=await call(RD_API,"/functions/"+functionName,{method:"POST",body:accountPayload,timeoutMs:125000});
     return {data};
   }
   if (!PUBLIC_FUNCTIONS.has(functionName)) {

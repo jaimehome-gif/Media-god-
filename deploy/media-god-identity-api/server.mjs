@@ -204,7 +204,11 @@ async function authentication(req,res,path,body,origin) {
     return respond(res,200,{ok:true},origin);
   }
   const user=await requireUser(req);
-  if (path==="/auth/me"&&req.method==="GET") return respond(res,200,profile(user),origin);
+  if (path==="/auth/me"&&req.method==="GET") {
+    // Renew active sessions at most once a week, including existing installations.
+    await pool.query("UPDATE identity_sessions SET expires_at=NOW()+INTERVAL '14 days' WHERE id=$1 AND revoked_at IS NULL AND expires_at>NOW() AND expires_at<NOW()+INTERVAL '7 days'",[user.session_id]);
+    return respond(res,200,profile(user),origin);
+  }
   if (path==="/auth/logout"&&req.method==="POST") {
     await pool.query("UPDATE identity_sessions SET revoked_at=NOW() WHERE id=$1",[user.session_id]);
     return respond(res,200,{ok:true},origin);

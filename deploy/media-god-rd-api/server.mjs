@@ -10,7 +10,7 @@ import fetchAddonStreams from "./fetchAddonStreams.mjs";
 const VERIFY_URL = process.env.IDENTITY_VERIFY_URL;
 const ACCOUNT_KEY = process.env.RD_ACCOUNT_DERIVATION_KEY;
 const allowed = new Set(
-  String(process.env.ALLOWED_ORIGINS || "https://underworldhub.co.uk")
+  String(process.env.ALLOWED_ORIGINS || "https://underworldhub.co.uk,https://www.underworldhub.co.uk")
     .split(",").map(x=>x.trim()).filter(Boolean)
 );
 if (!VERIFY_URL || !ACCOUNT_KEY || ACCOUNT_KEY.length<32) {
@@ -60,7 +60,8 @@ async function verifyIdentity(header) {
       signal:AbortSignal.timeout(5000),
       cache:"no-store"
     });
-    if (!response.ok) return null;
+    if (response.status===401 || response.status===403) return null;
+    if (!response.ok) throw Error("Identity service unavailable");
     const user=await response.json();
     if (!/^[0-9a-f-]{36}$/i.test(String(user?.id||""))) return null;
     // The independently verified account receives one stable encrypted
@@ -70,7 +71,7 @@ async function verifyIdentity(header) {
       .update("mg-account-rd-v1:"+user.id).digest("hex");
     return await deviceClient("Device "+capability);
   }catch {
-    return null;
+    throw Error("Account verification temporarily unavailable");
   }
 }
 async function exclusive(id,work) {
@@ -92,7 +93,9 @@ async function serve(req,res) {
   if (!Object.hasOwn(handlers,path)) return reply(res,404,{error:"Not found"},origin);
   if (req.method==="OPTIONS") return reply(res,204,{},origin);
   if (req.method!=="POST") return reply(res,405,{error:"POST required"},origin);
-  const verified=await verifyIdentity(req.headers.authorization);
+  let verified;
+  try { verified=await verifyIdentity(req.headers.authorization); }
+  catch { return reply(res,503,{error:"Account verification temporarily unavailable"},origin); }
   if (!verified) return reply(res,401,{error:"Sign in to your new Media God account"},origin);
   if (limited(verified.user.id)) return reply(res,429,{error:"Too many requests. Try shortly."},origin);
   let size=0,parts=[],body;
