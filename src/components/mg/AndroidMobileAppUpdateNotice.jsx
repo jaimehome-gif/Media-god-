@@ -149,10 +149,9 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
     ),
   });
   const legacySigningError = isMobileUpdaterSignatureError(updateState.message);
-  // GitHub sometimes answers the native HttpURLConnection request with HTTP 404
-  // even when the published, signed asset is available to Chrome. The installed
-  // native downloader cannot be repaired by hosted JavaScript, so offer the
-  // browser-hosted release page without forcing an APK uninstall.
+  // Some older native downloaders receive HTTP 404 even when the verified APK
+  // is available to the browser. Offer the APK itself as the first fallback;
+  // reserve the repository release page for the rare case where that also fails.
   const nativeDownload404 = /update download failed with HTTP 404/i.test(updateState.message);
   // Mobile 1.0.93 may mistake unavailable archive-signing metadata for a
   // certificate mismatch. The old native updater cannot fix itself, so offer
@@ -220,7 +219,7 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
       message:
         result === "busy"
           ? "Another Media God Mobile update is already running."
-          : "The in-app updater could not start. You can open the GitHub download instead.",
+          : "The in-app updater could not start. Use Download APK directly below.",
       progress: 0,
     });
   };
@@ -233,13 +232,12 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
     }
   };
 
-  const openFallback = () => {
-    // Use the release page, not the very same direct asset endpoint which
-    // just failed inside the native Android downloader.
-    openOfficialUrl(nativeDownload404
-      ? (release?.releaseUrl || release?.apkUrl || "")
-      : (release?.apkUrl || release?.releaseUrl || ""));
+  const downloadApkDirectly = () => {
+    // The release has already passed the published-signature and manifest gate.
+    // Open the actual APK asset, never a repository listing as the primary path.
+    openOfficialUrl(release?.apkUrl || "");
   };
+  const openReleaseFallback = () => openOfficialUrl(release?.releaseUrl || "");
   const openFireTvApk = () => openOfficialUrl(OFFICIAL_FIRE_TV_APK);
 
   if (!enabled || !visible || !release) {
@@ -274,7 +272,7 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
                 ? "This television appears to be running the Android phone APK. The TV APK also installs on Android boxes running Android 5.0 through 9.0. Install the dedicated Fire TV APK alongside Mobile, sign in and test before removing anything."
                 : canSelfUpdate
                   ? "Media God Mobile can download this update itself. Android will ask you to approve installation before anything is replaced."
-                  : "Open the Android Mobile APK from GitHub to update this installation."}
+                  : "Download the verified Android Mobile APK directly. Android will confirm whether the installer can update the app."}
             </p>
           </div>
 
@@ -372,10 +370,9 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
 
         {nativeDownload404 && !installedOnFireTv && (
           <p className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm leading-5 text-amber-100">
-            The built-in downloader received HTTP 404 from GitHub. Open the
-            official release page in your browser, expand Assets, and download
-            the Media-God-Android-Mobile.apk file. Install it over this app;
-            do not uninstall or clear its data.
+            The built-in download failed. Tap Download APK directly to get
+            the same verified installer without searching GitHub. Install it over
+            your existing Media God app. Do not uninstall or clear app data.
           </p>
         )}
 
@@ -385,13 +382,24 @@ export default function AndroidMobileAppUpdateNotice({ enabled = true }) {
           </p>
         )}
 
-        {showMobileInstaller && (
+        {!installedOnFireTv && release?.apkUrl && (
           <button
             type="button"
-            onClick={openFallback}
-            className="mt-4 min-h-12 w-full rounded-2xl bg-cyan-300 px-5 py-3 font-bold text-black outline-none hover:brightness-110 focus:ring-4 focus:ring-cyan-300/40"
+            onClick={downloadApkDirectly}
+            disabled={updateBusy || updateState.status === "starting"}
+            className={`mt-4 min-h-12 w-full rounded-2xl px-5 py-3 font-bold outline-none focus:ring-4 focus:ring-cyan-300/40 disabled:opacity-50 ${showMobileInstaller ? "bg-cyan-300 text-black hover:brightness-110" : "border border-cyan-300/35 bg-black/20 text-cyan-200 hover:bg-white/10"}`}
           >
-            {nativeDownload404 ? "Open official Mobile release in browser" : "Open official Android Mobile APK"}
+            <Download className="mr-2 inline h-5 w-5" />
+            Download APK directly
+          </button>
+        )}
+        {showMobileInstaller && release?.releaseUrl && (
+          <button
+            type="button"
+            onClick={openReleaseFallback}
+            className="mt-2 w-full min-h-10 rounded-lg text-xs text-white/55 hover:text-white hover:underline"
+          >
+            Having trouble downloading? View official release details
           </button>
         )}
 
