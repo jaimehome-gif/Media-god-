@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSocialOAuth } from "./socialOAuth.mjs";
+import { createSocialOAuth, associateSocialAccount } from "./socialOAuth.mjs";
 
 function response(){
   return {
@@ -50,7 +50,7 @@ test("provider start is disabled safely without configured OAuth client",async()
   const res=response();
   await oauth.handle(getRequest("/auth/oauth/google/start"),res,"/auth/oauth/google/start",{},"",apiResponse);
   assert.equal(res.status,303);
-  assert.match(res.headers.Location,/^https:\/\/underworldhub\.co\.uk\/login\?social_error=not_configured$/);
+  assert.match(res.headers.Location,/^https:\/\/www\.underworldhub\.co\.uk\/login\?social_error=not_configured$/);
 });
 
 test("Google OAuth start uses server-stored state, PKCE, nonce, browser-binding cookie and a fixed callback",async()=>{
@@ -72,7 +72,7 @@ test("Google OAuth start uses server-stored state, PKCE, nonce, browser-binding 
     assert.match(res.headers["Set-Cookie"],/HttpOnly; Secure; SameSite=None/);
     const inserted=pool.queries.find(q=>q.sql.startsWith("INSERT INTO identity_oauth_states"));
     assert.ok(inserted,"OAuth state stored in PostgreSQL");
-    assert.equal(inserted.values[5],"https://underworldhub.co.uk","external redirect rejected");
+    assert.equal(inserted.values[5],"https://www.underworldhub.co.uk","external redirect rejected");
     assert.notEqual(inserted.values[0],url.searchParams.get("state"),"raw OAuth state is never stored");
   }finally{unsetProvider("google");}
 });
@@ -123,4 +123,79 @@ test("callback without the correct browser cookie is rejected, never exchanged",
     assert.match(res.headers.Location,/social_error=invalid_session/);
     assert.equal(pool.queries.length,0);
   }finally{unsetProvider("google");}
+});
+
+function accountPool({emailAccount=null,existingProviderAccount=null}={}) {
+  const queries=[], links=[];
+  let insertedAccounts=0;
+  const conn={
+    async query(sql,args=[]) {
+      queries.push({sql,args});
+      if(sql.startsWith("SELECT a.* FROM identity_social_accounts")) {
+        return {rows:existingProviderAccount?[existingProviderAccount]:[]};
+      }
+      if(sql.startsWith("SELECT * FROM identity_accounts WHERE email=$1")) {
+        return {rows:emailAccount?[emailAccount]:[]};
+      }
+      if(sql.startsWith("INSERT INTO identity_accounts")) {
+        if(sql.includes("ON CONFLICT(email)") && emailAccount) return {rows:[]};
+        insertedAccounts++;
+        return {rows:[{id:"new-"+insertedAccounts,email:args[1],verified_at:new Date()}]};
+      }
+      if(sql.startsWith("INSERT INTO identity_social_accounts")) links.push(args);
+      return {rows:[]};
+    },
+    release(){}
+  };
+  return {
+    queries,links,
+    get insertedAccounts(){return insertedAccounts;},
+    async connect(){return conn;}
+  };
+}
+
+test("Google verified Gmail signs into the same independently verified email account",async()=>{
+  const canonical={id:"independent-user",email:"test@gmail.com",verified_at:new Date(),password_hash:"existing-hash"};
+  const pool=accountPool({emailAccount:canonical});
+  const user=await associateSocialAccount(pool,{
+    provider:"google",subject:"google-sub-1",verifiedEmail:"test@gmail.com",
+    fullName:"Test",trustedGoogleMailbox:true,
+  });
+  assert.equal(user.id,canonical.id);
+  assert.equal(user.password_hash,canonical.password_hash);
+  assert.equal(pool.insertedAccounts,0,"never create a duplicate account");
+  assert.deepEqual(pool.links,[["google","google-sub-1",canonical.id]]);
+  assert.ok(pool.queries.some(x=>x.sql.includes("verified_at IS NOT NULL FOR UPDATE")));
+});
+
+test("Unverified or third-party Google-email claims cannot attach an existing account",async()=>{
+  const canonical={id:"real-user",email:"test@example.net",verified_at:new Date()};
+  const pool=accountPool({emailAccount:canonical});
+  const user=await associateSocialAccount(pool,{
+    provider:"google",subject:"google-sub-2",verifiedEmail:"test@example.net",
+    fullName:"Test",trustedGoogleMailbox:false,
+  });
+  assert.notEqual(user.id,canonical.id);
+  assert.match(user.email,/^social-[a-f0-9]{40}@login\.media-god\.invalid$/);
+  assert.deepEqual(pool.links,[["google","google-sub-2",user.id]]);
+});
+
+test("Already linked Google profiles are never overwritten or silently merged",async()=>{
+  const old={id:"existing-provider-profile",email:"social-existing@login.media-god.invalid"};
+  const pool=accountPool({emailAccount:{id:"new-email-account"},existingProviderAccount:old});
+  const user=await associateSocialAccount(pool,{
+    provider:"google",subject:"previously-bound",verifiedEmail:"test@gmail.com",
+    fullName:"Test",trustedGoogleMailbox:true,
+  });
+  assert.equal(user.id,old.id);
+  assert.equal(pool.links.length,0);
+  assert.equal(pool.insertedAccounts,0);
+  assert.ok(!pool.queries.some(x=>x.sql.startsWith("SELECT * FROM identity_accounts WHERE email=$1")));
+});
+
+test("All social accounts still require a verified provider subject",async()=>{
+  const social=await import("./socialOAuth.mjs");
+  const source=String(social.associateSocialAccount);
+  assert.match(source,/SELECT a\.\* FROM identity_social_accounts/);
+  assert.match(source,/person\.trustedGoogleMailbox && person\.verifiedEmail/);
 });
