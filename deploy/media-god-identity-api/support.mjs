@@ -34,18 +34,23 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
   async function testMailSendingOnce() {
     const address=String(process.env.SUPPORT_TEST_TO||"").trim().toLowerCase();
     if (!emailRe.test(address) || address.length>254) return;
-    for (const [name,from] of [["support_from",supportFrom],["account_from",process.env.EMAIL_FROM]]) {
+    const runId = /^[a-z0-9-]{1,45}$/i.test(process.env.SUPPORT_TEST_RUN_ID || "")
+      ? process.env.SUPPORT_TEST_RUN_ID : "";
+    for (const [name,from,subject] of [
+      ["support_from",supportFrom,"Media God support reply delivery test"],
+      ["account_from",process.env.EMAIL_FROM,"Media God account email delivery test"]
+    ]) {
       if (!from) continue;
-      const previous=await pool.query("SELECT name FROM support_service_email_checks WHERE name=$1",[name]);
+      const marker = runId ? runId+":"+name : name;
+      const previous=await pool.query("SELECT name FROM support_service_email_checks WHERE name=$1",[marker]);
       if (previous.rows.length) continue;
       try {
-        await emailSend(address,"Media God email system test - "+name,
-          "This is a delivery test for Media God's independent email system. No action is required.\\n",{from});
-        // Include explicitly selected sender, even if defaults change.
-        await pool.query("INSERT INTO support_service_email_checks(name) VALUES($1) ON CONFLICT(name) DO NOTHING",[name]);
-        console.log("[support] Outgoing email test accepted by Resend for "+name);
+        await emailSend(address, runId ? subject+" ("+runId+")" : "Media God email system test - "+name,
+          "This is an authorised test of Media God's independent email system. No action is required.\\n",{from});
+        await pool.query("INSERT INTO support_service_email_checks(name) VALUES($1) ON CONFLICT(name) DO NOTHING",[marker]);
+        console.log("[support] Outgoing email test accepted by Resend for "+marker);
       } catch {
-        console.error("[support] Outgoing email test was not accepted for "+name);
+        console.error("[support] Outgoing email test was not accepted for "+marker);
       }
     }
   }
