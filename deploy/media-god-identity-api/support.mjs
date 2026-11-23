@@ -67,9 +67,61 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
   // Resend delivers signed metadata, not email content. The signature is
   // checked over the original request bytes, and email contents are fetched
   // from the Receiving API. No webhook secret means this stays disabled.
+  // Keep the secret in memory, not source control or logs. If a webhook for
+  // this exact endpoint already exists, reuse it instead of creating duplicates.
+  let webhookSigningSecret = String(process.env.RESEND_WEBHOOK_SECRET || "");
+  let webhookProvisioning = false;
+  const webhookEndpoint = "https://media-god-identity-api-production.up.railway.app/support/inbound/resend";
+  const webhookHeaders = () => ({
+    Authorization:"Bearer "+process.env.RESEND_API_KEY,
+    "Content-Type":"application/json"
+  });
+  async function ensureResendWebhook() {
+    if (webhookSigningSecret || webhookProvisioning ||
+        process.env.SUPPORT_AUTO_WEBHOOK !== "true" || !process.env.RESEND_API_KEY) return;
+    webhookProvisioning=true;
+    try {
+      const response=await fetch("https://api.resend.com/webhooks",{
+        headers:webhookHeaders(),signal:AbortSignal.timeout(12000)
+      });
+      if (!response.ok) throw Error("Webhook listing returned HTTP "+response.status);
+      const listing=await response.json();
+      if (!Array.isArray(listing.data)) throw Error("Unexpected webhook list response.");
+      const exact=listing.data.find(w=>w.endpoint===webhookEndpoint && Array.isArray(w.events) && w.events.includes("email.received"));
+      let details;
+      if (exact) {
+        if (exact.status==="disabled") throw Error("Existing support webhook is disabled; enable it in Resend.");
+        const check=await fetch("https://api.resend.com/webhooks/"+encodeURIComponent(exact.id),{
+          headers:webhookHeaders(),signal:AbortSignal.timeout(12000)
+        });
+        if (!check.ok) throw Error("Webhook detail returned HTTP "+check.status);
+        details=await check.json();
+      } else {
+        const created=await fetch("https://api.resend.com/webhooks",{
+          method:"POST",headers:webhookHeaders(),
+          body:JSON.stringify({endpoint:webhookEndpoint,events:["email.received"]}),
+          signal:AbortSignal.timeout(12000)
+        });
+        if (!created.ok) throw Error("Webhook creation returned HTTP "+created.status);
+        details=await created.json();
+      }
+      if (!/^whsec_[A-Za-z0-9_+\/-]{16,}$/.test(String(details.signing_secret||"")))
+        throw Error("Resend did not return a usable webhook secret.");
+      webhookSigningSecret=details.signing_secret;
+      console.log("[support] Resend receiving webhook connected and signature verification enabled");
+    } catch(e) {
+      console.error("[support] Could not connect Resend receiving webhook:",String(e.message||"request failed").slice(0,160));
+    } finally {webhookProvisioning=false;}
+  }
+  if (process.env.SUPPORT_AUTO_WEBHOOK === "true") {
+    const once=setTimeout(ensureResendWebhook, 2500);
+    once.unref?.();
+    const repeat=setInterval(ensureResendWebhook,5*60*1000);
+    repeat.unref?.();
+  }
   async function receiveWebhook(req,res,raw,origin,respond) {
-    if (!process.env.RESEND_WEBHOOK_SECRET) fail(503,"Incoming email webhook not configured.");
-    const signing = String(process.env.RESEND_WEBHOOK_SECRET);
+    if (!webhookSigningSecret) fail(503,"Incoming email webhook not configured.");
+    const signing = webhookSigningSecret;
     if (!signing.startsWith("whsec_")) fail(503,"Incoming email signing secret invalid.");
     const id = String(req.headers["svix-id"] || "");
     const stamp = String(req.headers["svix-timestamp"] || "");
