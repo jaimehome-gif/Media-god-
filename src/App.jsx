@@ -16,6 +16,7 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import VerifyEmail from '@/pages/VerifyEmail';
 import SocialOAuthCallback from '@/pages/SocialOAuthCallback';
+import DeviceLogin from '@/pages/DeviceLogin';
 import { SupportPage, SupportTicketPage, SupportInboxPage } from '@/pages/Support';
 import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -92,6 +93,7 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={publicOnly(<ResetPassword />)} />
       <Route path="/verify-email" element={publicOnly(<VerifyEmail />)} />
       <Route path="/auth/callback" element={<SocialOAuthCallback />} />
+      <Route path="/device-login" element={<DeviceLogin />} />
       <Route path="/support" element={<SupportPage />} />
       <Route path="/support/updates" element={
         <div className="min-h-screen bg-mg-background text-white">
