@@ -83,9 +83,21 @@ const limitRate = (req,kind,email="") => {
   const key=sha(kind+":"+String(req.socket.remoteAddress||"") + ":" + email);
   const now=Date.now(), prior=traffic.get(key);
   const state=prior&&prior.until>now?prior:{n:0,until:now+900000};
-  state.n++; traffic.set(key,state);
+  state.n++;
+  state.kind=kind;
+  state.emailHash=sha(email);
+  traffic.set(key,state);
   if (traffic.size>6000) for (const [id,val] of traffic) if (val.until<=now) traffic.delete(id);
   if (state.n>(kind==="login"?30:12)) err(429,"Too many requests. Try again later.");
+};
+// A verified password-reset token proves mailbox ownership; release that
+// account's in-memory login throttle alongside its database lockout.
+// This never clears throttles on an unauthenticated reset request.
+const clearLoginRateForEmail = email => {
+  const emailHash=sha(email);
+  for (const [key,state] of traffic) {
+    if (state.kind==="login" && state.emailHash===emailHash) traffic.delete(key);
+  }
 };
 const emailSend = async (recipient,subject,plain,options={}) => {
   if (!mailReady) err(503,"Verification email is not configured yet","EMAIL_NOT_READY");
@@ -175,7 +187,7 @@ async function authentication(req,res,path,body,origin) {
     limitRate(req,"login",email);
     const {rows}=await pool.query("SELECT * FROM identity_accounts WHERE email=$1",[email]);
     const user=rows[0];
-    if (user?.locked_until && new Date(user.locked_until)>new Date()) err(429,"Too many incorrect attempts. Try again later.");
+    if (user?.locked_until && new Date(user.locked_until)>new Date()) err(429,"Account temporarily locked after incorrect sign-in attempts. You can reset your password to unlock it, or wait 15 minutes.","ACCOUNT_LOCKED");
     if (!user || !await verifyPass(password,user.password_hash)) {
       if (user) await pool.query("UPDATE identity_accounts SET login_failures=login_failures+1,locked_until=CASE WHEN login_failures>=4 THEN NOW()+INTERVAL '15 minutes' ELSE locked_until END WHERE id=$1",[user.id]);
       err(401,"Invalid email or password");
@@ -198,9 +210,13 @@ async function authentication(req,res,path,body,origin) {
   if (path==="/auth/reset"&&req.method==="POST") {
     const value=String(body.token||""),password=validPassword(body.password);
     if (!/^[A-Za-z0-9_-]{40,100}$/.test(value)) err(400,"Invalid link");
-    const {rows}=await pool.query("UPDATE identity_accounts SET password_hash=$1,reset_hash=NULL,reset_expires=NULL,updated_at=NOW() WHERE reset_hash=$2 AND reset_expires>NOW() RETURNING id",[await hashPass(password),sha(value)]);
+    // A successfully consumed, single-use recovery token must also clear
+    // previous password-guess counters. Otherwise a new password can still
+    // be rejected with ACCOUNT_LOCKED for 15 minutes.
+    const {rows}=await pool.query("UPDATE identity_accounts SET password_hash=$1,reset_hash=NULL,reset_expires=NULL,login_failures=0,locked_until=NULL,updated_at=NOW() WHERE reset_hash=$2 AND reset_expires>NOW() RETURNING id,email",[await hashPass(password),sha(value)]);
     if (!rows.length) err(400,"Reset link expired or used");
     await pool.query("UPDATE identity_sessions SET revoked_at=NOW() WHERE user_id=$1",[rows[0].id]);
+    clearLoginRateForEmail(rows[0].email);
     return respond(res,200,{ok:true},origin);
   }
   const user=await requireUser(req);
