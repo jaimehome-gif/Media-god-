@@ -189,7 +189,12 @@ async function authentication(req,res,path,body,origin) {
     const user=rows[0];
     if (user?.locked_until && new Date(user.locked_until)>new Date()) err(429,"Account temporarily locked after incorrect sign-in attempts. You can reset your password to unlock it, or wait 15 minutes.","ACCOUNT_LOCKED");
     if (!user || !await verifyPass(password,user.password_hash)) {
-      if (user) await pool.query("UPDATE identity_accounts SET login_failures=login_failures+1,locked_until=CASE WHEN login_failures>=4 THEN NOW()+INTERVAL '15 minutes' ELSE locked_until END WHERE id=$1",[user.id]);
+      if (user) await pool.query(
+        // After a completed lockout window, a new incorrect attempt starts
+        // a fresh counter instead of immediately locking the user again.
+        "UPDATE identity_accounts SET login_failures=CASE WHEN locked_until<=NOW() THEN 1 ELSE login_failures+1 END,locked_until=CASE WHEN locked_until<=NOW() THEN NULL WHEN login_failures>=4 THEN NOW()+INTERVAL '15 minutes' ELSE locked_until END WHERE id=$1",
+        [user.id]
+      );
       err(401,"Invalid email or password");
     }
     if (!user.verified_at) err(403,"Verify your email before signing in","EMAIL_UNVERIFIED");
