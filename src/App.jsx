@@ -26,6 +26,7 @@ const UpdatesHistory = lazy(() => import("@/components/mg/UpdatesView"));
 
 const AuthenticatedApp = () => {
   const isSupportPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/support');
+  const isDeviceLoginPath = typeof window !== 'undefined' && window.location.pathname === '/device-login';
   const isPlayerRemotePath =
     typeof window !== 'undefined' &&
     window.location.pathname.startsWith('/remote/');
@@ -64,7 +65,7 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required' && !isAuthenticated && !isSupportPath) {
+    } else if (authError.type === 'auth_required' && !isAuthenticated && !isSupportPath && !isDeviceLoginPath) {
       navigateToLogin();
       return null;
     }
