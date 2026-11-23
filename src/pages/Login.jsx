@@ -98,13 +98,25 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    // Android WebView / password managers can fill the native DOM input
+    // without dispatching React's onChange event. In that case the password
+    // looks filled on screen, but the old useState value is blank or stale.
+    // Read the real form controls at submit time instead. Never trim/modify
+    // the password; the backend normalises only the email address.
+    const fields = new FormData(e.currentTarget);
+    const submittedEmail = String(fields.get("email") ?? email);
+    const submittedPassword = String(fields.get("password") ?? password);
+    if (!submittedEmail.trim() || !submittedPassword) {
+      setError("Please enter your email and password. If Android filled an old password, clear the field and type your new one.");
+      return;
+    }
     setLoading(true);
     try {
-      await base44.auth.loginViaEmailPassword(email, password);
+      await base44.auth.loginViaEmailPassword(submittedEmail, submittedPassword);
       window.location.href = returnTo;
     } catch (err) {
       setError(err?.status === 401
-        ? "Email or password not recognised. You can use your existing email address with your new Media God account. Check your password using the eye icon, or reset it if necessary."
+        ? "Email or password not recognised. If the website accepts your new password, clear the phone's saved password and type it manually using the eye icon. You do not need a new account."
         : err.message || "Could not sign in");
     } finally {
       setLoading(false);
@@ -213,6 +225,7 @@ export default function Login() {
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
               id="email"
+              name="email"
               type="email"
               autoComplete="email"
               autoFocus={!fireTv}
@@ -233,6 +246,7 @@ export default function Login() {
           </div>
           <PasswordVisibilityInput
             id="password"
+            name="password"
             label="password"
             autoComplete="current-password"
             placeholder="••••••••"
