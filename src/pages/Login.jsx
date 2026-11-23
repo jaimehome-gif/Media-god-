@@ -9,6 +9,7 @@ import AuthLayout from "@/components/AuthLayout";
 import PasswordVisibilityInput from "@/components/mg/PasswordVisibilityInput";
 import { SOCIAL_LOGIN_PROVIDERS } from "@/components/mg/SocialLoginSection";
 import { safeReturnTo } from "@/lib/authReturnTo";
+import { isNativeFireTvPlayerAvailable } from "@/components/mg/nativeFireTvBridge";
 import { useAuth } from "@/lib/AuthContext";
 
 const FIRE_TV_RE = /(?:AFT[A-Z0-9]*|Fire TV|AmazonWebAppPlatform|Silk)/i;
@@ -41,6 +42,10 @@ export default function Login() {
   const [socialLoading, setSocialLoading] = useState(null);
   const [availableProviders, setAvailableProviders] = useState({});
   const [socialStatus, setSocialStatus] = useState("loading");
+  const [deviceLogin, setDeviceLogin] = useState(null);
+  const [deviceLoginMessage, setDeviceLoginMessage] = useState("");
+  const nativeMediaGodApp = isNativeFireTvPlayerAvailable();
+
   useEffect(() => {
     let active = true;
     base44.auth.getSocialProviders().then(response => {
@@ -123,17 +128,65 @@ export default function Login() {
     }
   };
 
-  const handleSocial = (provider) => {
-    setError("");
-    setSocialLoading(provider);
+  // Google/other providers reject sign-in inside embedded Android WebViews.
+  // The installed phone and Fire TV APKs can instead display a device code,
+  // then accept an independently authenticated website session. Nothing
+  // changes to existing email/password sign-in or saved Real-Debrid tokens.
+  useEffect(() => {
+    if (!deviceLogin?.device_token) return undefined;
+    let alive = true;
+    let checking = false;
+    const poll = async () => {
+      if (!alive || checking) return;
+      checking = true;
+      try {
+        const status = await base44.auth.pollDeviceSocialLogin(deviceLogin.device_token);
+        if (alive && status?.status === "approved") {
+          window.location.replace(returnTo);
+        }
+      } catch (err) {
+        if (alive && [400, 401, 410].includes(err?.status)) {
+          setDeviceLogin(null);
+          setDeviceLoginMessage("");
+          setError("That device code expired. Select Google sign-in again to get a new code.");
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    const timer = window.setInterval(poll, 3000);
+    void poll();
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [deviceLogin?.device_token, returnTo]);
 
+  const handleSocial = async (provider) => {
+    setError("");
+    setDeviceLoginMessage("");
+    setSocialLoading(provider);
     try {
       if (!availableProviders[provider]) throw new Error("This sign-in provider is not connected yet.");
+      if (nativeMediaGodApp) {
+        const device = await base44.auth.startDeviceSocialLogin(provider);
+        setDeviceLogin(device);
+        setDeviceLoginMessage("Waiting for approval in your normal browser…");
+        setSocialLoading(null);
+        return;
+      }
       base44.auth.loginWithProvider(provider, window.location.origin);
     } catch (err) {
       setSocialLoading(null);
       setError(err?.message || `Could not start ${provider} sign-in`);
     }
+  };
+
+  const openDeviceVerification = () => {
+    const verification = "https://www.underworldhub.co.uk/device-login";
+    if (nativeMediaGodApp && !fireTv) {
+      try {
+        if (window.MediaGodNative?.openExternalUrl?.(verification)) return;
+      } catch { /* Display the address for manual opening instead. */ }
+    }
+    setDeviceLoginMessage("Open www.underworldhub.co.uk/device-login in Chrome on your phone or another device.");
   };
 
   const handleSkip = () => {
@@ -166,6 +219,27 @@ export default function Login() {
         </>
       }
     >
+      {deviceLogin && (
+        <div role="status" className="mb-5 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
+          <p className="mb-2 text-base font-semibold">Complete sign-in in a browser</p>
+          <p className="mb-2 text-xs text-muted-foreground">
+            On your phone or computer, open <strong>www.underworldhub.co.uk/device-login</strong>,
+            sign in with {deviceLogin.provider === "google" ? "Google" : deviceLogin.provider},
+            then approve this device with the code below.
+          </p>
+          <p className="my-3 select-all font-mono text-3xl font-bold tracking-[0.25em]" aria-label="Eight-character device code">
+            {deviceLogin.user_code}
+          </p>
+          <p className="text-xs text-muted-foreground">Code expires after 10 minutes. Keep this screen open.</p>
+          {deviceLoginMessage && <p className="mt-2 text-xs">{deviceLoginMessage}</p>}
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {!fireTv && <Button type="button" variant="outline" onClick={openDeviceVerification}>Open browser approval</Button>}
+            <Button type="button" variant="ghost" onClick={() => { setDeviceLogin(null); setDeviceLoginMessage(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
         {SOCIAL_LOGIN_PROVIDERS.map(({ id, label, Icon }, index) => (
           <Button
