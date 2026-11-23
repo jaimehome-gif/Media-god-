@@ -105,7 +105,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
         if (!created.ok) throw Error("Webhook creation returned HTTP "+created.status);
         details=await created.json();
       }
-      if (!/^whsec_[A-Za-z0-9_+\/-]{16,}$/.test(String(details.signing_secret||"")))
+      if (!/^whsec_[A-Za-z0-9_+\/=\-]{16,}$/.test(String(details.signing_secret||"")))
         throw Error("Resend did not return a usable webhook secret.");
       webhookSigningSecret=details.signing_secret;
       console.log("[support] Resend receiving webhook connected and signature verification enabled");
