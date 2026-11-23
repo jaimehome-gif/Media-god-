@@ -17,7 +17,7 @@ app-specific values using Railway's secret/variable controls.
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `https://media-god-identity-api-production.up.railway.app/auth/oauth/google/callback` |
 | Facebook / Meta | `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET` | `https://media-god-identity-api-production.up.railway.app/auth/oauth/facebook/callback` |
 | Microsoft | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | `https://media-god-identity-api-production.up.railway.app/auth/oauth/microsoft/callback` |
-| Apple | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, optional `APPLE_REDIRECT_URI` | `https://auth.underworldhub.co.uk/auth/oauth/apple/callback` after its verified Railway subdomain is configured |
+| Apple | `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, required `APPLE_REDIRECT_URI` | `https://auth.underworldhub.co.uk/auth/oauth/apple/callback` after its verified Railway subdomain is configured |
 
 Optional: `SITE_LINK_ORIGIN=https://www.underworldhub.co.uk`,
 `SOCIAL_CALLBACK_BASE_URL=https://media-god-identity-api-production.up.railway.app`,
@@ -75,6 +75,18 @@ Optional: `SITE_LINK_ORIGIN=https://www.underworldhub.co.uk`,
    normal browser, including Apple's first-use or Hide My Email behaviour.
    Apple cannot be switched on through Railway variables alone until its
    developer account and verified return domain are ready.
+
+### Existing-account provider linking (before trying another login)
+
+On the normal website, sign in through your existing Google or email/password
+method, open **Settings → Connect sign-in methods**, and choose any provider
+already configured for that account. Media God creates a short-lived,
+authenticated link intent before sending you to that provider. The verified
+OAuth callback adds the new provider identity to the SAME Media God user.
+It will never transfer a provider subject already linked to a different user
+and will never merge profiles merely because their email addresses match.
+On a native Android/Fire TV APK, use the browser website to link new
+providers, then return to the device-code sign-in screen.
 
 ### Activation checks
 
