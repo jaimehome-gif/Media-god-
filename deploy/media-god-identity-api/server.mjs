@@ -283,6 +283,15 @@ async function handler(req,res) {
     if (path==="/"&&req.method==="GET") return respond(res,200,{service:"Media God Identity",base44:false},origin);
     // Apple's form_post must be read as URL-encoded body by the OAuth router,
     // not parsed as JSON by the usual application request decoder.
+    if (path==="/support/inbound/resend" && req.method==="POST") {
+      let size=0, chunks=[];
+      for await (const chunk of req) {
+        size+=chunk.length;
+        if (size>maxBytes) err(413,"Webhook payload too large");
+        chunks.push(chunk);
+      }
+      return await support.receiveWebhook(req,res,Buffer.concat(chunks).toString("utf8"),origin,respond);
+    }
     const body=!appleCallback && ["POST","PATCH"].includes(req.method)?await input(req):{};
     if (path==="/auth/providers" || path.startsWith("/auth/oauth/")) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
