@@ -345,7 +345,7 @@ async function handler(req,res) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
     }
     if (path === "/auth/base44/recover/start" || path === "/auth/base44/recover/complete") return await base44Recovery.handle(req,res,path,body,origin);
-    if (path === "/auth/base44/link" || path === "/auth/base44/exchange") return await base44Bridge.handle(req,res,path,body,origin);
+    if (path === "/auth/base44/link" || path === "/auth/base44/exchange" || path === "/auth/base44/import-addons") return await base44Bridge.handle(req,res,path,body,origin);
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
     if (path.startsWith("/entities/")) return await entityRoute(req,res,path,body,origin);
     if (path.startsWith("/support/")) return await support.handle(req,res,path,body,origin,respond);
