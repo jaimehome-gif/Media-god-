@@ -40,7 +40,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
       if (previous.rows.length) continue;
       try {
         await emailSend(address,"Media God email system test - "+name,
-          "This is a delivery test for Media God's independent email system. No action is required.\\n");
+          "This is a delivery test for Media God's independent email system. No action is required.\\n",{from});
         // Include explicitly selected sender, even if defaults change.
         await pool.query("INSERT INTO support_service_email_checks(name) VALUES($1) ON CONFLICT(name) DO NOTHING",[name]);
         console.log("[support] Outgoing email test accepted by Resend for "+name);
