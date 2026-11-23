@@ -170,7 +170,21 @@ test("TV Sources retain episode identity and web backups", () => {
   assert.match(episodes, /data-mg-episode-sources="true"/);
   assert.match(episodes, /setSourcesEpisode/);
   assert.match(episodes, /<StreamSourcesBox/);
-  assert.match(sourceBox, /mediaType === "tv"[\s\S]{0,320}?rows\.filter\(\(row\) => row\.kind === "rd" \|\| row\.kind === "addon-stream"\)/);
-  assert.match(sourceBox, /Web-player links/);
+  assert.match(sourceBox, /const displayedSourceRows = torrentOnly/);
+  assert.match(sourceBox, /showNonVlcBackups \? rows\.filter\(isNonVlcBackup\)/);
+  assert.match(sourceBox, /showNonVlcBackups/);
+  assert.match(sourceBox, /primarySourceRows\.filter\(row =>/);
+  assert.match(sourceBox, /Web-player backups|web-player backups/);
   assert.match(sourceBox, /verifiedPlaybackPolicy: "manual",[\s\S]{0,150}?manualSourceSelection: true,[\s\S]{0,150}?preparedEpisodeHandoff: true/);
+});
+
+test("a manually selected ready film/episode source bypasses the discovery hold for native VLC", () => {
+  assert.match(player, /const explicitManualNativeSource = !isLive/);
+  assert.match(player, /manualSourceLockActive\(\)/);
+  assert.match(player, /active\?\.preferNativeVlc === true/);
+  assert.match(player, /sourceDiscoveryPending && !episodeReadyForNative && !explicitManualNativeSource/);
+  assert.match(player, /if \(!explicitManualNativeSource && \(/);
+  assert.match(sourceBox, /mediaType === "live" \? stream : \{ \.\.\.stream, preferNativeVlc: true \}/);
+  assert.match(sourceBox, /Web-player page \(not VLC\)/);
+  assert.match(sourceBox, /aria-expanded=\{showNonVlcBackups\}/);
 });
