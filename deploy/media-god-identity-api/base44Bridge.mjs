@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";\n// Secure, opt-in bridge: a Railway session may only be minted after Base44
+import { randomUUID } from "node:crypto";
+// Secure, opt-in bridge: a Railway session may only be minted after Base44
 // verifies the bearer token against Media God's exact historical app ID.
 // Never trust an email or user id supplied by the browser.
 const APP_ID = "6a95b85c1b5a8657bf3906c8";
@@ -67,7 +68,8 @@ export const selectOwnedLegacyAddons = (payload, legacyId) => {
   const rows = Array.isArray(payload) ? payload :
     Array.isArray(payload?.data) ? payload.data :
     Array.isArray(payload?.items) ? payload.items :
-    Array.isArray(payload?.records) ? payload.records : [];
+    Array.isArray(payload?.records) ? payload.records :
+    Array.isArray(payload?.entities) ? payload.entities : [];
   return rows.slice(0, 100).filter(row => {
     if (!row || typeof row !== "object" || Array.isArray(row)) return false;
     // The old Addon schema is owner-scoped. Require that owner explicitly.
