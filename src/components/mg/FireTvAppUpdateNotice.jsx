@@ -3,6 +3,7 @@ import { Download, Loader2, Tv, X } from "lucide-react";
 
 import {
   nativeFireTvAppInfo,
+  openNativeFireTvExternalUrl,
   startNativeFireTvUpdate,
 } from "@/components/mg/nativeFireTvBridge";
 import { fetchLatestNativeRelease } from "@/components/mg/nativeReleaseInfo";
@@ -215,6 +216,16 @@ export default function FireTvAppUpdateNotice({ enabled = true }) {
     setVisible(false);
   };
 
+  // Legacy TV editions may not have the native updater. Give those users
+  // a direct link to the verified APK, with Downloader only as a fallback.
+  const downloadApkDirectly = () => {
+    const url = String(release?.apkUrl || "").trim();
+    if (!url || updateBusy || updateState.status === "starting") return;
+    if (!openNativeFireTvExternalUrl(url)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   const startUpdate = () => {
     if (!canSelfUpdate || updateBusy) {
       return;
@@ -240,7 +251,7 @@ export default function FireTvAppUpdateNotice({ enabled = true }) {
       message:
         result === "busy"
           ? "Another Media God update is already running."
-          : "The in-app updater could not start. Use the Downloader fallback below.",
+          : "The in-app updater could not start. Try Download APK directly below.",
       progress: 0,
     });
   };
@@ -370,10 +381,10 @@ export default function FireTvAppUpdateNotice({ enabled = true }) {
             <div className="flex items-center gap-2 text-sm font-bold text-white">
               <Download className="h-5 w-5 text-mg-green" />
               {signatureMigration
-                ? "One-time clean reinstall"
+                ? "One-time signing migration"
                 : legacySignatureCheckError
-                  ? "Install over the current 1.4.9 app"
-                  : "One-time Downloader install"}
+                  ? "Install over the current Media God app"
+                  : "Download the verified Fire TV APK"}
             </div>
 
             {signatureMigration ? (
@@ -411,6 +422,17 @@ export default function FireTvAppUpdateNotice({ enabled = true }) {
               </ol>
             )}
 
+            <button
+              type="button"
+              onClick={downloadApkDirectly}
+              disabled={updateBusy || updateState.status === "starting"}
+              className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-mg-green px-5 py-3 font-bold text-black outline-none hover:brightness-110 focus:ring-4 focus:ring-mg-green/40 disabled:opacity-50"
+            >
+              <Download className="h-5 w-5" /> Download APK directly
+            </button>
+            <p className="mt-3 text-xs leading-5 text-white/55">
+              If this Fire TV cannot open the installer directly, use the Downloader code below. Keep the existing app installed unless Fire OS confirms the signing certificates are incompatible.
+            </p>
             <div
               className={`my-3 rounded-xl border-2 border-mg-green bg-black px-4 py-4 text-center font-mono font-black text-mg-green ${
                 downloaderCode
