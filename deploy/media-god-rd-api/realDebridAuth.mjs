@@ -216,7 +216,7 @@ const refreshStoredToken = async ({
         clientSecret,
     },
 
-    tokenData,
+    tokenData: { ...tokenData, refresh_token: clean(tokenData.refresh_token) || refreshToken },
   });
 
   return {
@@ -364,6 +364,9 @@ const getStatus = async ({
     }
   }
 
+  if (!rdUser.ok && rdUser.status !== 401) {
+    throw new Error("Real-Debrid status temporarily unavailable");
+  }
   if (!rdUser.ok) {
     return {
       connected: false,
