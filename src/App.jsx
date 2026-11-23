@@ -1,8 +1,9 @@
 import BrowserOpenHelp from "@/components/BrowserOpenHelp";
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, Link } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -19,6 +20,8 @@ import { SupportPage, SupportTicketPage, SupportInboxPage } from '@/pages/Suppor
 import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { PlayerProvider } from '@/components/mg/PlayerProvider.jsx';
+
+const UpdatesHistory = lazy(() => import("@/components/mg/UpdatesView"));
 
 const AuthenticatedApp = () => {
   const isSupportPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/support');
@@ -90,6 +93,16 @@ const AuthenticatedApp = () => {
       <Route path="/verify-email" element={publicOnly(<VerifyEmail />)} />
       <Route path="/auth/callback" element={<SocialOAuthCallback />} />
       <Route path="/support" element={<SupportPage />} />
+      <Route path="/support/updates" element={
+        <div className="min-h-screen bg-mg-background text-white">
+          <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+            <Link to="/support" className="text-sm font-semibold text-mg-green hover:underline">← Support & downloads</Link>
+          </div>
+          <Suspense fallback={<p className="p-6 text-white/70">Loading Media God updates…</p>}>
+            <UpdatesHistory />
+          </Suspense>
+        </div>
+      } />
       <Route path="/support/ticket/:id" element={<SupportTicketPage />} />
       <Route path="/support/inbox" element={<SupportInboxPage />} />
       <Route
