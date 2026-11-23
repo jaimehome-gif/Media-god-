@@ -2,6 +2,7 @@ import { mediaForTorrentFallback } from "./automaticWebFallback.js";
 import { prefersNativeBoxPlayer } from "./boxPlayerPreference.js";
 import { supportsLegacyBoxWebPlayer } from "./legacyBoxWebPlayer";
 import { browserCodecSupport, getPlaybackDeviceProfile } from "./mediaCompatibility";
+import { isNativeFireTvPlayerAvailable } from "./nativeFireTvBridge";
 
 // The Fire Stick's main Play button must enter the same selectable web-scraper
 // player available from source cards. OnlyFlix is the first provider
@@ -33,8 +34,12 @@ export const launchFireTvCardPlay = (player, media) => {
 
   // Never pass an OnlyFlix/VidCore webpage URL to LibVLC: web providers
   // require their own iframe/player with the user's manual scraper selector.
-  const needsNativeVideo = supportsLegacyBoxWebPlayer(true, navigator.userAgent) &&
-    (!browserCodecSupport.h264Aac || prefersNativeBoxPlayer());
+  // Installed Fire TV APKs must enter Media God's own player first.
+  // The native bridge decodes resolved media in VLC; a webpage scraper
+  // cannot provide reliable audio or video to that decoder.
+  const needsNativeVideo = isNativeFireTvPlayerAvailable() ||
+    (supportsLegacyBoxWebPlayer(true, navigator.userAgent) &&
+    (!browserCodecSupport.h264Aac || prefersNativeBoxPlayer()));
   if (!needsNativeVideo) {
     if (typeof player?.playOnlyFlix === "function" &&
         player.playOnlyFlix(scraperMedia)) return true;

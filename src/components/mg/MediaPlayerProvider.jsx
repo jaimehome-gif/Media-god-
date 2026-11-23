@@ -37,6 +37,7 @@ import { hasUnusableEpisodeAudio, episodeAutoplayCandidates, isEnglishMainTrack 
 import { episodeSourceMatchesRequest, flixQuestFirstEpisodeSources, hasUsableEpisodeAddonSource } from "./episodeSourcePolicy.js";
 import { episodeAutoplayCanTrustSource } from "./episodeLaunchTrust.js";
 import { episodeAutoprepareCandidates } from "./episodeAutoprepare.js";
+import { classifyTvBoxSource } from "./tvBoxSourceGate.js";
 
 const PlayerContext = createContext(null);
 
@@ -274,6 +275,9 @@ const isDirectSource = (item) => {
   return (
     /^https?:\/\//i.test(value) &&
     !isMagnetSource(item) &&
+    // A scraped HTML player can be marked type:"url" by an addon. It is
+    // never a native video file, even on sites where HTTPS looks direct.
+    classifyTvBoxSource(item).kind !== "webpage" &&
     !["provider", "youtube", "external", "status"].includes(type) &&
     explicitMedia
   );

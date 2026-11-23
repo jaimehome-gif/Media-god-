@@ -986,7 +986,9 @@ export default function StreamSourcesBox({
           // built-in VLC player, not an external or embedded web decoder.
           completeSources: mediaType === "live"
             ? visibleAddonStreams
-            : visibleAddonStreams.map((item) => ({ ...item, preferNativeVlc: true })),
+            : visibleAddonStreams
+                .filter((item) => classifyTvBoxSource(item).kind !== "webpage")
+                .map((item) => ({ ...item, preferNativeVlc: true })),
         });
       } catch (error) {
         setMessage(
@@ -1060,7 +1062,16 @@ export default function StreamSourcesBox({
       // from a source that was selected for Media God VLC playback. Dedicated
       // labelled web-player backups remain available as an explicit choice.
       if (isNativeFireTvPlayerAvailable() && mediaType !== "live" && webScraperPage) {
-        setMessage("This source is a web-player page rather than a direct video file. Choose a direct stream or Combined Debrid above to play using Media God VLC. Separate web-player backups are still listed below.");
+        // The viewer asked to play from Sources in the installed app.
+        // An iframe/HTML watch page cannot be decoded by native VLC, so
+        // discover a genuine direct/cached media file instead. Do not open
+        // the provider's silent embedded player or pass HTML to LibVLC.
+        if (hasDebrid) {
+          setMessage("Finding a direct video for Media God VLC…");
+          await playCombinedDebrid({ readyOnly: mediaType === "tv" });
+          return;
+        }
+        setMessage("This source is a web-player page, not a video file. Connect Real-Debrid or choose a direct video source to use Media God VLC.");
         return;
       }
       if (isTvBox && mediaType !== "live" && webScraperPage) {
@@ -1164,7 +1175,9 @@ export default function StreamSourcesBox({
         ],
         completeSources: mediaType === "live"
           ? visibleAddonStreams
-          : visibleAddonStreams.map((item) => ({ ...item, preferNativeVlc: true })),
+          : visibleAddonStreams
+              .filter((item) => classifyTvBoxSource(item).kind !== "webpage")
+              .map((item) => ({ ...item, preferNativeVlc: true })),
       });
     };
 

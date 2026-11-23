@@ -23,6 +23,7 @@ function selectedEpisodeSource({
   src = "magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
   properties = {},
   tvBox = false,
+  native = false,
 } = {}) {
   const start = sourceBox.indexOf("  const playCombinedDebrid =");
   const end = sourceBox.indexOf("  const pasteMagnet =", start);
@@ -36,7 +37,7 @@ function selectedEpisodeSource({
     player: { play: async (payload) => { captured.push(payload); return true; } },
     setMessage: () => {}, setRdSearching: () => {},
     hasDebrid, rdSearching: false,
-    isFireTvRuntime: () => tvBox, classifyTvBoxSource,
+    isFireTvRuntime: () => tvBox, isNativeFireTvPlayerAvailable: () => native, classifyTvBoxSource,
     sourceHasPendingCacheSignal, sourceIsConfirmedCachedForPlayback,
     tmdbId: 1234, resolvedImdb: "tt123456", imdbId: "",
     title: "Example Show", poster: "poster", rdYear: 2026,
@@ -187,4 +188,34 @@ test("a manually selected ready film/episode source bypasses the discovery hold 
   assert.match(sourceBox, /mediaType === "live" \? stream : \{ \.\.\.stream, preferNativeVlc: true \}/);
   assert.match(sourceBox, /Web-player page \(not VLC\)/);
   assert.match(sourceBox, /aria-expanded=\{showNonVlcBackups\}/);
+});
+
+test("installed APK Sources redirects HTML scraper selections to VLC direct media discovery", async () => {
+  const page = selectedEpisodeSource({
+    tvBox: true,
+    native: true,
+    type: "url",
+    src: "https://onlyflix.to/embed/1234",
+  });
+  await page.run();
+  assert.equal(page.captured.length, 1);
+  const request = page.captured[0];
+  assert.equal(request.preferRd, true);
+  assert.equal(request.skipEpisodeAutoPrepare, true);
+  assert.deepEqual(Array.from(request.sources), []);
+  assert.equal(request.completeSources.length, 1);
+  assert.equal(request.completeSources[0].src, "https://example.test/episode-other.mp4");
+  assert.equal(request.completeSources[0].preferNativeVlc, true);
+});
+
+test("native VLC never attempts an HTML scraper without a debrid account", async () => {
+  const page = selectedEpisodeSource({
+    tvBox: true,
+    native: true,
+    type: "url",
+    src: "https://onlyflix.to/embed/1234",
+    hasDebrid: false,
+  });
+  await page.run();
+  assert.equal(page.captured.length, 0);
 });
