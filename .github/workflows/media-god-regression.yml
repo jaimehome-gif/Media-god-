@@ -54,6 +54,8 @@ jobs:
         run: node --test tests/base44-account-bridge.test.mjs tests/base44-recovery.test.mjs tests/base44-addon-import.test.mjs
       - name: Verify native Sources VLC handoff
         run: node --test tests/native-vlc-source-priority.test.mjs tests/tv-sources-native-vlc-handoff.test.mjs
+      - name: Verify Continue Watching resumes in the native Media God player
+        run: node --test tests/continue-watching-native-resume.test.mjs tests/firetv-resume-routing.test.mjs tests/continue-watching-source-recovery.test.mjs tests/continue-watching-in-player-sources.test.mjs
       - name: Compile independent website
         run: npm run build
       - name: Verify identity service container build

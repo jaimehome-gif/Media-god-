@@ -27,6 +27,8 @@ import { Image } from "@/components/ui/image";
 import { restoreResumeSource } from "./resumeSource";
 import { hasSeekableHistoryPosition } from "./resumeHistoryPolicy";
 import { isIpBoundHostedProvider, isElfHostedUrl } from "@/components/mg/ipBoundVodSafety";
+import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
+import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 
 const PosterImage = /** @type {any} */ (Image);
 
@@ -251,6 +253,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState("");
+  const [resumeMessage, setResumeMessage] = useState("");
   const displayedProfileRef = useRef(activeHouseholdProfileId());
   const [sourcePicker, setSourcePicker] = useState(null);
   const [downloadPicker, setDownloadPicker] = useState(null);
@@ -399,6 +402,17 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
   };
 
   const openDetail = async (item) => {
+    setResumeMessage("");
+    // A saved OnlyFlix/iframe bookmark is an HTML player, not a direct video
+    // that Media God's native VLC engine can decode. The Resume action in an
+    // installed APK always uses the verified source player instead.
+    const nativeResume = isNativeFireTvPlayerAvailable();
+    if (nativeResume && nativeFireTvAppInfo()?.native === false) {
+      setResumeMessage(
+        "The installed Media God player is blocked on this web address. Reopen the official app address below, then tap Resume again."
+      );
+      return;
+    }
     const meta = parseContentKey(item);
     const isTv = meta.mediaType === "tv";
     const tmdbId = await resolveTmdbIdQuickly(meta);
@@ -415,7 +429,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
     // History merges may combine a measured native position with a newer
     // embedded bookmark. If real progress exists, reopen a seekable source
     // through Media God's normal player instead of returning to OnlyFlix.
-    if (!hasSavedSeekPosition && bookmark && player.playSavedEmbed?.({
+    if (!hasSavedSeekPosition && bookmark && !nativeResume && player.playSavedEmbed?.({
       id: tmdbId || undefined, tmdbId: tmdbId || undefined,
       title: meta.title, year: meta.year, poster: item.poster_url || "",
       mediaType: meta.mediaType, type: isTv ? "series" : "movie",
@@ -447,7 +461,11 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
       const savedDirectIsIpBound = savedSource &&
         String(savedSource.type || "").toLowerCase() === "url" &&
         isIpBoundHostedProvider(savedSource);
-      if (savedSource && typeof savedSource === "object" && !savedDirectIsIpBound) {
+      const savedIsWebpage = savedSource &&
+        classifyTvBoxSource(savedSource).kind === "webpage";
+      if (savedSource && typeof savedSource === "object" &&
+          !savedDirectIsIpBound && !savedIsWebpage) {
+        if (nativeResume) savedSource.preferNativeVlc = true;
         await player.play({
           id: tmdbId || undefined,
           tmdbId: tmdbId || undefined,
@@ -470,6 +488,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
           // The saved torrent is the preferred candidate, not the entire
           // catalogue. Keep Real-Debrid and addon discovery available.
           resumeFromHistory: true,
+          manualSourceSelection: nativeResume,
           verifiedPlaybackPolicy: "manual",
           sources: [savedSource],
         });
@@ -477,6 +496,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
       }
 
       if (/^https?:\/\//i.test(savedUrl) &&
+          classifyTvBoxSource({ type: "url", url: savedUrl }).kind !== "webpage" &&
           !isElfHostedUrl(savedUrl) &&
           !isIpBoundHostedProvider({
             url: savedUrl,
@@ -503,6 +523,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
           // Old history may hold an expired CDN or debrid URL. Keep it as
           // one candidate, but do not lock discovery onto it.
           resumeFromHistory: true,
+          manualSourceSelection: nativeResume,
           sources: [{
             label: "Resume last source",
             name: "Resume last source",
@@ -510,6 +531,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
             src: savedUrl,
             url: savedUrl,
             direct: true,
+            preferNativeVlc: nativeResume,
             viaRealDebrid: savedSourceType === "rd" || savedSourceType === "debrid",
           }],
           verifiedPlaybackPolicy: "manual",
@@ -527,7 +549,7 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
     // silently replacing the viewer's last torrent with OnlyFlix.
     const explicitOnlyFlixResume =
       savedSourceType === "onlyflix" && /onlyflix/i.test(savedUrl);
-    if (!isTv && !hasSavedSeekPosition && explicitOnlyFlixResume && !hasPreviouslySelectedAlternateSource && player.playOnlyFlix) {
+    if (!isTv && !hasSavedSeekPosition && !nativeResume && explicitOnlyFlixResume && !hasPreviouslySelectedAlternateSource && player.playOnlyFlix) {
       if (player.playOnlyFlix({
         id: tmdbId || undefined,
         tmdbId: tmdbId || undefined,
@@ -682,6 +704,21 @@ export default function ContinueWatchingRow({ onOpenDetail }) {
           </p>
         </div>
       </div>
+
+      {resumeMessage && (
+        <div role="alert" className="mb-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
+          <p>{resumeMessage}</p>
+          {typeof window !== "undefined" && window.location.hostname === "www.underworldhub.co.uk" && (
+            <button type="button" onClick={() => {
+              const url = new URL(window.location.href);
+              url.hostname = "underworldhub.co.uk";
+              window.location.assign(url.toString());
+            }} className="mt-2 min-h-11 rounded-md border border-amber-300/50 px-3 py-2 font-semibold">
+              Reopen Media God for VLC
+            </button>
+          )}
+        </div>
+      )}
 
       {loading && displayItems.length === 0 && (
         <div role="status" className="mb-3 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/60">
