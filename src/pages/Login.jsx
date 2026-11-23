@@ -45,6 +45,7 @@ export default function Login() {
   const [deviceLogin, setDeviceLogin] = useState(null);
   const [deviceLoginMessage, setDeviceLoginMessage] = useState("");
   const nativeMediaGodApp = isNativeFireTvPlayerAvailable();
+  const socialStartInProgressRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -160,6 +161,9 @@ export default function Login() {
   }, [deviceLogin?.device_token, returnTo]);
 
   const handleSocial = async (provider) => {
+    // Fire TV D-pad Select sometimes sends both keydown and click.
+    if (socialStartInProgressRef.current) return;
+    socialStartInProgressRef.current = true;
     setError("");
     setDeviceLoginMessage("");
     setSocialLoading(provider);
@@ -170,6 +174,7 @@ export default function Login() {
         setDeviceLogin(device);
         setDeviceLoginMessage("Waiting for approval in your normal browser…");
         setSocialLoading(null);
+        socialStartInProgressRef.current = false;
         return;
       }
       // Keep the browser on the device-approval screen after a Google
@@ -183,19 +188,10 @@ export default function Login() {
       } catch { /* Storage may be disabled; normal login still works. */ }
       base44.auth.loginWithProvider(provider, window.location.origin);
     } catch (err) {
+      socialStartInProgressRef.current = false;
       setSocialLoading(null);
       setError(err?.message || `Could not start ${provider} sign-in`);
     }
-  };
-
-  const openDeviceVerification = () => {
-    const verification = "https://www.underworldhub.co.uk/device-login";
-    if (nativeMediaGodApp && !fireTv) {
-      try {
-        if (window.MediaGodNative?.openExternalUrl?.(verification)) return;
-      } catch { /* Display the address for manual opening instead. */ }
-    }
-    setDeviceLoginMessage("Open www.underworldhub.co.uk/device-login in Chrome on your phone or another device.");
   };
 
   const handleSkip = () => {
@@ -242,7 +238,6 @@ export default function Login() {
           <p className="text-xs text-muted-foreground">Code expires after 10 minutes. Keep this screen open.</p>
           {deviceLoginMessage && <p className="mt-2 text-xs">{deviceLoginMessage}</p>}
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {!fireTv && <Button type="button" variant="outline" onClick={openDeviceVerification}>Open browser approval</Button>}
             <Button type="button" variant="ghost" onClick={() => { setDeviceLogin(null); setDeviceLoginMessage(""); }}>
               Cancel
             </Button>
