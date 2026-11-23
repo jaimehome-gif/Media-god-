@@ -322,3 +322,92 @@ jobs:
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               --raw-field body="$(cat "$RUNNER_TEMP/$tag-verified-notes.txt")" >/dev/null
           done
+
+  signed-preview:
+    name: Sign and validate native bridge test APKs (no public release)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/native-bridge-host-parity-20261123'
+    needs: [ffmpeg-extension, build-check, device-regression]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FIRETV_KEYSTORE_BASE64: ${{ secrets.FIRETV_KEYSTORE_BASE64 }}
+      FIRETV_KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+      FIRETV_KEY_ALIAS: ${{ secrets.FIRETV_KEY_ALIAS }}
+      FIRETV_KEY_PASSWORD: ${{ secrets.FIRETV_KEY_PASSWORD }}
+      MOBILE_KEYSTORE_PATH: mobile-release.jks
+      MOBILE_KEYSTORE_BASE64: ${{ secrets.FIRETV_KEYSTORE_BASE64 }}
+      MOBILE_KEYSTORE_PASSWORD: ${{ secrets.FIRETV_KEYSTORE_PASSWORD }}
+      MOBILE_KEY_ALIAS: ${{ secrets.FIRETV_KEY_ALIAS }}
+      MOBILE_KEY_PASSWORD: ${{ secrets.FIRETV_KEY_PASSWORD }}
+      FIRETV_KEYSTORE_PATH: firetv-release.jks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-android-mobile
+          path: android-mobile/app/libs
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-firetv-android
+          path: firetv-android/app/libs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Verify host security and version manifests
+        run: node --test tests/native-bridge-host-parity.test.mjs tests/native-vlc-source-priority.test.mjs tests/tv-sources-native-vlc-handoff.test.mjs
+      - name: Restore existing signing identity
+        run: |
+          set -euo pipefail
+          for item in FIRETV_KEYSTORE_BASE64 FIRETV_KEYSTORE_PASSWORD FIRETV_KEY_ALIAS FIRETV_KEY_PASSWORD; do
+            if [ -z "${!item:-}" ]; then echo "Missing existing APK signing secret: $item"; exit 1; fi
+          done
+          printf '%s' "$FIRETV_KEYSTORE_BASE64" | base64 --decode > "firetv-android/app/$FIRETV_KEYSTORE_PATH"
+          printf '%s' "$MOBILE_KEYSTORE_BASE64" | base64 --decode > "android-mobile/app/$MOBILE_KEYSTORE_PATH"
+      - name: Build both signed native bridge test APKs
+        run: |
+          gradle -p android-mobile :app:assembleRelease --stacktrace
+          gradle -p firetv-android :app:assembleRelease --stacktrace
+          cp android-mobile/app/build/outputs/apk/release/app-release.apk Media-God-Mobile-Bridge-Test.apk
+          cp firetv-android/app/build/outputs/apk/release/app-release.apk Media-God-Fire-TV-Bridge-Test.apk
+      - name: Verify package identities, version and signatures
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Mobile-Bridge-Test.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs Media-God-Fire-TV-Bridge-Test.apk
+          python3 scripts/verify-announced-apk.py android-mobile Media-God-Mobile-Bridge-Test.apk
+          python3 scripts/verify-announced-apk.py fire-tv Media-God-Fire-TV-Bridge-Test.apk
+      - name: Check compatibility with currently published signing certificates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for item in "android-mobile-latest:Media-God-Android-Mobile.apk:Media-God-Mobile-Bridge-Test.apk" "firetv-latest:Media-God-Fire-TV.apk:Media-God-Fire-TV-Bridge-Test.apk"; do
+            IFS=: read -r tag old new <<< "$item"
+            curl --fail --location --retry 2 --max-time 180 "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$old" -o "old-$old"
+            oldcert="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "old-$old" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+            newcert="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$new" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+            if [[ -z "$oldcert" || "$oldcert" != "$newcert" ]]; then
+              echo "BLOCKED: signed preview does not match current $tag release certificate"
+              exit 1
+            fi
+          done
+          echo "Both preview APKs match installed release signing lineage"
+      - name: Upload private-to-workflow signed test pair (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Media-God-Bridge-Host-Fix-TEST-APKs
+          path: |
+            Media-God-Mobile-Bridge-Test.apk
+            Media-God-Fire-TV-Bridge-Test.apk
+          retention-days: 14
+          if-no-files-found: error

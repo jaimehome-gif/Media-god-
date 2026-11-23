@@ -54,6 +54,8 @@ jobs:
         run: node --test tests/base44-account-bridge.test.mjs tests/base44-recovery.test.mjs
       - name: Verify native Sources VLC handoff
         run: node --test tests/native-vlc-source-priority.test.mjs tests/tv-sources-native-vlc-handoff.test.mjs
+      - name: Verify native bridge origin and APK version security
+        run: node --test tests/native-bridge-host-parity.test.mjs
       - name: Compile independent website
         run: npm run build
       - name: Verify identity service container build
