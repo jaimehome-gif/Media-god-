@@ -229,6 +229,27 @@ export default function SettingsView() {
     me,
     setMe,
   ] = useState(null);
+  const [unlockingSignIn, setUnlockingSignIn] = useState(false);
+  const [unlockSignInResult, setUnlockSignInResult] = useState(null);
+  const unlockOtherDeviceSignIn = async () => {
+    if (!me || unlockingSignIn) return;
+    setUnlockingSignIn(true);
+    setUnlockSignInResult(null);
+    try {
+      await base44.auth.unlockLogin();
+      setUnlockSignInResult({
+        ok: true,
+        message: "Other-device sign-in unlocked. Check any saved password on your phone before trying once more."
+      });
+    } catch (error) {
+      setUnlockSignInResult({
+        ok: false,
+        message: error?.message || "Could not unlock sign-in. Your account remains unchanged."
+      });
+    } finally {
+      setUnlockingSignIn(false);
+    }
+  };
 
   const [
     autoplay,
@@ -1612,6 +1633,31 @@ export default function SettingsView() {
           <p className="text-xs 3xl:text-sm text-white/35 mt-1">
             Playback preferences and your Real-Debrid connection are saved to this Media God user.
           </p>
+          <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <ShieldCheck className="h-4 w-4 text-mg-green" />
+              Locked out on another device?
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-white/60">
+              If your phone says too many incorrect attempts, use this button
+              from the website where you are already signed in. It unlocks
+              sign-in for this account only and does not change your password.
+            </p>
+            <button
+              type="button"
+              onClick={unlockOtherDeviceSignIn}
+              disabled={unlockingSignIn}
+              className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-mg-green/30 bg-mg-green/10 px-4 py-2 text-sm font-semibold text-mg-green hover:bg-mg-green/20 disabled:opacity-50"
+            >
+              {unlockingSignIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {unlockingSignIn ? "Unlocking…" : "Unlock sign-in on my other devices"}
+            </button>
+            {unlockSignInResult && (
+              <p role="status" className={`mt-2 text-xs leading-5 ${unlockSignInResult.ok ? "text-mg-green" : "text-red-300"}`}>
+                {unlockSignInResult.message}
+              </p>
+            )}
+          </div>
         </div>
       ) : (
         <div className="bg-mg-card border border-white/10 rounded-lg 3xl:rounded-xl p-4 3xl:p-5 mb-6 3xl:mb-8">
