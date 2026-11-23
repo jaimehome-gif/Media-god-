@@ -199,3 +199,88 @@ test("All social accounts still require a verified provider subject",async()=>{
   assert.match(source,/SELECT a\.\* FROM identity_social_accounts/);
   assert.match(source,/person\.trustedGoogleMailbox && person\.verifiedEmail/);
 });
+
+test("verified existing account may explicitly connect another social provider without replacing its history",async()=>{
+  const existing={id:"owner-verified",email:"owner@gmail.com",verified_at:new Date(),password_hash:"unchanged"};
+  const queries=[],links=[];
+  const db={
+    async connect(){
+      return {
+        async query(sql,args=[]){
+          queries.push({sql,args});
+          if(sql.startsWith("SELECT a.* FROM identity_social_accounts")) return {rows:[]};
+          if(sql.startsWith("SELECT * FROM identity_accounts WHERE id=$1 AND verified_at")) return {rows:[existing]};
+          if(sql.startsWith("INSERT INTO identity_social_accounts")) links.push(args);
+          return {rows:[]};
+        },
+        release(){}
+      };
+    }
+  };
+  const user=await associateSocialAccount(db,{
+    provider:"microsoft",subject:"verified-ms-subject",verifiedEmail:"",
+    fullName:"Owner",trustedGoogleMailbox:false,
+  },existing.id);
+  assert.equal(user.id,existing.id);
+  assert.equal(user.password_hash,"unchanged");
+  assert.deepEqual(links,[["microsoft","verified-ms-subject",existing.id]]);
+  assert.ok(!queries.some(x=>x.sql.startsWith("INSERT INTO identity_accounts")));
+});
+
+test("social link cannot seize an identity already connected to another account",async()=>{
+  const owner={id:"different-user",email:"private@example.net"};
+  const pool=accountPool({existingProviderAccount:owner});
+  await assert.rejects(
+    () => associateSocialAccount(pool,{
+      provider:"facebook",subject:"facebook-existing",verifiedEmail:"",
+      fullName:"Different",trustedGoogleMailbox:false,
+    },"owner-verified"),/already belongs to another account/);
+  assert.equal(pool.links.length,0);
+});
+
+test("authenticated one-time social connection intent returns only an approved backend URL",async()=>{
+  setProvider("microsoft");
+  try{
+    const queries=[];
+    const pool={
+      async query(sql,args=[]){queries.push({sql,args});return {rows:[]};}
+    };
+    const oauth=createSocialOAuth({
+      pool,issueSession:noSession,
+      requireUser:async()=>({id:"owner-user",email:"owner@gmail.com"}),
+      limitRate:()=>{}
+    });
+    const res=response();
+    await oauth.handle(postRequest(),res,"/auth/oauth/link/init",
+      {provider:"microsoft"},"",apiResponse);
+    assert.equal(res.status,200);
+    const target=new URL(res.payload.start_url);
+    assert.equal(target.origin,"https://media-god-identity-api-production.up.railway.app");
+    assert.equal(target.pathname,"/auth/oauth/microsoft/start");
+    assert.ok(target.searchParams.get("link_token")?.length>=40);
+    assert.ok(queries.some(x=>x.sql.startsWith("INSERT INTO identity_oauth_link_intents") &&
+      x.args[1]==="owner-user" && x.args[2]==="microsoft"));
+  }finally{unsetProvider("microsoft");}
+});
+
+test("Apple independent callback uses verified dedicated subdomain only when configured",async()=>{
+  const previous=process.env.APPLE_REDIRECT_URI;
+  process.env.APPLE_CLIENT_ID="test-services-id";
+  process.env.APPLE_TEAM_ID="test-team";
+  process.env.APPLE_KEY_ID="test-key";
+  process.env.APPLE_PRIVATE_KEY="test-private-key";
+  try{
+    process.env.APPLE_REDIRECT_URI="https://auth.underworldhub.co.uk/auth/oauth/apple/callback";
+    const pool=fakePool(), res=response(), oauth=createSocialOAuth({pool,issueSession:noSession});
+    await oauth.handle(getRequest("/auth/oauth/apple/start"),res,"/auth/oauth/apple/start",{},"",apiResponse);
+    const target=new URL(res.headers.Location);
+    assert.equal(target.origin,"https://appleid.apple.com");
+    assert.equal(target.searchParams.get("redirect_uri"),process.env.APPLE_REDIRECT_URI);
+    assert.equal(target.searchParams.get("response_mode"),"form_post");
+    assert.ok(target.searchParams.has("nonce"));
+  }finally{
+    if(previous===undefined)delete process.env.APPLE_REDIRECT_URI;
+    else process.env.APPLE_REDIRECT_URI=previous;
+    for(const key of ["APPLE_CLIENT_ID","APPLE_TEAM_ID","APPLE_KEY_ID","APPLE_PRIVATE_KEY"])delete process.env[key];
+  }
+});
