@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertTriangle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
@@ -20,6 +19,10 @@ export default function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (newPassword.length < 12 || newPassword.length > 128) {
+      setError("Use a password between 12 and 128 characters.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match");
       return;
