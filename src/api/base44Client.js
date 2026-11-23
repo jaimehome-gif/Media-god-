@@ -62,6 +62,10 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
   }
 };
 const auth = {
+  // Legacy-account linking and recovery need the independent session helpers.
+  // Keep the verified Railway session separate from Base44 provider tokens.
+  getAccessToken: getIndependentSessionToken,
+  setToken: saveIndependentSessionToken,
   async getRegistrationConfig() {
     return call(IDENTITY_API,"/auth/config",{token:"",timeoutMs:8000});
   },

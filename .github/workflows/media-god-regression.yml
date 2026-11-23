@@ -51,7 +51,7 @@ jobs:
           node --check deploy/media-god-identity-api/base44Recovery.mjs
           node --check src/api/legacyBase44Bridge.js
       - name: Verify Base44 account bridge security
-        run: node --test tests/base44-account-bridge.test.mjs tests/base44-recovery.test.mjs
+        run: node --test tests/base44-account-bridge.test.mjs tests/base44-recovery.test.mjs tests/base44-addon-import.test.mjs
       - name: Verify native Sources VLC handoff
         run: node --test tests/native-vlc-source-priority.test.mjs tests/tv-sources-native-vlc-handoff.test.mjs
       - name: Compile independent website

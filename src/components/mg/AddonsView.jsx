@@ -18,6 +18,7 @@ import {
 
 import { base44 } from "@/api/base44Client";
 import RealDebridDeviceConnect from "@/components/mg/RealDebridDeviceConnect";
+import LegacyAddonImporter from "@/components/mg/LegacyAddonImporter";
 import { OPTIONAL_SCRAPER_PILOTS, isOptionalScraperPilot, isBareOptionalPilotManifest, redactOptionalPilotManifest, buildOrionTorrentOnlyManifest } from "@/components/mg/optionalScraperPilots.js";
 
 const unwrap = (response) =>
@@ -1439,6 +1440,8 @@ export default function AddonsManager() {
           Add Addon
         </button>
       </form>
+
+      <LegacyAddonImporter onImported={loadAddons} />
 
       <div className="space-y-3">
         <h2 className="text-md font-semibold">
