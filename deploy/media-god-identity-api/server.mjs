@@ -144,7 +144,7 @@ const sqlSchema=[
 "CREATE INDEX IF NOT EXISTS identity_records_user_idx ON identity_records(user_id,entity,updated_at DESC)"
 ];
 for (const sql of sqlSchema) await pool.query(sql);
-const socialOAuth = createSocialOAuth({pool,issueSession});
+const socialOAuth = createSocialOAuth({pool,issueSession,requireUser,limitRate});
 await socialOAuth.initialize();
 const support = await createSupport({pool,requireUser,emailSend,site});
 
@@ -335,7 +335,7 @@ async function handler(req,res) {
       return await support.receiveWebhook(req,res,Buffer.concat(chunks).toString("utf8"),origin,respond);
     }
     const body=!appleCallback && ["POST","PATCH"].includes(req.method)?await input(req):{};
-    if (path==="/auth/providers" || path.startsWith("/auth/oauth/")) {
+    if (path==="/auth/providers" || path.startsWith("/auth/oauth/") || path.startsWith("/auth/device/")) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
     }
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
