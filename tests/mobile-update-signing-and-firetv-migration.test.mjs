@@ -33,11 +33,33 @@ test("old false signing errors explain the safe manual path without ignoring And
   const dialog = read("src/components/mg/AndroidMobileAppUpdateNotice.jsx");
   assert.match(dialog, /legacySigningError \|\| nativeDownload404 \|\| !nativeInfo\?\.selfUpdateSupported/);
   assert.match(dialog, /Android itself will verify the certificate before replacing it/);
-  assert.match(dialog, /Open official Android Mobile APK/);
+  assert.match(dialog, /onClick={downloadApkDirectly}/);
+  assert.match(dialog, /openOfficialUrl\(release\?\.apkUrl \|\| ""\)/);
+  assert.match(dialog, /Download APK directly/);
+  assert.match(dialog, /showMobileInstaller && release\?\.releaseUrl/);
+  assert.match(dialog, /onClick={openReleaseFallback}/);
   const kotlin = read("android-mobile/app/src/main/java/com/mediagod/mobile/AppUpdater.kt");
   assert.match(kotlin, /currentSigners\.isNotEmpty\(\) &&\s*archiveSigners\.isNotEmpty\(\) &&\s*currentSigners\.intersect\(archiveSigners\)\.isEmpty\(\)/);
   assert.match(kotlin, /signingCertificateHistory/);
   assert.match(kotlin, /getArchivePackageInfo/);
   assert.match(kotlin, /versionCodeOf\(archiveInfo\) <= BuildConfig\.VERSION_CODE/);
   assert.match(kotlin, /archiveInfo\.packageName != BuildConfig\.APPLICATION_ID/);
+});
+
+test("installed Android and Fire TV builds prioritise the native installer and never require repository browsing", () => {
+  const mobile = read("src/components/mg/AndroidMobileAppUpdateNotice.jsx");
+  const fire = read("src/components/mg/FireTvAppUpdateNotice.jsx");
+  assert.match(mobile, /startNativeFireTvUpdate\(\{/);
+  assert.match(fire, /startNativeFireTvUpdate\(\{/);
+  assert.match(mobile, /onClick={startUpdate}/);
+  assert.match(fire, /onClick={startUpdate}/);
+  assert.match(mobile, /onClick={downloadApkDirectly}/);
+  assert.match(fire, /onClick={downloadApkDirectly}/);
+  assert.match(mobile, /Download APK directly/);
+  assert.match(fire, /Download APK directly/);
+  assert.match(fire, /nativeDownloadFailed[\s\S]*?showDownloaderMigration/);
+  assert.match(fire, /openNativeFireTvExternalUrl\(url\)/);
+  assert.match(mobile, /onClick={openReleaseFallback}/);
+  assert.match(mobile, /release\?\.apkUrl \|\| ""/);
+  assert.match(fire, /release\?\.apkUrl \|\| ""/);
 });
