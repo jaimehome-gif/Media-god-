@@ -1804,6 +1804,13 @@ export default function SettingsView() {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
+                onClick={() => window.location.assign("/support")}
+                className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-mg-green/25 bg-mg-green/10 px-4 py-2 text-sm font-semibold text-mg-green hover:bg-mg-green/15"
+              >
+                <LifeBuoy className="h-4 w-4" /> Contact Support
+              </button>
+              <button
+                type="button"
                 onClick={copySupportReport}
                 className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/75 hover:bg-white/10 hover:text-white"
               >
