@@ -29,6 +29,9 @@ certificate = subprocess.check_output([
 ])
 signing = subprocess.check_output([sdk / "apksigner", "verify", "--print-certs", apk], text=True)
 signers = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$", signing, re.M)
+original_signer = "f0402010b19a69e8f46494788d506b669ab7d48bcbb43702ec5aa9a9399ab255"
+if hashlib.sha256(certificate).hexdigest() != original_signer:
+    sys.exit("Release keystore differs from the original distribution certificate")
 if [digest.lower() for digest in signers] != [hashlib.sha256(certificate).hexdigest()]:
     sys.exit("APK certificate differs from the release signing identity")
 print(f"Verified {package} {manifest['versionName']} ({manifest['versionCode']})")

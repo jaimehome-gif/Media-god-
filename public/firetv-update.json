@@ -1,9 +1,9 @@
 {
   "channel": "fire-tv",
-  "versionCode": 132,
-  "versionName": "1.4.127",
+  "versionCode": 133,
+  "versionName": "1.4.128",
   "title": "Media God Fire TV",
-  "message": "Media God 1.4.127: retain verified Google login after app restart. Existing Fire TV controls, player and Live TV remain unchanged.",
+  "message": "Media God 1.4.128 improves in-place updates and checks release signing compatibility.",
   "apkUrl": "https://github.com/jaimehome-gif/Media-god-/releases/download/firetv-latest/Media-God-Fire-TV.apk",
   "downloaderCode": "4738952",
   "downloaderAddress": "https://underworldhub.co.uk/tv.html",

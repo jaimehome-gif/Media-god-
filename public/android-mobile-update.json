@@ -1,9 +1,9 @@
 {
   "channel": "android-mobile",
-  "versionCode": 98,
-  "versionName": "1.0.97",
+  "versionCode": 99,
+  "versionName": "1.0.98",
   "title": "Media God Mobile",
-  "message": "Media God 1.0.97: restore Google sign-in persistence after Android app restarts, reduce Real-Debrid rate-limit errors, and keep the original Media God player and source choices.",
+  "message": "Media God 1.0.98 improves in-place updates and checks release signing compatibility.",
   "apkUrl": "https://github.com/jaimehome-gif/Media-god-/releases/download/android-mobile-latest/Media-God-Android-Mobile.apk",
   "downloaderCode": "",
   "releaseUrl": "https://github.com/jaimehome-gif/Media-god-/releases/tag/android-mobile-latest"

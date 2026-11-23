@@ -43,17 +43,13 @@ class AppUpdater(
             activity.packageManager.canRequestPackageInstalls()
 
     fun startUpdate(versionName: String): String {
-        pendingUpdateFile()?.takeIf { it.exists() }?.let { apk ->
-            activity.runOnUiThread {
-                openInstallerOrRequestPermission(apk)
-            }
-            return "started"
-        }
-
+        // An explicit retry must fetch the current release. The pending file
+        // is only for resuming an installation after the permission screen.
         if (!downloading.compareAndSet(false, true)) {
             return "busy"
         }
 
+        clearPendingUpdate()
         Thread {
             try {
                 sendStatus(
