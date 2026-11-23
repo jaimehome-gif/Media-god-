@@ -92,6 +92,21 @@ const auth = {
       method:"POST",body:{user_code:userCode},timeoutMs:10000
     });
   },
+  async connectSocialProvider(provider) {
+    if(!["google","facebook","microsoft","apple"].includes(provider)) {
+      throw new Error("Unknown sign-in provider");
+    }
+    const result=await call(IDENTITY_API,"/auth/oauth/link/init",{
+      method:"POST",body:{provider},timeoutMs:12000
+    });
+    const redirect=new URL(result.start_url || "");
+    if(redirect.origin!==IDENTITY_API ||
+       redirect.pathname!=="/auth/oauth/"+provider+"/start") {
+      throw new Error("Untrusted social connection destination");
+    }
+    if(typeof window==="undefined") throw new Error("Browser required");
+    window.location.assign(redirect.toString());
+  },
   loginWithProvider(provider,returnTo) {
     if(!["google","facebook","microsoft","apple"].includes(provider)) {
       throw new Error("Unsupported social login provider");
