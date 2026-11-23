@@ -182,7 +182,7 @@ async function verifiedIdentity(provider,tokens,config,nonce) {
   return sanitizeProfile({name:info.name,email:info.email,emailVerified:false},provider,info.id);
 }
 
-export async function associateSocialAccount(pool,person) {
+export async function associateSocialAccount(pool,person,linkUserId="") {
   const conn=await pool.connect();
   try {
     await conn.query("BEGIN");
@@ -190,7 +190,24 @@ export async function associateSocialAccount(pool,person) {
     const linked=await conn.query(
       "SELECT a.* FROM identity_social_accounts s JOIN identity_accounts a ON a.id=s.user_id WHERE s.provider=$1 AND s.subject=$2",
       [person.provider,person.subject]);
-    if(linked.rows[0]){await conn.query("COMMIT");return linked.rows[0];}
+    if(linked.rows[0]){
+      // An already-linked third-party identity belongs exclusively to that
+      // user. Never transfer it to another account during a linking attempt.
+      if(linkUserId && String(linked.rows[0].id)!==String(linkUserId)){
+        throw Error("Social provider identity already belongs to another account");
+      }
+      await conn.query("COMMIT");return linked.rows[0];
+    }
+    if(linkUserId) {
+      const owner=await conn.query(
+        "SELECT * FROM identity_accounts WHERE id=$1 AND verified_at IS NOT NULL FOR UPDATE",
+        [linkUserId]);
+      if(!owner.rows[0]) throw Error("Existing account is not verified");
+      await conn.query("INSERT INTO identity_social_accounts(provider,subject,user_id) VALUES($1,$2,$3)",
+        [person.provider,person.subject,owner.rows[0].id]);
+      await conn.query("COMMIT");
+      return owner.rows[0];
+    }
     // Verified Google-owned Gmail mailboxes may sign into the SAME already
     // verified Media God account as email/password. Never associate by an
     // unverified email, Facebook, or a third-party Google account address.
@@ -229,6 +246,9 @@ export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
   async function initialize() {
     await pool.query("CREATE TABLE IF NOT EXISTS identity_social_accounts(provider TEXT NOT NULL,subject TEXT NOT NULL,user_id UUID NOT NULL REFERENCES identity_accounts(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(provider,subject),UNIQUE(user_id,provider))");
     await pool.query("CREATE TABLE IF NOT EXISTS identity_oauth_states(state_hash TEXT PRIMARY KEY,browser_hash TEXT NOT NULL,provider TEXT NOT NULL,verifier TEXT NOT NULL,nonce TEXT NOT NULL,return_origin TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL)");
+    await pool.query("ALTER TABLE identity_oauth_states ADD COLUMN IF NOT EXISTS link_user_id UUID REFERENCES identity_accounts(id) ON DELETE CASCADE");
+    await pool.query("CREATE TABLE IF NOT EXISTS identity_oauth_link_intents(token_hash TEXT PRIMARY KEY,user_id UUID NOT NULL REFERENCES identity_accounts(id) ON DELETE CASCADE,provider TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL)");
+
     await pool.query("CREATE TABLE IF NOT EXISTS identity_oauth_tickets(ticket_hash TEXT PRIMARY KEY,user_id UUID NOT NULL REFERENCES identity_accounts(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL)");
     // Explicit approval binds an existing website session to a short-lived
     // random app token. The app never handles a Google OAuth WebView.
@@ -304,6 +324,21 @@ export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
       if(!claimed.rows[0]) return respond(res,404,{error:"Code already used or expired"},origin);
       return respond(res,200,{ok:true,provider:claimed.rows[0].provider},origin);
     }
+    if(path==="/auth/oauth/link/init"&&req.method==="POST") {
+      const owner=await requireUser(req);
+      limitRate(req,"social-link",owner.id);
+      const provider=String(body?.provider||"").trim().toLowerCase();
+      if(!SOC.includes(provider)||!configured(provider)) return respond(res,503,{error:"Social provider is not configured"},origin);
+      const secret=safeToken();
+      await pool.query("DELETE FROM identity_oauth_link_intents WHERE expires_at<NOW()");
+      await pool.query(
+        "INSERT INTO identity_oauth_link_intents(token_hash,user_id,provider,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL '2 minutes')",
+        [sha(secret),owner.id,provider]);
+      const target=new URL("/auth/oauth/"+provider+"/start",identity);
+      target.searchParams.set("return_to",site);
+      target.searchParams.set("link_token",secret);
+      return respond(res,200,{start_url:target.toString()},origin);
+    }
     const routes=/^\/auth\/oauth\/(google|facebook|microsoft|apple)\/(start|callback)$/.exec(path);
     if(routes) {
       const [,provider,action]=routes;
@@ -315,10 +350,23 @@ export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
       if(action==="start"&&req.method==="GET") {
         const requestUrl=new URL(req.url,"http://localhost");
         const target=safeReturn(requestUrl.searchParams.get("return_to"));
+        // An explicit connect-account action starts with an authenticated,
+        // short-lived POST in Settings. Its secret is consumed once before
+        // third-party authorisation and binds this OAuth state to the owner.
+        const linkToken=String(requestUrl.searchParams.get("link_token")||"");
+        let linkUserId=null;
+        if(linkToken) {
+          if(!/^[A-Za-z0-9_-]{40,100}$/.test(linkToken)) return errorResponse(res,site,"invalid_session");
+          const link=await pool.query(
+            "DELETE FROM identity_oauth_link_intents WHERE token_hash=$1 AND provider=$2 AND expires_at>NOW() RETURNING user_id",
+            [sha(linkToken),provider]);
+          if(!link.rows[0]) return errorResponse(res,site,"invalid_session");
+          linkUserId=link.rows[0].user_id;
+        }
         const browser=safeToken(),state=safeToken(),nonce=safeToken(),verifier=safeToken()+safeToken();
         await pool.query("DELETE FROM identity_oauth_states WHERE expires_at<NOW()");
-        await pool.query("INSERT INTO identity_oauth_states(state_hash,browser_hash,provider,verifier,nonce,return_origin,expires_at) VALUES($1,$2,$3,$4,$5,$6,NOW()+INTERVAL '10 minutes')",
-          [sha(state),sha(browser),provider,verifier,nonce,target]);
+        await pool.query("INSERT INTO identity_oauth_states(state_hash,browser_hash,provider,verifier,nonce,return_origin,expires_at,link_user_id) VALUES($1,$2,$3,$4,$5,$6,NOW()+INTERVAL '10 minutes',$7)",
+          [sha(state),sha(browser),provider,verifier,nonce,target,linkUserId]);
         let authUrl;
         if(provider==="google")authUrl=new URL("https://accounts.google.com/o/oauth2/v2/auth");
         if(provider==="microsoft")authUrl=new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
@@ -362,7 +410,7 @@ export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
         try {
           const tokens=await exchangeCode(provider,code,row.verifier,cfg);
           const person=await verifiedIdentity(provider,tokens,cfg,row.nonce);
-          const user=await associateSocialAccount(pool,person);
+          const user=await associateSocialAccount(pool,person,row.link_user_id||"");
           const ticket=safeToken();
           await pool.query("DELETE FROM identity_oauth_tickets WHERE expires_at<NOW()");
           await pool.query("INSERT INTO identity_oauth_tickets(ticket_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '90 seconds')",[sha(ticket),user.id]);
