@@ -988,6 +988,10 @@ function MediaGodApp() {
     );
 
   const openSettingsTool = useCallback((nextView) => {
+    if (nextView === "support") {
+      navigate("/support");
+      return;
+    }
     setSearchOpen(false);
     setPendingSearchSelection(null);
     setSearchResult(null);
@@ -996,7 +1000,7 @@ function MediaGodApp() {
       key: Number(current?.key || 0) + 1,
     }));
     setView(nextView);
-  }, []);
+  }, [navigate]);
 
   const openTvStreamingService = useCallback((service) => {
     if (!service?.providerIds?.length) return;
