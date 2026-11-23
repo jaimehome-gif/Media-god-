@@ -89,13 +89,17 @@ test("handlers cannot obtain a client without a verified user request", () => {
 test("a verified account is stable inside its RD handler despite a second User/me outage", async () => {
   const verifiedUser = {id:"verified-stable",rd_token:"private-real-debrid-token"};
   let secondaryReads = 0;
+  let credentialWrites = 0;
   const client = {
     auth: {
       me: async () => {
         secondaryReads += 1;
         throw new Error("Base44 User/me briefly unavailable");
       },
-      updateMe: async patch => ({...verifiedUser,...patch}),
+      updateMe: async patch => {
+        credentialWrites++;
+        return {...verifiedUser,...patch};
+      },
     },
     entities: {RdLink:{filter:async()=>[]}},
   };
@@ -113,8 +117,10 @@ test("a verified account is stable inside its RD handler despite a second User/m
   assert.notEqual(scoped,client);
   assert.deepEqual(await scoped.auth.me(),verifiedUser);
   assert.equal(secondaryReads,0,"never repeat authentication after server verification");
-  assert.equal(scoped.auth.updateMe,client.auth.updateMe,
-    "keep original user-scoped credential update");
+  const saved = await scoped.auth.updateMe({rd_token:"replacement-test-token"});
+  assert.equal(credentialWrites,1,"delegate to the verified account store");
+  assert.deepEqual(await scoped.auth.me(),saved,"subsequent checks see the completed write");
+  assert.equal(secondaryReads,0);
   const originalFetch = globalThis.fetch;
   try {
     globalThis.fetch = async () => new Response(JSON.stringify({premium:1}), {
