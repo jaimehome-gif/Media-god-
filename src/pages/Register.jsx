@@ -40,7 +40,7 @@ export default function Register() {
     e.preventDefault();
     setError("");
     if (!registrationReady) { setError("Email registration is not open until verification delivery is connected."); return; }
-    if (password.length < 12) { setError("Use at least 12 characters for your new password."); return; }
+    if (password.length < 12 || password.length > 128) { setError("Use a password between 12 and 128 characters."); return; }
     if (password !== confirmPassword) {
       setError("Passwords do not match");
       return;
