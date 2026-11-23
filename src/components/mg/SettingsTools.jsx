@@ -6,6 +6,7 @@ import {
   HardDrive,
   KeyRound,
   Link,
+  LifeBuoy,
   ListVideo,
   Smartphone,
   Sparkles,
@@ -18,6 +19,13 @@ const TOOLS = [
     label: "Check for Updates",
     description: "Check for a new Media God version and view release information.",
     icon: ListVideo,
+    featured: true,
+  },
+  {
+    id: "support",
+    label: "Support, updates & app downloads",
+    description: "Contact support, follow tickets and get the latest verified APKs.",
+    icon: LifeBuoy,
     featured: true,
   },
   {
