@@ -1,5 +1,4 @@
 import http from "node:http";
-import { resolveMx } from "node:dns/promises";
 import { randomBytes, randomUUID, createHash, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import pg from "pg";
@@ -309,55 +308,4 @@ async function handler(req,res) {
 }
 http.createServer(handler).listen(port,"0.0.0.0",()=>{
   console.log("[identity] Jaime Home service started; email setup "+(mailReady?"ready":"pending"));
-  // Disposable authorised mail-routing diagnostic. Publishes no secret or test endpoint.
-  const mxQaTimer=setTimeout(async()=>{
-    try {
-      await pool.query("CREATE TABLE IF NOT EXISTS mail_mx_diagnostic_runs (id TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-      const once=await pool.query(
-        "INSERT INTO mail_mx_diagnostic_runs(id) VALUES('mx-check-20261123-retry') ON CONFLICT DO NOTHING RETURNING id"
-      );
-      if(!once.rowCount) return;
-      const lines=["Media God inbound support routing test, 23 November 2026."];
-      try {
-        const records=await resolveMx("underworldhub.co.uk");
-        const list=records.map(r=>r.priority+" "+r.exchange.replace(/\.$/,""));
-        lines.push("Public MX records: "+(list.join("; ")||"NONE"));
-        lines.push("Resend receiving MX published: "+records.some(r=>r.priority===10 && r.exchange.replace(/\.$/,"")==="receive-euw1.forge.rmta.net"));
-      } catch(e) {
-        lines.push("Public MX lookup failed: "+String(e.code||"DNS error").slice(0,60));
-      }
-      try {
-        const headers={Authorization:"Bearer "+process.env.RESEND_API_KEY};
-        const response=await fetch("https://api.resend.com/domains",{
-          headers,signal:AbortSignal.timeout(10000)
-        });
-        if (!response.ok) lines.push("Resend domain lookup HTTP "+response.status);
-        else {
-          const data=await response.json();
-          const domain=(data.data||[]).find(x=>x.name==="underworldhub.co.uk");
-          if (!domain) lines.push("Resend domain not found");
-          else {
-            const detail=await fetch("https://api.resend.com/domains/"+encodeURIComponent(domain.id),{
-              headers,signal:AbortSignal.timeout(10000)
-            });
-            if (detail.ok) {
-              const d=await detail.json();
-              const entries=(d.records||[]).filter(x=>String(x.type).toUpperCase()==="MX");
-              lines.push("Resend domain status: "+d.status);
-              lines.push("Resend receiving: "+String(d.capabilities?.receiving||"unknown"));
-              lines.push("Resend incoming MX status: "+(entries.map(x=>x.status).join(", ")||"none"));
-            } else lines.push("Resend domain detail HTTP "+detail.status);
-          }
-        }
-      } catch(e){lines.push("Resend domain lookup failed: "+String(e.message||"unknown").slice(0,70));}
-      lines.push("An email sent to support@underworldhub.co.uk must generate a new support ticket acknowledgement to pass end-to-end.");
-      await emailSend("jaime.home@gmail.com","Media God incoming MX live DNS check - 23 Nov 2026",lines.join("\n"),{
-        from:process.env.SUPPORT_EMAIL_FROM||process.env.EMAIL_FROM
-      });
-      console.log("[mail-mx-qa] Diagnostic email sent");
-    }catch(e){
-      console.error("[mail-mx-qa] Could not complete diagnostic:",String(e.message||"error").slice(0,160));
-    }
-  },3000);
-  mxQaTimer.unref?.();
 });
