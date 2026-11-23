@@ -1,9 +1,9 @@
 {
   "channel": "fire-tv",
-  "versionCode": 131,
-  "versionName": "1.4.126",
+  "versionCode": 132,
+  "versionName": "1.4.127",
   "title": "Media God Fire TV",
-  "message": "If an ad traps the Fire Stick remote, hold Back for two seconds and release to return to Media God.",
+  "message": "Media God 1.4.127: restores native VLC after Google sign-in on either official Underworld Hub hostname; hold Back for two seconds to exit stuck adverts.",
   "apkUrl": "https://github.com/jaimehome-gif/Media-god-/releases/download/firetv-latest/Media-God-Fire-TV.apk",
   "downloaderCode": "4738952",
   "downloaderAddress": "https://underworldhub.co.uk/tv.html",
