@@ -172,6 +172,15 @@ export default function Login() {
         setSocialLoading(null);
         return;
       }
+      // Keep the browser on the device-approval screen after a Google
+      // round trip, rather than losing the typed pairing code on Home.
+      try {
+        if (returnTo === "/device-login") {
+          window.sessionStorage.setItem("mg:social-return-path", "/device-login");
+        } else {
+          window.sessionStorage.removeItem("mg:social-return-path");
+        }
+      } catch { /* Storage may be disabled; normal login still works. */ }
       base44.auth.loginWithProvider(provider, window.location.origin);
     } catch (err) {
       setSocialLoading(null);
