@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import pg from "pg";
 import { createSocialOAuth } from "./socialOAuth.mjs";
 import { createSupport } from "./support.mjs";
+import { runEmailE2E } from "./emailE2e.mjs";
 
 const { Pool } = pg;
 const scrypt = promisify(scryptCb);
@@ -308,4 +309,5 @@ async function handler(req,res) {
 }
 http.createServer(handler).listen(port,"0.0.0.0",()=>{
   console.log("[identity] Jaime Home service started; email setup "+(mailReady?"ready":"pending"));
+  runEmailE2E({port,pool});
 });
