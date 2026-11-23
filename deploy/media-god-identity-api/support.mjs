@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import { randomUUID, randomBytes, createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 // Independent Media God helpdesk: tickets are stored in PostgreSQL.
 // Customers reply using unguessable ticket links; staff reply from support@
@@ -29,6 +29,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
   await pool.query("CREATE TABLE IF NOT EXISTS support_ticket_keys (ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, key_hash TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(ticket_id,key_hash))");
   await pool.query("CREATE TABLE IF NOT EXISTS support_messages (id UUID PRIMARY KEY, ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, author TEXT NOT NULL CHECK(author IN ('customer','support')), body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query("CREATE INDEX IF NOT EXISTS support_messages_ticket_idx ON support_messages(ticket_id,created_at)");
+  await pool.query("CREATE TABLE IF NOT EXISTS support_inbound_messages (resend_email_id TEXT PRIMARY KEY, ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   const isAdmin = u => adminEmails.has(String(u?.email || "").toLowerCase());
   const admin = async req => {
     const user = await requireUser(req);
@@ -63,6 +64,70 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
     if (recent.size > 2000) for (const [k,v] of recent) if (v.until < now) recent.delete(k);
     if (entry.count > 3) fail(429, "Too many support requests. Please try again later.");
   };
+  // Resend delivers signed metadata, not email content. The signature is
+  // checked over the original request bytes, and email contents are fetched
+  // from the Receiving API. No webhook secret means this stays disabled.
+  async function receiveWebhook(req,res,raw,origin,respond) {
+    if (!process.env.RESEND_WEBHOOK_SECRET) fail(503,"Incoming email webhook not configured.");
+    const signing = String(process.env.RESEND_WEBHOOK_SECRET);
+    if (!signing.startsWith("whsec_")) fail(503,"Incoming email signing secret invalid.");
+    const id = String(req.headers["svix-id"] || "");
+    const stamp = String(req.headers["svix-timestamp"] || "");
+    const signatures = String(req.headers["svix-signature"] || "");
+    const ts = Number(stamp);
+    if (!id || !Number.isFinite(ts) || Math.abs(Date.now()/1000 - ts) > 300) fail(401,"Invalid webhook signature.");
+    const secret = Buffer.from(signing.slice(6),"base64");
+    if (secret.length < 16) fail(503,"Incoming email signing secret invalid.");
+    const expected = createHmac("sha256",secret).update(id+"."+stamp+"."+raw).digest();
+    const valid = signatures.split(/\\s+/).some(piece => {
+      if (!piece.startsWith("v1,")) return false;
+      try {
+        const provided = Buffer.from(piece.slice(3),"base64");
+        return provided.length===expected.length && timingSafeEqual(provided,expected);
+      } catch { return false; }
+    });
+    if (!valid) fail(401,"Invalid webhook signature.");
+    let event;
+    try { event = JSON.parse(raw); } catch { fail(400,"Invalid webhook event."); }
+    if (event?.type!=="email.received") return respond(res,200,{ok:true,ignored:true},origin);
+    const recipients = Array.isArray(event.data?.to) ? event.data.to.map(x=>String(x).toLowerCase()) : [];
+    if (!recipients.includes("support@underworldhub.co.uk")) return respond(res,200,{ok:true,ignored:true},origin);
+    const emailId = String(event.data?.email_id || "");
+    if (!/^[A-Za-z0-9_-]{8,120}$/.test(emailId)) fail(400,"Invalid received email ID.");
+    const existing = await pool.query("SELECT ticket_id FROM support_inbound_messages WHERE resend_email_id=$1",[emailId]);
+    if (existing.rows.length) return respond(res,200,{ok:true,duplicate:true},origin);
+    const response = await fetch("https://api.resend.com/emails/receiving/"+encodeURIComponent(emailId),{
+      headers:{Authorization:"Bearer "+process.env.RESEND_API_KEY},
+      signal:AbortSignal.timeout(12000)
+    });
+    if (!response.ok) fail(503,"Cannot retrieve incoming email. Resend will retry.");
+    const email = await response.json();
+    const sender = String(email.from || event.data.from || "");
+    const senderAddress = (sender.match(/<([^>]+)>/)?.[1] || sender).trim().toLowerCase();
+    if (!emailRe.test(senderAddress) || senderAddress.length>254) return respond(res,200,{ok:true,ignored:true},origin);
+    const subject = clean(email.subject || event.data.subject || "Email support request",140) || "Email support request";
+    const attachmentText = (email.attachments?.length||event.data.attachments?.length) ? "\\n\\n[Attachments are available in the Resend receiving dashboard.]" : "";
+    const details = clean(email.text || "[Rich-text email: view the original in Resend Receiving]",4700) + attachmentText;
+    const ticketId=randomUUID(), ticketKey=newKey();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("INSERT INTO support_tickets(id,requester_email,category,subject,device) VALUES($1,$2,'Email',$3,'Email')",[ticketId,senderAddress,subject]);
+      await client.query("INSERT INTO support_messages(id,ticket_id,author,body) VALUES($1,$2,'customer',$3)",[randomUUID(),ticketId,details.slice(0,5000)]);
+      await client.query("INSERT INTO support_ticket_keys(ticket_id,key_hash) VALUES($1,$2)",[ticketId,hash(ticketKey)]);
+      await client.query("INSERT INTO support_inbound_messages(resend_email_id,ticket_id) VALUES($1,$2)",[emailId,ticketId]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      if (e.code==="23505") return respond(res,200,{ok:true,duplicate:true},origin);
+      throw e;
+    } finally {client.release();}
+    await sendNotice(senderAddress,"Media God Support received your email ("+ticketId.slice(0,8)+")",
+      "We've received your email and created ticket "+ticketId+".\\nYou can read and reply here:\\n"+link(ticketId,ticketKey)+"\\n\\nMedia God Support");
+    if (alertTo) await sendNotice(alertTo,"New email support ticket "+ticketId.slice(0,8),
+      "From: "+senderAddress+"\\nSubject: "+subject+"\\n\\nStaff inbox: "+site+"/support/inbox");
+    return respond(res,200,{ok:true},origin);
+  }
   async function handle(req,res,path,body,origin,respond) {
     if (path === "/support/tickets" && req.method === "POST") {
       // Hidden honeypot field; never send mail for bots.
@@ -134,5 +199,5 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
     }
     fail(404,"Unknown support route.");
   }
-  return {handle};
+  return {handle,receiveWebhook};
 }
