@@ -204,4 +204,13 @@ async function invoke(name,payload={}) {
   }
   throw new Error("Unsupported Media God function");
 }
-export const base44 = { auth, entities, functions:{invoke} };
+const support = {
+  createTicket: details => call(IDENTITY_API,"/support/tickets",{method:"POST",body:details,token:""}),
+  ticket: (id,key) => call(IDENTITY_API,"/support/tickets/"+encodeURIComponent(id)+"?key="+encodeURIComponent(key),{token:""}),
+  customerReply: (id,key,message) => call(IDENTITY_API,"/support/tickets/"+encodeURIComponent(id)+"/reply",{method:"POST",body:{key,message},token:""}),
+  staffTickets: () => call(IDENTITY_API,"/support/admin/tickets"),
+  staffTicket: id => call(IDENTITY_API,"/support/admin/tickets/"+encodeURIComponent(id)),
+  staffReply: (id,message) => call(IDENTITY_API,"/support/admin/tickets/"+encodeURIComponent(id)+"/reply",{method:"POST",body:{message}}),
+  staffStatus: (id,status) => call(IDENTITY_API,"/support/admin/tickets/"+encodeURIComponent(id)+"/status",{method:"POST",body:{status}})
+};
+export const base44 = { auth, entities, functions:{invoke}, support };
