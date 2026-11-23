@@ -46,10 +46,11 @@ test("installed APK Resume does not reopen OnlyFlix/embed bookmark without saved
   assert.deepEqual(Array.from(calls[0].request.sources),[]);
 });
 
-test("ordinary website retains explicitly saved embedded bookmark when no seek exists",async()=>{
+test("ordinary website Resume also uses Media God's player, not an embedded bookmark",async()=>{
   const {calls,openDetail}=setup({native:false,bookmark:{url:"https://onlyflix.to/embed/film123",provider:"onlyflix"}});
   await openDetail({source_type:"embed",progress:0,duration:0});
-  assert.deepEqual(calls.map(x=>x.kind),["embed"]);
+  assert.deepEqual(calls.map(x=>x.kind),["native"]);
+  assert.equal(calls[0].request.verifiedPlaybackPolicy,"strict");
 });
 
 test("native Resume rejects saved HTML watch pages mislabelled as direct media",async()=>{
