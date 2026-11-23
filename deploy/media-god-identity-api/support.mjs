@@ -79,7 +79,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
     const secret = Buffer.from(signing.slice(6),"base64");
     if (secret.length < 16) fail(503,"Incoming email signing secret invalid.");
     const expected = createHmac("sha256",secret).update(id+"."+stamp+"."+raw).digest();
-    const valid = signatures.split(/\\s+/).some(piece => {
+    const valid = signatures.split(/\s+/).some(piece => {
       if (!piece.startsWith("v1,")) return false;
       try {
         const provided = Buffer.from(piece.slice(3),"base64");
@@ -106,7 +106,7 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
     const senderAddress = (sender.match(/<([^>]+)>/)?.[1] || sender).trim().toLowerCase();
     if (!emailRe.test(senderAddress) || senderAddress.length>254) return respond(res,200,{ok:true,ignored:true},origin);
     const subject = clean(email.subject || event.data.subject || "Email support request",140) || "Email support request";
-    const attachmentText = (email.attachments?.length||event.data.attachments?.length) ? "\\n\\n[Attachments are available in the Resend receiving dashboard.]" : "";
+    const attachmentText = (email.attachments?.length||event.data.attachments?.length) ? "\n\n[Attachments are available in the Resend receiving dashboard.]" : "";
     const details = clean(email.text || "[Rich-text email: view the original in Resend Receiving]",4700) + attachmentText;
     const ticketId=randomUUID(), ticketKey=newKey();
     const client = await pool.connect();
@@ -123,9 +123,9 @@ export async function createSupport({ pool, requireUser, emailSend, site }) {
       throw e;
     } finally {client.release();}
     await sendNotice(senderAddress,"Media God Support received your email ("+ticketId.slice(0,8)+")",
-      "We've received your email and created ticket "+ticketId+".\\nYou can read and reply here:\\n"+link(ticketId,ticketKey)+"\\n\\nMedia God Support");
+      "We've received your email and created ticket "+ticketId+".\nYou can read and reply here:\n"+link(ticketId,ticketKey)+"\n\nMedia God Support");
     if (alertTo) await sendNotice(alertTo,"New email support ticket "+ticketId.slice(0,8),
-      "From: "+senderAddress+"\\nSubject: "+subject+"\\n\\nStaff inbox: "+site+"/support/inbox");
+      "From: "+senderAddress+"\nSubject: "+subject+"\n\nStaff inbox: "+site+"/support/inbox");
     return respond(res,200,{ok:true},origin);
   }
   async function handle(req,res,path,body,origin,respond) {
