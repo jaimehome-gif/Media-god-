@@ -1619,8 +1619,10 @@ export default function StreamSourcesBox({
         kind:
           "addon-stream",
 
+        webpageSource: classifyTvBoxSource(stream).kind === "webpage",
         selectableTorrentSource:
-          !["provider", "youtube"].includes(String(stream?.type || "").toLowerCase()),
+          !["provider", "youtube"].includes(String(stream?.type || "").toLowerCase()) &&
+          classifyTvBoxSource(stream).kind !== "webpage",
 
         label:
           stream?.label ||
@@ -1664,6 +1666,8 @@ export default function StreamSourcesBox({
               : stream?.type ===
                   "youtube"
                 ? `${stream?.addon || "Addon"} • Video`
+                : classifyTvBoxSource(stream).kind === "webpage"
+                  ? `${stream?.addon || "Addon"} • Web-player page (not VLC)`
                 : `${stream?.addon || "Addon"} • Direct stream${
                     stream?.browserFallback
                       ? " • Browser fallback"
@@ -1929,12 +1933,14 @@ export default function StreamSourcesBox({
           {(torrentOnly
             ? rows.filter((row) => row.kind === "rd" || row.kind === "paste" ||
                 (row.kind === "addon-stream" && row.selectableTorrentSource))
-            : mediaType === "tv"
-              // Keep true episode video choices above external web embeds.
-              // Picking one of these cards now opens the native VLC route.
+            : mediaType !== "live"
+              // Put VLC-playable direct sources and torrents first for films
+              // AND TV. Keep HTML embeds only as labelled optional backups.
               ? [
-                  ...rows.filter((row) => row.kind === "rd" || row.kind === "addon-stream"),
-                  ...rows.filter((row) => row.kind !== "rd" && row.kind !== "addon-stream"),
+                  ...rows.filter((row) => row.kind === "rd" ||
+                    (row.kind === "addon-stream" && !row.webpageSource)),
+                  ...rows.filter((row) => row.kind !== "rd" &&
+                    !(row.kind === "addon-stream" && !row.webpageSource)),
                 ]
               : rows).map(
             (
