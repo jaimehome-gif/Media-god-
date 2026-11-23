@@ -794,6 +794,8 @@ export const playNativeFireTv = ({
         .trim(),
       url: String(item?.url || item?.src || item?.magnet || item?.magnetLink || "").trim(),
       mimeType: String(item?.mimeType || item?.mime_type || "").trim(),
+      // The user explicitly chose this Media God Sources row for built-in VLC.
+      preferNativeVlc: item?.preferNativeVlc === true,
       videoCodec: hints.videoCodec,
       audioCodec: hints.audioCodec,
       container: hints.container,
@@ -945,6 +947,8 @@ export const playNativeFireTv = ({
     advancedPlayback.volumeNormalization === true;
 
   const forceCompatibilityReason =
+    (!live && !drm && selectedHints?.preferNativeVlc === true
+      ? "sources-manual-built-in-vlc" : "") ||
     learnedReason ||
     (selectedIsAioStreams ? "audio:aiostreams-compatibility" : "") ||
     (userForcesCompatibility ? "advanced-audio-processing" : "");
