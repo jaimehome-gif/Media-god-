@@ -11,11 +11,10 @@ const url = process.env.DATABASE_URL;
 if (!url) throw Error("DATABASE_URL required");
 const pool = new Pool({ connectionString: url, max: 8, connectionTimeoutMillis: 5000 });
 const port = Number(process.env.PORT || 4000);
-// Email links must point to the independent Railway website until the custom
-// domain is publicly routed to and verified by Railway. This host serves the
-// full SPA, including /support, /support/inbox, /verify-email and /reset-password.
-// SITE_LINK_ORIGIN can be set to the custom domain after DNS verification.
-const site = String(process.env.SITE_LINK_ORIGIN || "https://media-god-independent-web-production.up.railway.app").replace(/\/+$/, "");
+// The independently hosted Media God website is now verified on the www custom
+// domain, including TLS. Keep that as the link origin until the root domain
+// is fully routed and verified too. SITE_LINK_ORIGIN may override this.
+const site = String(process.env.SITE_LINK_ORIGIN || "https://www.underworldhub.co.uk").replace(/\/+$/, "");
 const origins = new Set(String(process.env.ALLOWED_ORIGINS || "https://underworldhub.co.uk,https://www.underworldhub.co.uk").split(",").map(s=>s.trim()).filter(Boolean));
 origins.add(site);
 const mailReady = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
