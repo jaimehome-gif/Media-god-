@@ -4,7 +4,6 @@ import { promisify } from "node:util";
 import pg from "pg";
 import { createSocialOAuth } from "./socialOAuth.mjs";
 import { createSupport } from "./support.mjs";
-import { runEmailE2E } from "./emailE2e.mjs";
 
 const { Pool } = pg;
 const scrypt = promisify(scryptCb);
@@ -84,12 +83,6 @@ const limitRate = (req,kind,email="") => {
   if (traffic.size>6000) for (const [id,val] of traffic) if (val.until<=now) traffic.delete(id);
   if (state.n>(kind==="login"?30:12)) err(429,"Too many requests. Try again later.");
 };
-// A temporary, exact-address-only QA capture; no credentials, links or
-// tokens are exposed to logs, HTTP routes or source control.
-const qaMailTokens = new Map();
-const qaMailEnabled = process.env.EMAIL_E2E_RUN_ID === "mgqa-20261123e2e" &&
-  process.env.EMAIL_E2E_STAGE === "register" &&
-  process.env.EMAIL_E2E_EMAIL === "jaime.home+mgqa-20261123e2e@gmail.com";
 const emailSend = async (recipient,subject,plain,options={}) => {
   if (!mailReady) err(503,"Verification email is not configured yet","EMAIL_NOT_READY");
   const result=await fetch("https://api.resend.com/emails",{
@@ -100,12 +93,6 @@ const emailSend = async (recipient,subject,plain,options={}) => {
   if (!result.ok) {
     console.error("[identity] email delivery unavailable",result.status);
     err(503,"Could not deliver the email. Try again later.");
-  }
-  if (qaMailEnabled && String(recipient).toLowerCase()===process.env.EMAIL_E2E_EMAIL) {
-    const kind = subject==="Verify your new Media God account" ? "verify" :
-      subject==="Reset Media God password" ? "reset" : null;
-    const match = kind && String(plain).match(/[?&]token=([A-Za-z0-9_-]{40,100})/);
-    if (kind && match) qaMailTokens.set(kind,match[1]);
   }
 };
 const requireUser=async req=>{
@@ -321,5 +308,4 @@ async function handler(req,res) {
 }
 http.createServer(handler).listen(port,"0.0.0.0",()=>{
   console.log("[identity] Jaime Home service started; email setup "+(mailReady?"ready":"pending"));
-  runEmailE2E({port,pool,getToken:kind=>qaMailTokens.get(kind),clearToken:kind=>qaMailTokens.delete(kind)});
 });
