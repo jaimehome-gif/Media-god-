@@ -17,6 +17,13 @@ export const createClientFromRequest = (request) => {
   // The wrapper is ephemeral and cannot be used for another request.
   const scopedClient = Object.create(client);
   scopedClient.auth = Object.create(client.auth);
-  scopedClient.auth.me = async () => verifiedUser;
+  let currentUser = verifiedUser;
+  scopedClient.auth.me = async () => currentUser;
+  scopedClient.auth.updateMe = async patch => {
+    const saved = await client.auth.updateMe(patch);
+    if (saved?.id !== verifiedId) throw new Error("Could not verify the saved account");
+    currentUser = saved;
+    return saved;
+  };
   return scopedClient;
 };

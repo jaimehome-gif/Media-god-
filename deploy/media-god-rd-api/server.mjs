@@ -116,12 +116,15 @@ async function serve(req,res) {
     const request=new Request("http://127.0.0.1"+path,{
       method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)
     });
-    Object.defineProperties(request,{
-      __mediaGodVerifiedClient:{value:verified.client},
-      __mediaGodVerifiedUserId:{value:verified.user.id},
-      __mediaGodVerifiedUser:{value:verified.user}
+    const result=await exclusive(verified.user.id,async () => {
+      const currentUser = await verified.client.auth.me();
+      Object.defineProperties(request,{
+        __mediaGodVerifiedClient:{value:verified.client},
+        __mediaGodVerifiedUserId:{value:verified.user.id},
+        __mediaGodVerifiedUser:{value:currentUser}
+      });
+      return handlers[path](request);
     });
-    const result=await exclusive(verified.user.id,()=>handlers[path](request));
     if (result.status===401||result.status>=500) {
       console.warn("[rd-independent] request rejected",{action,function:path.slice(11),status:result.status});
     }

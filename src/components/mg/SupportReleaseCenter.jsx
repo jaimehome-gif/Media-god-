@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckCircle2, Download, ExternalLink, History, Loader2,
+  CheckCircle2, Download, ExternalLink, History,
   RefreshCw, ShieldCheck, Smartphone, Tv
 } from "lucide-react";
 import { fetchLatestNativeRelease } from "@/components/mg/nativeReleaseInfo";
