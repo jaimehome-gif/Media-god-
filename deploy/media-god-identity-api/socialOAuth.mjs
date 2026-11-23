@@ -40,10 +40,17 @@ const allowedOrigins = new Set(String(process.env.SOCIAL_RETURN_ORIGINS ||
   .split(",").map(s=>s.trim().replace(/\/+$/,"")).filter(Boolean));
 const providerConfig = p => {
   const upper=p.toUpperCase();
+  // Apple requires a verified domain controlled by Media God. Its return
+  // hostname can move to auth.underworldhub.co.uk without changing the
+  // working Google, Facebook or Microsoft callback registrations.
+  const defaultCallback=identity+"/auth/oauth/"+p+"/callback";
+  const appleOverride=String(process.env.APPLE_REDIRECT_URI||"").trim();
+  const appleCallback="https://auth.underworldhub.co.uk/auth/oauth/apple/callback";
   return {
     clientId: process.env[upper+"_CLIENT_ID"] || "",
     secret: process.env[upper+"_CLIENT_SECRET"] || "",
-    callback:identity+"/auth/oauth/"+p+"/callback",
+    callback:p==="apple" && appleOverride===appleCallback
+      ? appleCallback : defaultCallback,
   };
 };
 function safeReturn(raw) {
