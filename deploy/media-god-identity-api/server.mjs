@@ -225,6 +225,19 @@ async function authentication(req,res,path,body,origin) {
     return respond(res,200,{ok:true},origin);
   }
   const user=await requireUser(req);
+  // A still-valid Media God session is proof of prior authentication. Allow
+  // that user to unlock sign-in on their other devices without a password
+  // change, email-disclosure, or any account-wide security bypass.
+  // No unauthenticated or cross-account unlock operation is provided.
+  if (path==="/auth/unlock-login"&&req.method==="POST") {
+    limitRate(req,"unlock",user.email);
+    await pool.query(
+      "UPDATE identity_accounts SET login_failures=0,locked_until=NULL,updated_at=NOW() WHERE id=$1",
+      [user.id]
+    );
+    clearLoginRateForEmail(user.email);
+    return respond(res,200,{ok:true,message:"Sign-in attempts unlocked for this Media God account."},origin);
+  }
   if (path==="/auth/me"&&req.method==="GET") {
     // Renew active sessions at most once a week, including existing installations.
     await pool.query("UPDATE identity_sessions SET expires_at=NOW()+INTERVAL '14 days' WHERE id=$1 AND revoked_at IS NULL AND expires_at>NOW() AND expires_at<NOW()+INTERVAL '7 days'",[user.session_id]);
