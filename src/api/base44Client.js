@@ -114,6 +114,11 @@ const auth = {
     try { await auth.me(); return true; }
     catch { return false; }
   },
+  // Works only with a currently valid authenticated session; unlocks
+  // failed sign-in attempts for this account on the user's other devices.
+  async unlockLogin() {
+    return call(IDENTITY_API,"/auth/unlock-login",{method:"POST",body:{}});
+  },
   async updateMe(patch={}) {
     return call(IDENTITY_API,"/auth/me",{method:"PATCH",body:patch});
   },
