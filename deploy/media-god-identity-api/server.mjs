@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, createHash, scrypt as scryptCb, timingSafeEqua
 import { promisify } from "node:util";
 import pg from "pg";
 import { createSocialOAuth } from "./socialOAuth.mjs";
+import { createBase44Bridge } from "./base44Bridge.mjs";
 import { createSupport } from "./support.mjs";
 
 const { Pool } = pg;
@@ -146,6 +147,8 @@ const sqlSchema=[
 for (const sql of sqlSchema) await pool.query(sql);
 const socialOAuth = createSocialOAuth({pool,issueSession,requireUser,limitRate});
 await socialOAuth.initialize();
+const base44Bridge = createBase44Bridge({pool,requireUser,issueSession,limitRate,respond});
+await base44Bridge.initialize();
 const support = await createSupport({pool,requireUser,emailSend,site});
 
 async function authentication(req,res,path,body,origin) {
@@ -338,6 +341,7 @@ async function handler(req,res) {
     if (path==="/auth/providers" || path.startsWith("/auth/oauth/") || path.startsWith("/auth/device/")) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
     }
+    if (path === "/auth/base44/link" || path === "/auth/base44/exchange") return await base44Bridge.handle(req,res,path,body,origin);
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
     if (path.startsWith("/entities/")) return await entityRoute(req,res,path,body,origin);
     if (path.startsWith("/support/")) return await support.handle(req,res,path,body,origin,respond);
