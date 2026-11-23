@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, createHash, scrypt as scryptCb, timingSafeEqua
 import { promisify } from "node:util";
 import pg from "pg";
 import { createSocialOAuth } from "./socialOAuth.mjs";
+import { createSupport } from "./support.mjs";
 
 const { Pool } = pg;
 const scrypt = promisify(scryptCb);
@@ -82,11 +83,11 @@ const limitRate = (req,kind,email="") => {
   if (traffic.size>6000) for (const [id,val] of traffic) if (val.until<=now) traffic.delete(id);
   if (state.n>(kind==="login"?30:12)) err(429,"Too many requests. Try again later.");
 };
-const emailSend = async (recipient,subject,plain) => {
+const emailSend = async (recipient,subject,plain,options={}) => {
   if (!mailReady) err(503,"Verification email is not configured yet","EMAIL_NOT_READY");
   const result=await fetch("https://api.resend.com/emails",{
     method:"POST",headers:{Authorization:"Bearer "+process.env.RESEND_API_KEY,"Content-Type":"application/json"},
-    body:JSON.stringify({from:process.env.EMAIL_FROM,to:[recipient],subject,text:plain}),
+    body:JSON.stringify({from:options.from||process.env.EMAIL_FROM,to:[recipient],subject,text:plain}),
     signal:AbortSignal.timeout(10000)
   });
   if (!result.ok) {
@@ -129,6 +130,7 @@ const sqlSchema=[
 for (const sql of sqlSchema) await pool.query(sql);
 const socialOAuth = createSocialOAuth({pool,issueSession});
 await socialOAuth.initialize();
+const support = await createSupport({pool,requireUser,emailSend,site});
 
 async function authentication(req,res,path,body,origin) {
   if (path==="/auth/config"&&req.method==="GET") return respond(res,200,{independent:true,email_verification_required:true,registration_ready:mailReady,previous_accounts_not_imported:true},origin);
@@ -271,6 +273,7 @@ async function handler(req,res) {
     // This single server-to-server OAuth callback is verified using its
     // one-use state, browser-binding cookie, signed ID token and nonce.
     // appleCallback is defined above for both the origin check and body decoder.
+    const appleCallback = path==="/auth/oauth/apple/callback" && req.method==="POST";
     if (origin&&!origins.has(origin)&&!appleCallback) err(403,"Origin not allowed");
     if (req.method==="OPTIONS") return respond(res,204,{},origin);
     if (path==="/health"&&req.method==="GET") {
@@ -280,13 +283,13 @@ async function handler(req,res) {
     if (path==="/"&&req.method==="GET") return respond(res,200,{service:"Media God Identity",base44:false},origin);
     // Apple's form_post must be read as URL-encoded body by the OAuth router,
     // not parsed as JSON by the usual application request decoder.
-    const appleCallback = path==="/auth/oauth/apple/callback" && req.method==="POST";
     const body=!appleCallback && ["POST","PATCH"].includes(req.method)?await input(req):{};
     if (path==="/auth/providers" || path.startsWith("/auth/oauth/")) {
       return await socialOAuth.handle(req,res,path,body,origin,respond);
     }
     if (path.startsWith("/auth/")) return await authentication(req,res,path,body,origin);
     if (path.startsWith("/entities/")) return await entityRoute(req,res,path,body,origin);
+    if (path.startsWith("/support/")) return await support.handle(req,res,path,body,origin,respond);
     err(404,"Not found");
   }catch(e){
     const status=Number(e.status)||500;
