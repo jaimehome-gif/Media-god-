@@ -171,7 +171,7 @@ async function verifiedIdentity(provider,tokens,config,nonce) {
   return sanitizeProfile({name:info.name,email:info.email,emailVerified:false},provider,info.id);
 }
 
-async function associate(pool,person) {
+export async function associateSocialAccount(pool,person) {
   const conn=await pool.connect();
   try {
     await conn.query("BEGIN");
@@ -283,7 +283,7 @@ export function createSocialOAuth({pool,issueSession}) {
         try {
           const tokens=await exchangeCode(provider,code,row.verifier,cfg);
           const person=await verifiedIdentity(provider,tokens,cfg,row.nonce);
-          const user=await associate(pool,person);
+          const user=await associateSocialAccount(pool,person);
           const ticket=safeToken();
           await pool.query("DELETE FROM identity_oauth_tickets WHERE expires_at<NOW()");
           await pool.query("INSERT INTO identity_oauth_tickets(ticket_hash,user_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '90 seconds')",[sha(ticket),user.id]);
