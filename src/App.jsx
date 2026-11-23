@@ -15,11 +15,13 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import VerifyEmail from '@/pages/VerifyEmail';
 import SocialOAuthCallback from '@/pages/SocialOAuthCallback';
+import { SupportPage, SupportTicketPage, SupportInboxPage } from '@/pages/Support';
 import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { PlayerProvider } from '@/components/mg/PlayerProvider.jsx';
 
 const AuthenticatedApp = () => {
+  const isSupportPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/support');
   const isPlayerRemotePath =
     typeof window !== 'undefined' &&
     window.location.pathname.startsWith('/remote/');
@@ -58,7 +60,7 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required' && !isAuthenticated) {
+    } else if (authError.type === 'auth_required' && !isAuthenticated && !isSupportPath) {
       navigateToLogin();
       return null;
     }
@@ -87,6 +89,9 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={publicOnly(<ResetPassword />)} />
       <Route path="/verify-email" element={publicOnly(<VerifyEmail />)} />
       <Route path="/auth/callback" element={<SocialOAuthCallback />} />
+      <Route path="/support" element={<SupportPage />} />
+      <Route path="/support/ticket/:id" element={<SupportTicketPage />} />
+      <Route path="/support/inbox" element={<SupportInboxPage />} />
       <Route
         element={
           <ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />
