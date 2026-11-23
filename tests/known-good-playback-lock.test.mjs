@@ -62,7 +62,11 @@ const sourceReviewedFiles = {
   // Explicit 14 November release instruction: reviewed wake recovery; physical
   // Fire Stick acceptance remains unverified. See FIRETV_WAKE_RELEASE_20261114.md.
   // Approved for live Fire Stick testing on 18 November. Physical acceptance is pending.
-  "firetv-android/app/src/main/java/com/mediagod/firetv/MainActivity.kt": "e601d7d631b40a09fddf3b2bb0ea6a27cd18467ab996fdf7a573f21e3cbf098c",
+  // 23 November 2026: code-reviewed Google session cookie flush on OAuth
+  // page completion, app pause and destroy. No source/playback/Live TV changes.
+  // Former normalized hash and exact changes documented in
+  // docs/ANDROID_OAUTH_SESSION_REPAIR.md. Physical installation unverified.
+  "firetv-android/app/src/main/java/com/mediagod/firetv/MainActivity.kt": "c1034356da63b95a205025cf6ae83ebf192b4f971a8dee4cced72f0de47ccd3d",
   "firetv-android/app/src/main/java/com/mediagod/firetv/ExternalWebActivity.kt": "c97886ff48d788efbbb41854cf39437918fddb5edf08ddaf82060480a8d8a92d",
   "firetv-android/app/src/main/java/com/mediagod/firetv/FullscreenWakeRecovery.kt": "6353d568bfa8b6e04ef5a3f669d48d781d15102eb9e7de4c740fc8cfa549802e",
   "src/components/mg/MediaStreamSourcesBox.jsx": "8bc3e768b6843d6d9bd426e63851349c7b8583f244c92bc60f134c963798ca47",

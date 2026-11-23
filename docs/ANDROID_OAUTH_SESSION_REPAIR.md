@@ -39,3 +39,35 @@ This is a deliberately scoped update to the protected-media checksum guard, not 
 - `src/components/mg/MediaPlayerProvider.jsx`: prior SHA-256 `4ac9442105a010730d0fdc99f2b4bad707df405fb991d80e2d46c7d894c17110`, reviewed new SHA-256 `245ea498e38651c674adda47f8e5a0c20b6d05669354a07534f976b529c31b35`. Source diff in `d473a0d0441e244db0590f8b6dba4510f4ea954b` changes only the repeat pass, retry delay and cached launch probe limits (6 insertions, 6 removals).
 - Regression tests were revised to verify the new finite request/worker limits while retaining the original web-provider HTML isolation, source choice, native audio and Live TV checks.
 - The SHA-256 guard still checks **all** protected files and rejects any new undocumented drift. The prior baselines remain documented and available for rollback. This source review does not claim physical-device playback verification.
+
+## Same-package Fire TV repair for installed 1.4.126 — 23 November 2026
+The owner reported Android's generic "App not installed" error while trying to
+install **Mobile 1.0.97** on a device showing installed version **1.4.126**.
+The Android package identities are **com.mediagod.mobile** (1.0.97, code 98)
+and **com.mediagod.firetv** (1.4.126, code 131). Different packages are NOT
+an in-place update path, regardless of matching signer. This difference alone
+does not diagnose why a separate second app could not install.
+
+Preserve the existing `com.mediagod.firetv` installation, data and signing
+identity. The compatible new build is **Fire TV 1.4.127 (code 132)**,
+compiled from the unchanged Fire TV package identity and the existing
+GitHub release signing configuration.
+
+Code review of `firetv-android/.../MainActivity.kt`: exactly three additive
+`CookieManager.getInstance().flush()` invocations after `onPageFinished`,
+at the start of `onPause`, and at the start of `onDestroy`.
+The former FULL SHA-256 was
+`2d479ed8bab2406896482347b6dd7172a80dc4efea0f8b85215459cfe3729f09`
+and the new FULL SHA-256 is
+`90842c49b00abf5a18d15f99b2a9be5b1c577437eb3bbb92dc6a17cff6f0bb31`.
+The source-reviewed checksum, normalising the existing download-status adapter,
+changes from `e601d7d631b40a09fddf3b2bb0ea6a27cd18467ab996fdf7a573f21e3cbf098c`
+to `c1034356da63b95a205025cf6ae83ebf192b4f971a8dee4cced72f0de47ccd3d`.
+
+This is a source-review and regression-protected adaptation, NOT confirmation
+that the 1.4.127 signed APK has shipped or that a Google session is persistent
+on the owner's actual Android device. Update only with the official
+`Media-God-Fire-TV.apk` if GitHub Actions has verified signature, source
+commit and download hash. Android in-place replacement requires the *installed*
+`com.mediagod.firetv` APK signing certificate to match the new one;
+do not uninstall/clear app data to work around a certificate mismatch.
