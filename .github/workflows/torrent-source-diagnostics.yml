@@ -16,7 +16,7 @@ permissions:
 jobs:
   probe-public-sources:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 10
     steps:
       - name: Check representative movie and episode source availability (no source URLs)
         shell: bash
