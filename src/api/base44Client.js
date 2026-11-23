@@ -14,7 +14,7 @@ import {
 export const IDENTITY_API = "https://media-god-identity-api-production.up.railway.app";
 export const RD_API = "https://media-god-rd-independent-api-production.up.railway.app";
 const SESSION_KEY = "mg:jaime-home-session:v1";
-const AUTH_ERROR = "Sign in to your new Media God account. Previous Base44 sessions are not valid here.";
+const AUTH_ERROR = "Please sign in to Media God again. Your existing verified email address is still valid; there is no need to create a different account.";
 const PUBLIC_FUNCTIONS = new Set(["getTmdbMovies","resolveImdb","resolveTvImdb","fetchAddonStreams","getEntertainmentNews","getSkipSegments","getFireTvApkLink"]);
 const PRIVATE_FUNCTIONS = new Set(["realDebrid","realDebridAuth","multiDebrid","findRdLibrary"]);
 const cleanName = n => String(n||"").trim();
