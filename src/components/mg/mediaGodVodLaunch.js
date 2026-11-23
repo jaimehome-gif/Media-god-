@@ -23,14 +23,20 @@ export const buildMediaGodVodRequest = (media = {}) => ({
 
 export const launchMediaGodVod = (player, media) => {
   if (!player || typeof player.play !== "function") return false;
-  void Promise.resolve().then(() => player.play(buildMediaGodVodRequest(media)))
-    .catch((error) => {
-      console.error("[Media God] Default VOD player launch failed", error);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("mg:player-status", {
-          detail: { message: "Media God could not open this source. Please try Sources or another file." },
-        }));
-      }
-    });
-  return true;
+  const onError = (error) => {
+    console.error("[Media God] Default VOD player launch failed", error);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("mg:player-status", {
+        detail: { message: "Media God could not open this source. Please try Sources or another file." },
+      }));
+    }
+  };
+  try {
+    const started = player.play(buildMediaGodVodRequest(media));
+    if (started && typeof started.catch === "function") void started.catch(onError);
+    return true;
+  } catch (error) {
+    onError(error);
+    return false;
+  }
 };
