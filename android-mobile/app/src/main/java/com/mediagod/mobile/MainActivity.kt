@@ -627,14 +627,27 @@ class MainActivity : FragmentActivity() {
             Uri.parse(currentTopLevelUrl)
         }.getOrNull() ?: return false
 
-        val expectedHost = expected.host.orEmpty()
-        val currentHost = current.host.orEmpty()
+        val expectedHost = expected.host.orEmpty().lowercase()
+        val currentHost = current.host.orEmpty().lowercase()
+
+        // Media God operates on both apex and www domains. After Google
+        // login the account UI may return to www.underworldhub.co.uk even
+        // though the APK initially loaded underworldhub.co.uk. That must
+        // not disable MediaGodNative.play() or strand VOD in the silent
+        // embedded web player. Never use endsWith() here: the bridge is
+        // exposed to iframes, so only these exact first-party hosts qualify.
+        val trustedHost = when (expectedHost) {
+            "underworldhub.co.uk", "www.underworldhub.co.uk" ->
+                currentHost == "underworldhub.co.uk" ||
+                currentHost == "www.underworldhub.co.uk"
+            else -> currentHost == expectedHost
+        }
 
         return (
             expected.scheme.equals("https", ignoreCase = true) &&
                 current.scheme.equals(expected.scheme, ignoreCase = true) &&
                 expectedHost.isNotBlank() &&
-                currentHost.equals(expectedHost, ignoreCase = true) &&
+                trustedHost &&
                 current.port == expected.port
         )
     }
