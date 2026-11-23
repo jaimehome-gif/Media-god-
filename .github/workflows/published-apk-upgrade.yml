@@ -1,0 +1,45 @@
+name: Verify published APK upgrades
+on:
+  push:
+    branches: [verify/published-apk-upgrade-20261123]
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Download previous and new signed releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir previous current
+          for attempt in {1..40}; do
+            body=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/firetv-latest" --jq '.body')
+            if grep -Fq 'Verified-APK-Commit: bf936833ebde6af7d25b5c458811bdddfa22c7cb' <<< "$body"; then break; fi
+            sleep 15
+          done
+          grep -Fq 'Verified-APK-Commit: bf936833ebde6af7d25b5c458811bdddfa22c7cb' <<< "$body"
+          gh release download stable-716a61590d3e --pattern 'Media-God-*.apk' --dir previous
+          gh release download android-mobile-latest --pattern 'Media-God-Android-Mobile.apk' --dir current
+          gh release download firetv-latest --pattern 'Media-God-Fire-TV.apk' --dir current
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install previous signed apps and upgrade in place
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install previous/Media-God-Android-Mobile.apk
+            adb install -r current/Media-God-Android-Mobile.apk
+            adb shell dumpsys package com.mediagod.mobile | grep -F 'versionName=1.0.99'
+            adb install previous/Media-God-Fire-TV.apk
+            adb install -r current/Media-God-Fire-TV.apk
+            adb shell dumpsys package com.mediagod.firetv | grep -F 'versionName=1.4.129'
