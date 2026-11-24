@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import {
   INDEPENDENT_METADATA_API_URL,
   invokeIndependentMetadata,
@@ -61,13 +62,40 @@ test("public metadata cache survives a temporary endpoint outage without deletin
     "Never touch Continue Watching, login or user profile data");
 });
 
-test("no silent return to Base44 credits for public catalogue requests", () => {
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /if \(name === 'getTmdbMovies'\) \{\s*return invokeIndependentMetadata\(payload\)/);
-  assert.match(client, /return rawInvoke\(/);
-  assert.match(client, /deviceToken: railwayDeviceToken\(\)/);
-  const metadata = read("src/api/independentMetadata.js");
-  assert.doesNotMatch(metadata, /base44\.functions\.invoke|rd_token|asServiceRole/);
+// Exercise the independent compatibility facade rather than requiring the
+// retired Base44 SDK call and legacy device token to remain in production.
+function publicFacadeHarness() {
+  const calls = [];
+  const network = [];
+  const route = name => async (...args) => {
+    calls.push({ name, args });
+    return { data: { public: true } };
+  };
+  const source = read("src/api/base44Client.js")
+    .replace(/^import\s+[\s\S]*?from\s+["'][^"']+["'];/gm, "")
+    .replace(/^export\s+/gm, "");
+  const localStorage = { getItem: () => "synthetic-account-session" };
+  const client = vm.runInNewContext(source + "\nbase44;", {
+    window: { localStorage }, AbortController, setTimeout, clearTimeout,
+    fetch: async (...args) => { network.push(args); throw Error("Unexpected network fallback"); },
+    invokeIndependentMetadata: route("catalogue"),
+    invokeIndependentImdbResolver: route("identity"),
+    invokeIndependentPublicFeature: route("feature"),
+  });
+  return { client, calls, network };
+}
+
+test("no silent return to Base44 credits for public catalogue requests", async () => {
+  const { client, calls, network } = publicFacadeHarness();
+  const payload = { media_type: "movie", page: 1 };
+  assert.equal((await client.functions.invoke("getTmdbMovies", payload)).data.public, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, "catalogue");
+  assert.equal(calls[0].args.length, 1);
+  assert.equal(calls[0].args[0], payload);
+  await assert.rejects(client.functions.invoke("notMigrated"), error => error.code === "MIGRATION_PENDING_FUNCTION");
+  assert.equal(network.length, 0);
+  assert.doesNotMatch(read("src/api/independentMetadata.js"), /base44\.functions\.invoke|rd_token|asServiceRole/);
 });
 
 test("standalone metadata port keeps original response and server-held secret", () => {
@@ -96,9 +124,16 @@ test("independent IMDb resolvers pass only public movie/episode identity", async
   assert.equal(result.data.imdb_id, "tt0944947");
   assert.doesNotMatch(init.body, /never-send|rd_token|token/);
   assert.equal(init.credentials, "omit");
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'resolveImdb' \|\| name === 'resolveTvImdb'/);
-  assert.match(client, /return invokeIndependentImdbResolver\(name, payload\)/);
+  const { client, calls, network } = publicFacadeHarness();
+  for (const name of ["resolveImdb", "resolveTvImdb"]) {
+    const payload = { tmdb_id: 123 };
+    await client.functions.invoke(name, payload);
+    assert.equal(calls.at(-1).name, "identity");
+    assert.equal(calls.at(-1).args[0], name);
+    assert.equal(calls.at(-1).args[1], payload);
+    assert.equal(calls.at(-1).args.length, 2);
+  }
+  assert.equal(network.length, 0);
 });
 
 test("independent backend ports IMDb logic without Base44 integration runtime", () => {
@@ -170,12 +205,17 @@ test("news and skip metadata bypass Base44 and strip all account credentials", a
   assert.equal(seen[2].options.body, "{}");
 });
 
-test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", () => {
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'getEntertainmentNews'/);
-  assert.match(client, /name === 'getSkipSegments'/);
-  assert.match(client, /name === 'getFireTvApkLink'/);
-  assert.match(client, /return invokeIndependentPublicFeature\(name, payload\)/);
+test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", async () => {
+  const { client, calls, network } = publicFacadeHarness();
+  for (const name of ["getEntertainmentNews", "getSkipSegments", "getFireTvApkLink"]) {
+    const payload = {};
+    await client.functions.invoke(name, payload);
+    assert.equal(calls.at(-1).name, "feature");
+    assert.equal(calls.at(-1).args[0], name);
+    assert.equal(calls.at(-1).args[1], payload);
+    assert.equal(calls.at(-1).args.length, 2);
+  }
+  assert.equal(network.length, 0);
   const server = read("deploy/media-god-api/server.mjs");
   const docker = read("deploy/media-god-api/Dockerfile");
   for (const name of ["getEntertainmentNews", "getSkipSegments", "getFireTvApkLink"]) {
