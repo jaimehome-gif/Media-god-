@@ -37,9 +37,11 @@ const readCache = (payload, storage = safeStorage()) => {
   if (!storage) return null;
   try {
     const entry = JSON.parse(storage.getItem(keyFor(payload)) || "null");
+    const age = Date.now() - entry?.savedAt;
     if (!entry || entry.payload !== JSON.stringify(payload || {}) ||
-      Date.now() - Number(entry.savedAt || 0) > (payload?.__resolver ? 7 * CACHE_LIFETIME_MS : CACHE_LIFETIME_MS) ||
-      !entry.data || typeof entry.data !== "object") return null;
+      !Number.isFinite(entry.savedAt) || age < 0 ||
+      age > (payload?.__resolver ? 7 * CACHE_LIFETIME_MS : CACHE_LIFETIME_MS) ||
+      !entry.data || typeof entry.data !== "object" || Array.isArray(entry.data)) return null;
     return entry.data;
   } catch {
     return null;
@@ -129,7 +131,8 @@ export async function invokeIndependentMetadata(payload = {}, {
           });
           if (!response.ok) throw new Error(`Independent metadata returned ${response.status}`);
           const parsed = await response.json();
-          if (!parsed || typeof parsed !== "object" || parsed.error) {
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.error ||
+              (["upcoming", "tv_upcoming"].includes(request.category) && !Array.isArray(parsed.movies))) {
             throw new Error("Independent metadata response invalid");
           }
           return parsed;
