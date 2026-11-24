@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash, createHmac } from "node:crypto";
+import vm from "node:vm";
 import realDebrid from "../deploy/media-god-rd-api/realDebrid.mjs";
 import realDebridAuth from "../deploy/media-god-rd-api/realDebridAuth.mjs";
 import multiDebrid from "../deploy/media-god-rd-api/multiDebrid.mjs";
@@ -146,17 +148,48 @@ test("mismatched verified-user IDs never gain an authenticated RD client", () =>
   assert.throws(() => createClientFromRequest(req), /Verified Media God account/);
 });
 
-test("Railway RD service requires a real Base44 session, protects actions and excludes guest impersonation", () => {
-  const server = source("deploy/media-god-rd-api/server.mjs");
-  assert.match(server, /createAccountVerificationCache\(/);
-  assert.match(server, /const verifiedClient = createAccountVerificationCache/);
-  assert.match(server, /if \(!verified\) \{/);
-  assert.match(server, /return respond\(res, 401, \{error: "Sign in to Media God to use Real-Debrid\."\}/);
-  assert.match(server, /credentials must not be supplied/i);
-  assert.match(server, /ALLOWED_ORIGINS/);
-  assert.match(server, /private, no-store/);
-  assert.match(server, /\/functions\/realDebridAuth/);
-  assert.match(server, /\/functions\/findRdLibrary/);
+test("Railway RD service requires a verified account, protects actions and excludes guest impersonation", async () => {
+  const server = source("deploy/media-god-rd-api/server.mjs")
+    .replace(/^import .*;$/gm, "")
+    .split("http.createServer(")[0];
+  const id = "11111111-1111-4111-8111-111111111111";
+  const token = "A".repeat(40);
+  const calls = [];
+  const handler = async req => {
+    calls.push(req.__mediaGodVerifiedUserId);
+    return Response.json({ok:true});
+  };
+  const serve = vm.runInNewContext(server + "\nserve", {
+    process: {env: {IDENTITY_VERIFY_URL:"https://identity.invalid/auth/me",
+      RD_ACCOUNT_DERIVATION_KEY:"synthetic-secret-".repeat(4)}},
+    createHash, createHmac, AbortSignal, Request, Buffer, console,
+    realDebrid: handler, realDebridAuth: handler, findRdLibrary: handler,
+    multiDebrid: handler, fetchAddonStreams: handler,
+    fetch: async (_url, options) => options.headers.Authorization === "Bearer " + token
+      ? Response.json({id}) : new Response(null,{status:401}),
+    deviceClient: async () => ({user:{id:"account-store"},client:{auth:{me:async()=>({id:"account-store"})}}}),
+  });
+  async function requestServer(authorization, body = {}, origin = "https://underworldhub.co.uk") {
+    const request = {headers:{authorization,origin},url:"/functions/realDebridAuth",method:"POST",
+      async *[Symbol.asyncIterator]() {yield Buffer.from(JSON.stringify(body));}};
+    const headers = {};
+    const reply = {setHeader:(key,value)=>{headers[key]=value;},
+      writeHead(status){this.status=status;},end(value){this.body=value;}};
+    await serve(request,reply);
+    return {status:reply.status,headers,body:JSON.parse(reply.body)};
+  }
+  for (const authorization of ["", "Device " + token, "Bearer " + "B".repeat(40)]) {
+    assert.equal((await requestServer(authorization)).status,401);
+  }
+  for (const body of [{user_id:"other"}, {guest_device_key:"other"}, {rd_token:"other"}]) {
+    assert.equal((await requestServer("Bearer " + token,body)).status,400);
+  }
+  assert.equal((await requestServer("Bearer " + token,{}, "https://untrusted.invalid")).status,403);
+  assert.equal(calls.length,0);
+  const accepted = await requestServer("Bearer " + token,{action:"status"});
+  assert.equal(accepted.status,200);
+  assert.equal(accepted.headers["Cache-Control"],"private,no-store");
+  assert.deepEqual(calls,["account-store"]);
   const guests = source("deploy/media-god-rd-api/guestDebrid.mjs");
   assert.doesNotMatch(guests, /asServiceRole|process\.env\..*TOKEN/);
 });
