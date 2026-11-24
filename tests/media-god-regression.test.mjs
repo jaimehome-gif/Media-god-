@@ -2371,26 +2371,19 @@ test("a six-row fast-start snapshot cannot replace 117 cached sources", () => {
   );
 });
 
-test("background caching runs multiple candidates and retries temporary slot blocks", () => {
-  const playerSource = readFileSync(
-    new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url),
-    "utf8"
-  );
-
+test("background cache respects bounded concurrency and backs off when account slots are blocked", () => {
+  const playerSource = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url), "utf8");
+  // The 24 November rate-limit repair intentionally reduced concurrency.
   assert.match(playerSource, /backgroundCacheControllersRef\s*=\s*useRef\(new Map\(\)\)/);
-  assert.match(playerSource, /BACKGROUND_CACHE_CONCURRENCY\s*=\s*3/);
-  assert.match(
-    playerSource,
-    /const freeWorkerCount\s*=\s*Math\.max\([\s\S]{0,260}?BACKGROUND_CACHE_CONCURRENCY[\s\S]{0,260}?backgroundCacheControllersRef\.current\.size/
-  );
-  assert.match(playerSource, /const batch\s*=\s*candidates\.slice\(0, freeWorkerCount\)/);
+  assert.match(playerSource, /BACKGROUND_CACHE_CONCURRENCY\s*=\s*1/);
+  assert.match(playerSource, /BACKGROUND_CACHE_MAX_PER_TITLE\s*=\s*2/);
+  assert.match(playerSource, /const freeWorkerCount\s*=\s*Math\.max\([\s\S]{0,260}?BACKGROUND_CACHE_CONCURRENCY[\s\S]{0,260}?backgroundCacheControllersRef\.current\.size[\s\S]{0,260}?backgroundCacheScheduledHashesRef\.current\.size/);
+  assert.match(playerSource, /const batch\s*=\s*candidates\.slice\(\s*0,\s*Math\.min\(freeWorkerCount, remainingBackgroundBudget\)/);
   assert.match(playerSource, /batch\.forEach\(\(candidate, batchIndex\)/);
-  assert.match(
-    playerSource,
-    /result\.accountBlocked\s*===\s*true[\s\S]{0,260}?backgroundCacheAttemptedRef\.current\.delete\(candidate\.hash\)/
-  );
-  assert.match(playerSource, /BACKGROUND_CACHE_SLOT_RETRY_MS\s*=\s*5_000/);
+  assert.match(playerSource, /result\.accountBlocked\s*===\s*true[\s\S]{0,260}?backgroundCacheAttemptedRef\.current\.delete\(candidate\.hash\)/);
+  assert.match(playerSource, /BACKGROUND_CACHE_SLOT_RETRY_MS\s*=\s*30_000/);
   assert.match(playerSource, /state:\s*"waiting-slot"/);
+  assert.match(playerSource, /if \(rdCacheEngineOwnsPollingRef\.current\)/);
 });
 
 test("background caching continues after foreground reaches ready", () => {
@@ -2408,17 +2401,24 @@ test("background caching continues after foreground reaches ready", () => {
   );
 });
 
-test("background caching does not stop after five ready alternatives", () => {
-  const playerSource = readFileSync(
-    new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url),
-    "utf8"
-  );
-
+test("background budget does not truncate the visible manual source pool", () => {
+  const playerSource = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(playerSource, /entry\.cachedCount\s*<\s*5/);
-  assert.match(
-    playerSource,
-    /const candidates\s*=\s*sortedSourceEntries[\s\S]{0,1800}?sourceNeedsCaching\(entry\.original\)[\s\S]{0,1800}?const batch\s*=\s*candidates\.slice\(0, freeWorkerCount\)/
-  );
+  assert.match(playerSource, /const candidates\s*=\s*sortedSourceEntries[\s\S]{0,1800}?sourceNeedsCaching\(entry\.original\)/);
+  const start = playerSource.indexOf("const freeWorkerCount = Math.max(");
+  const end = playerSource.indexOf("if (batch.length === 0)", start);
+  assert.ok(start >= 0 && end > start);
+  const budgetCode = playerSource.slice(start,end);
+  for (const [active, scheduled, attempted, expected] of [
+    [0,0,0,1], [1,0,0,0], [0,1,0,0], [0,0,1,1], [0,0,2,0],
+  ]) {
+    const execute = new Function("BACKGROUND_CACHE_CONCURRENCY","BACKGROUND_CACHE_MAX_PER_TITLE",
+      "backgroundCacheControllersRef","backgroundCacheScheduledHashesRef","backgroundCacheAttemptedRef","candidates",
+      budgetCode + "\nreturn batch.length;");
+    assert.equal(execute(1,2,{current:new Map(Array.from({length:active},(_,i)=>[i,true]))},
+      {current:new Set(Array.from({length:scheduled},(_,i)=>i))},
+      {current:new Set(Array.from({length:attempted},(_,i)=>i))},[1,2,3,4,5,6]), expected);
+  }
 });
 
 test("final player source pool comes directly from the full cache-annotated result", () => {
