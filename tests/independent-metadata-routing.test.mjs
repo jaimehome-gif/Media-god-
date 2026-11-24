@@ -186,3 +186,28 @@ test("the three independently hosted public handlers are wired and never fall ba
   // 5-minute request cache, even when news and skip metadata are cached.
   assert.match(server, /route !== "\/functions\/getFireTvApkLink"/);
 });
+
+test("public catalogue requests and cache retain only public query data", async () => {
+  const local = storage();
+  let sent;
+  const payload = {
+    category: "upcoming", region: "GB", page: 1,
+    provider_ids: [8, "9", { secret: "DO_NOT_FORWARD" }],
+    release_alerts: [{ id: 123, media_type: "tv", email: "DO_NOT_FORWARD" }],
+    access_token: "DO_NOT_FORWARD", account: { email: "DO_NOT_FORWARD" },
+  };
+  await invokeIndependentMetadata(payload, {
+    fetchImpl: async (_url, options) => {
+      sent = options.body;
+      return { ok: true, json: async () => ({ movies: [] }) };
+    },
+    storage: local,
+  });
+  assert.deepEqual(JSON.parse(sent), {
+    category: "upcoming", region: "GB", page: 1,
+    provider_ids: [8, "9"], release_alerts: [{ tmdb_id: "123", media_type: "tv" }],
+  });
+  assert.doesNotMatch(sent, /DO_NOT_FORWARD/);
+  assert.ok(local.keys().length > 0);
+  for (const key of local.keys()) assert.doesNotMatch(local.getItem(key), /DO_NOT_FORWARD/);
+});
