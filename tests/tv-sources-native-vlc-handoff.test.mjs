@@ -155,14 +155,15 @@ test("manual episode source stays pinned before automatic startup handoff", () =
 
 test("HTTP 429 is described as a Real-Debrid rate limit, not a VLC failure", () => {
   assert.match(player, /const rdRateLimited =/);
-  assert.match(player, /Playback lookup returned HTTP 429 \(too many requests\)/);
-  assert.match(player, /This torrent is not ready to play/);
+  assert.match(player, /Real-Debrid is rate limited/);
+  assert.match(player, /Wait before retrying or choose a direct video source/);
 });
 
-test("HTTP 429 attempts only already-ready TV fallback, never another uncached download", () => {
-  assert.match(player, /rdRateLimited &&[\s\S]{0,140}?playbackMediaType === "tv" &&[\s\S]{0,140}?!manualSourceLockActive\(\)/);
+test("HTTP 429 only attempts direct video fallback for Sources and TV", () => {
+  assert.match(player, /rdRateLimited &&[\s\S]{0,140}?\(sourcesPlayback \|\| playbackMediaType === "tv"\) &&[\s\S]{0,140}?!manualSourceLockActive\(\)/);
   assert.match(player, /const readyBackup = findNextPlayableSource\(activeIdx, \{[\s\S]{0,90}?allowCaching: false/);
-  assert.match(player, /Real-Debrid is rate limited\. Trying a ready episode source/);
+  assert.match(player, /const readyBackup = findNextPlayableSource\(activeIdx, \{\s*directOnly: true/);
+  assert.match(player, /Real-Debrid is rate limited\. Trying a ready source/);
 });
 
 test("unconnected Real-Debrid source does not launch", async () => {
