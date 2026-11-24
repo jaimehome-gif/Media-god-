@@ -15,7 +15,7 @@ export function mountSample({ url, videoCodec, audioCodec }) {
     <LiveVideo key={url} src={url} sourceLabel={url} isLive={false} allowMutedAutoplay={false}
       showCastButton={false} subtitlesEnabled={false} />
   ));
-  if (!document.querySelector('video[data-mg-playback-surface="true"]')) {
+  if (!document.querySelector('video[data-mg-playback-surface="active"]')) {
     throw new Error("LiveVideo did not mount: " + document.getElementById("root").innerHTML.slice(0, 1000));
   }
   return gate;
