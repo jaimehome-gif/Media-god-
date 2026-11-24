@@ -942,10 +942,16 @@ export default function VideoPlayer({
 
   const [activeIdx, setActiveIdx] =
     useState(0);
-  const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(false);
+  // The Sources button in OnlyFlix explicitly requests our own player
+  // with the source list already open. A normal Play never sets this flag.
+  const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(
+    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+  );
 
   useEffect(() => {
-    setInPlayerSourcesOpen(false);
+    setInPlayerSourcesOpen(
+      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+    );
   }, [source?.playRequestId]);
 
   const [sourceSortMode, setSourceSortMode] = useState(
