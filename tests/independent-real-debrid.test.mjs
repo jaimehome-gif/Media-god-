@@ -348,3 +348,30 @@ test("device approval is bound to the verified account, expires and is consumed"
     assert.equal(users.get("account-b").rd_token,undefined);
   } finally {globalThis.fetch=original;}
 });
+
+test("failed verified-account device-code write never falls back to privileged credentials", async () => {
+  const original = globalThis.fetch;
+  const user = {id:"account-a"};
+  let writes = 0, privilegedWrites = 0;
+  const client = {
+    auth: {me:async()=>user,updateMe:async()=>{writes++;throw Error("Account storage unavailable");}},
+    asServiceRole: {entities:{User:{update:async()=>{privilegedWrites++;return user;}}}},
+  };
+  const req = new Request("https://local.test/functions/realDebridAuth",{
+    method:"POST",body:JSON.stringify({action:"start_device"}),
+  });
+  Object.defineProperties(req,{
+    __mediaGodVerifiedClient:{value:client},
+    __mediaGodVerifiedUser:{value:user},
+    __mediaGodVerifiedUserId:{value:user.id},
+  });
+  try {
+    globalThis.fetch = async () => Response.json({device_code:"test-code",user_code:"TESTCODE",expires_in:600});
+    const result = await realDebridAuth(req);
+    assert.equal(result.status,500);
+    assert.equal(writes,1);
+    assert.equal(privilegedWrites,0);
+    const body = await result.json();
+    assert.equal(body.device_code,undefined);
+  } finally {globalThis.fetch=original;}
+});
