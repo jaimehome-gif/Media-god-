@@ -48,6 +48,7 @@ const playbackRateLimitError = seconds => {
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
   const privateRdRequest = endpoint === RD_API && PRIVATE_FUNCTIONS.has(path.replace(/^\/functions\//, ""));
+  const accountBoundRdRequest = privateRdRequest || (endpoint === RD_API && path === "/functions/fetchAddonStreams");
   if (privateRdRequest && token && rejectedRdSession.token === token && rejectedRdSession.until > Date.now()) {
     throw asError({ status: 401 }, { error: AUTH_ERROR, code: "SESSION_REJECTED" });
   }
@@ -67,6 +68,11 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       credentials:"omit",cache:"no-store",signal:controller.signal
     });
     const data = await response.json().catch(()=>({}));
+    if (accountBoundRdRequest && token && getIndependentSessionToken() !== token) {
+      const error = new Error("Media God account changed while the request was running.");
+      error.code = "SESSION_CHANGED";
+      throw error;
+    }
     if (playbackRequest && response.status === 429) {
       const delay = response.headers?.get?.("Retry-After") || data?.retry_after;
       const seconds = Number(delay) > 0 ? Number(delay) : (Date.parse(delay) - Date.now()) / 1000;
