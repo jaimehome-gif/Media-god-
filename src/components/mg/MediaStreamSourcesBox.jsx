@@ -25,7 +25,6 @@ import {
 
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
-import { isFireTvRuntime } from "@/components/mg/runtimePlatform";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
@@ -909,6 +908,47 @@ export default function StreamSourcesBox({
       ]
     );
 
+  // The dedicated Sources Play action always uses Media God's own player,
+  // including the web version. Main catalogue Play is intentionally left
+  // to the existing OnlyFlix-first path.
+  const playInMediaGod = async () => {
+    if (mediaType === "live") return;
+    setMessage("");
+    const playableSources = visibleAddonStreams
+      .filter(item =>
+        classifyTvBoxSource(item).kind !== "webpage" &&
+        !["provider", "youtube", "external", "status"].includes(
+          String(item?.type || "").toLowerCase()
+        )
+      )
+      .map(item => ({ ...item, preferNativeVlc: true }));
+    try {
+      await player.play({
+        startTime: Math.max(0, Number(resumeAt) || 0),
+        id: tmdbId,
+        tmdbId,
+        imdbId: resolvedImdb || imdbId || "",
+        title, poster, year: rdYear,
+        mediaType, season, episode,
+        rdTitle: title, rdYear,
+        alternateYears, rdAlternateYears: alternateYears,
+        rdSeason: season, rdEpisode: episode,
+        preferRd: hasDebrid,
+        noRd: !hasDebrid,
+        verifiedPlaybackPolicy: "strict",
+        skipAddonLookup: false,
+        skipRdLookup: false,
+        allowNonPlaybackFallback: false,
+        sources: [],
+        completeSources: playableSources,
+        discoveredSources: [],
+        src: "", url: "", video_url: "",
+      });
+    } catch (error) {
+      setMessage(error?.message || "Media God could not start this source. Try a different direct file.");
+    }
+  };
+
   const playCombinedDebrid =
     async ({ readyOnly = false } = {}) => {
       if (!hasDebrid) {
@@ -1058,53 +1098,21 @@ export default function StreamSourcesBox({
         return;
       }
 
-      // TV-box web-scraper pages are HTML, not video files. Never hand them
-      // to LibVLC or the direct-file pipeline. Keep phone and Live TV intact.
-      const selectedUrl = String(stream?.src || stream?.url || stream?.link || "").trim();
-      const pageType = String(stream?.type || "").toLowerCase();
-      const isTvBox = isFireTvRuntime();
+      // HTML watch pages cannot be decoded by Media God's built-in player
+      // in a website browser OR the installed native VLC player. The
+      // separate named web-player backups remain available when the viewer
+      // explicitly chooses one. Sources Play never silently opens an iframe.
       const sourceKind = classifyTvBoxSource(stream);
-      const onlyFlixPage = sourceKind.provider === "onlyflix";
-      const vidCorePage = sourceKind.provider === "vidcore";
-      const webScraperPage = sourceKind.kind === "webpage";
-      // A scraper watch/iframe page is HTML, not a media stream. In Android
-      // and Fire TV APKs, never launch a silent third-party embedded player
-      // from a source that was selected for Media God VLC playback. Dedicated
-      // labelled web-player backups remain available as an explicit choice.
-      if (isNativeFireTvPlayerAvailable() && mediaType !== "live" && webScraperPage) {
-        // The viewer asked to play from Sources in the installed app.
-        // An iframe/HTML watch page cannot be decoded by native VLC, so
-        // discover a genuine direct/cached media file instead. Do not open
-        // the provider's silent embedded player or pass HTML to LibVLC.
+      if (mediaType !== "live" && sourceKind.kind === "webpage") {
+        // A provider's page cannot play inside our video element or LibVLC.
+        // When Real-Debrid is connected, discover the correct playable file
+        // instead of opening the page as an embedded/silent player.
         if (hasDebrid) {
-          setMessage("Finding a direct video for Media God VLC…");
+          setMessage("Finding a direct video for the Media God player…");
           await playCombinedDebrid({ readyOnly: mediaType === "tv" });
           return;
         }
-        setMessage("This source is a web-player page, not a video file. Connect Real-Debrid or choose a direct video source to use Media God VLC.");
-        return;
-      }
-      if (isTvBox && mediaType !== "live" && webScraperPage) {
-        const embedMedia = {
-          id: tmdbId, tmdbId, imdbId: resolvedImdb || imdbId || "",
-          title, poster, mediaType, season, episode,
-        };
-        // Keep the exact webpage selected by the viewer. Regenerating a
-        // provider URL from TMDB can choose a different server or file, so an
-        // apparently working source may open a removed-file notice instead.
-        const supportedWebProvider = ["onlyflix", "vidcore", "vidsrc", "twoembed", "cinesrc", "multiembed"]
-          .includes(sourceKind.provider);
-        if (supportedWebProvider && /^https:\/\//i.test(selectedUrl) &&
-            player.playSavedEmbed?.(embedMedia, { url: selectedUrl, provider: sourceKind.provider })) return;
-        // Older player contexts can still open a canonical provider URL.
-        if (onlyFlixPage && player.playOnlyFlix?.(embedMedia)) return;
-        if (vidCorePage && player.playVidCore?.(embedMedia)) return;
-        if (sourceKind.provider === "vidsrc" && player.playVidSrc?.(embedMedia)) return;
-        if (["twoembed", "cinesrc", "multiembed"].includes(sourceKind.provider) &&
-            player.playExtraEmbed?.(sourceKind.provider, embedMedia)) return;
-        // An unknown webpage cannot be decoded by a native media player.
-        // The Sources panel retains its existing provider tabs and backups.
-        setMessage("This scraper returned a webpage, not a playable video file. Choose OnlyFlix, VidCore or another web provider above.");
+        setMessage("This is a web-player page, not a video file. Use Play in Media God to search direct sources, or choose a labelled web-player backup.");
         return;
       }
 
@@ -1503,6 +1511,13 @@ export default function StreamSourcesBox({
   const onlyFlixTitlePageUrl = buildOnlyFlixTitlePageUrl({ mediaType, title });
 
   const rows = [
+    ...(mediaType === "live" ? [] : [{
+      id: "media-god-sources-player",
+      kind: "media-god",
+      label: "Play in Media God",
+      note: "Use our player: browser video on the website, native VLC in Android and Fire Stick",
+      onClick: playInMediaGod,
+    }]),
     {
       id:
         "rd",
@@ -1850,10 +1865,12 @@ export default function StreamSourcesBox({
     : rows.filter(row => !isNonVlcBackup(row));
   const displayedSourceRows = torrentOnly
     ? rows.filter(row =>
-        row.kind === "rd" || row.kind === "paste" ||
+        row.kind === "media-god" || row.kind === "rd" || row.kind === "paste" ||
         (row.kind === "addon-stream" && row.selectableTorrentSource))
     : mediaType !== "live"
       ? [
+          ...primarySourceRows.filter(row =>
+            row.kind === "media-god"),
           ...primarySourceRows.filter(row =>
             row.kind === "rd" || row.kind === "addon-stream"),
           ...primarySourceRows.filter(row =>
@@ -1865,6 +1882,10 @@ export default function StreamSourcesBox({
   const iconFor = (
     kind
   ) => {
+    if (kind === "media-god") {
+      return <Play className="w-4 h-4 text-mg-green" />;
+    }
+
     if (
       kind ===
       "rd"
@@ -1953,10 +1974,12 @@ export default function StreamSourcesBox({
       </div>
 
       <p className="text-[10px] text-white/45 leading-relaxed mb-2.5 px-1">
-        Choose a torrent or direct video source to play it in Media God
-        using the built-in VLC player in Android and Fire Stick apps.
-        Web-player backups are separate and may not support VLC or all audio codecs. Sources may vary in language,
-        audio availability and picture quality.
+        Play in Media God uses our built-in video player on the website
+        and VLC in the Android and Fire Stick apps. Choose an individual
+        direct source below to play that file in the same player. The
+        main film/episode Play button still opens OnlyFlix. Web-player
+        backups use their own controls, and available audio and video
+        formats may vary.
       </p>
 
       {blockedNativeOnWww && mediaType !== "live" && (
@@ -2030,8 +2053,7 @@ export default function StreamSourcesBox({
                 className={cn(
                   "flex items-center gap-2.5 w-full text-left px-2.5 py-2 rounded-md transition-colors border",
 
-                  row.kind ===
-                      "rd"
+                  (row.kind === "media-god" || row.kind === "rd")
                     ? "bg-mg-green/10 hover:bg-mg-green/20 border-mg-green/30"
                     : (row.kind === "vidsrc" || row.kind === "vidcore" || row.kind === "onlyflix")
                       ? "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30"
@@ -2074,10 +2096,9 @@ export default function StreamSourcesBox({
                     className={cn(
                       "block text-sm font-medium truncate",
 
-                      row.kind ===
-                        "rd" ||
-                        row.kind ===
-                          "addon-stream"
+                      row.kind === "media-god" ||
+                      row.kind === "rd" ||
+                      row.kind === "addon-stream"
                         ? "text-mg-green"
                         : "text-white"
                     )}
