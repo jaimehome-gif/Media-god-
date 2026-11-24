@@ -36,14 +36,9 @@ const updateCredentialOwner = async ({
   patch,
 }) => {
   if (user?.id) {
-    try {
-      return await base44.auth.updateMe(patch);
-    } catch (error) {
-      return await base44.asServiceRole.entities.User.update(
-        user.id,
-        patch
-      );
-    }
+    // Independent credentials must only be written by the verified account
+    // client. A failed scoped write must never become a privileged write.
+    return await base44.auth.updateMe(patch);
   }
 
   return await saveGuestDebridCredential(
@@ -570,14 +565,7 @@ export default async function (
             )
           ),
 
-        expires_in:
-          Math.max(
-            60,
-            Number(
-              data.expires_in ||
-                1800
-            )
-          ),
+        expires_in: expiresIn,
       });
     }
 
