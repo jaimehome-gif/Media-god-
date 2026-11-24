@@ -8978,7 +8978,7 @@ export default function VideoPlayer({
     source, active, isLive,
   });
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
-    ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active,
+    ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
   const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
