@@ -790,6 +790,14 @@ export default function SettingsView() {
 
   const startRdConnect =
     async () => {
+      if (!base44.auth.getAccessToken()) {
+        toast({
+          title: "Sign in to connect Real-Debrid",
+          description: "Guest linking is currently unavailable. Sign in to Media God first.",
+        });
+        return;
+      }
+
       if (
         pollTimerRef.current
       ) {
@@ -1429,7 +1437,7 @@ export default function SettingsView() {
         </div>
 
         <p className="text-xs 3xl:text-sm text-white/45 mb-4">
-          Connect your own Real-Debrid account with its 8-digit device-code login. No Media God sign-in is required: enter the code at real-debrid.com/device and Media God remembers the approved connection for this device. If you are signed in, the connection is saved to your account instead.
+          Sign in to Media God before linking your Real-Debrid account. Enter the 8-digit code at real-debrid.com/device to save your approved connection across your devices. Guest linking is currently unavailable.
         </p>
 
         {rdConnected && (
@@ -1666,7 +1674,7 @@ export default function SettingsView() {
             Using Media God without an account
           </p>
           <p className="mt-1 text-xs 3xl:text-sm text-white/40">
-            Your skip choice and any Real-Debrid connection can be remembered on this device. Sign in only if you want account syncing and other account-only features.
+            Your skip choice can be remembered on this device. Sign in for account syncing and to link Real-Debrid.
           </p>
           <button
             type="button"
