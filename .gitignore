@@ -38,3 +38,4 @@ firetv-android/app/*.jks
 firetv-android/app/*.keystore
 android-mobile/app/libs/*.aar
 firetv-android/app/libs/*.aar
+/public/source-player/engine/

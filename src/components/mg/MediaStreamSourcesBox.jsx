@@ -939,6 +939,7 @@ export default function StreamSourcesBox({
         skipAddonLookup: false,
         skipRdLookup: false,
         allowNonPlaybackFallback: false,
+        openSourcesDrawer: true,
         sources: [],
         completeSources: playableSources,
         discoveredSources: [],

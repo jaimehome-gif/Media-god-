@@ -34,7 +34,20 @@ const asError = (response, data) => {
   error.response = { status: response.status, data };
   return error;
 };
+// A gateway rate limit applies across torrent choices in the same session.
+let playbackCooldown = { session: "", until: 0 };
+const playbackRateLimitError = seconds => {
+  const error = new Error(`Real-Debrid is busy. Try again in ${seconds} seconds.`);
+  error.status = 429;
+  error.code = "RD_RATE_LIMITED";
+  error.response = { status: 429, data: { retry_after: seconds } };
+  return error;
+};
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
+  const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
+  if (playbackRequest && playbackCooldown.session === token && playbackCooldown.until > Date.now()) {
+    throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
+  }
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),timeoutMs);
   try {
@@ -48,6 +61,14 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       credentials:"omit",cache:"no-store",signal:controller.signal
     });
     const data = await response.json().catch(()=>({}));
+    if (playbackRequest && response.status === 429) {
+      const delay = response.headers?.get?.("Retry-After") || data?.retry_after;
+      const seconds = Number(delay) > 0 ? Number(delay) : (Date.parse(delay) - Date.now()) / 1000;
+      const wait = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60;
+      const until = Date.now() + wait * 1000;
+      playbackCooldown = { session: token, until: Math.max(until, playbackCooldown.session === token ? playbackCooldown.until : 0) };
+      throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
+    }
     if (!response.ok) throw asError(response,data);
     return data;
   } catch(error) {

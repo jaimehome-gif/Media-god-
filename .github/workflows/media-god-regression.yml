@@ -60,6 +60,8 @@ jobs:
         run: node --test tests/sources-play-mediagod-main-onlyflix.test.mjs tests/tv-sources-native-vlc-handoff.test.mjs tests/native-vlc-source-priority.test.mjs tests/continue-watching-native-resume.test.mjs
       - name: Verify website sound recovery without changing normal Play or TV
         run: node --test tests/website-audio-recovery.test.mjs tests/browser-hls-audio-priority.test.mjs tests/sources-play-mediagod-main-onlyflix.test.mjs
+      - name: Verify Sources opens Media God player, OnlyFlix Play unchanged
+        run: node --test tests/sources-opens-mediagod-player.test.mjs tests/sources-play-mediagod-main-onlyflix.test.mjs
       - name: Compile independent website
         run: npm run build
       - name: Verify identity service container build

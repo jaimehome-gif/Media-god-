@@ -1,3 +1,4 @@
+import BrowserSourceVlc from "./BrowserSourceVlc";
 import React, {
   useCallback,
   useEffect,
@@ -942,10 +943,16 @@ export default function VideoPlayer({
 
   const [activeIdx, setActiveIdx] =
     useState(0);
-  const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(false);
+  // The Sources button in OnlyFlix explicitly requests our own player
+  // with the source list already open. A normal Play never sets this flag.
+  const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(
+    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+  );
 
   useEffect(() => {
-    setInPlayerSourcesOpen(false);
+    setInPlayerSourcesOpen(
+      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+    );
   }, [source?.playRequestId]);
 
   const [sourceSortMode, setSourceSortMode] = useState(
@@ -2403,7 +2410,7 @@ export default function VideoPlayer({
 
   const findNextPlayableSource = (
     fromIndex,
-    { allowCaching = true } = {}
+    { allowCaching = true, directOnly = false } = {}
   ) => {
     /*
      * Automatic failover must follow the same source ordering the user sees
@@ -2496,6 +2503,7 @@ export default function VideoPlayer({
           candidate?.type === "status" ||
           candidate?.type === "provider" ||
           candidate?.type === "youtube" ||
+          (directOnly && (torrent || candidateHash || !/^https?:\/\//i.test(url) || candidate?.type === "external")) ||
           (allowCaching === false && sourceNeedsCaching(candidate)) ||
           (!url && !torrent)
         ) {
@@ -3292,6 +3300,14 @@ export default function VideoPlayer({
    * to another torrent. After that one handoff, or with another quality sort,
    * suppressing resolution leaves a bare spinner and Try Again forever.
    */
+  const sourcesPlayback = playbackMediaType !== "live" && Boolean(
+    source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc
+  );
+  const [requestedCacheJob, setRequestedCacheJob] = useState("");
+  const cacheJobKey = JSON.stringify([source?.playRequestId, rdMediaContextKey, activeResolutionKey]);
+  const awaitingCacheChoice = sourcesPlayback && activeNeedsCaching &&
+    !sourceHasAuthoritativeCachedSignal(active) && requestedCacheJob !== cacheJobKey;
+
   const startupHandoffAvailable = canAutoHandoffStartup({
     sortMode: sourceSortMode,
     mediaType: playbackMediaType,
@@ -3462,7 +3478,9 @@ export default function VideoPlayer({
       bestNonAioTorrentAutoplayCandidateIndex !== activeIdx;
 
     const nextAutomaticSourceIndex =
-      bestSourceShouldOwnStartup
+      sourcesPlayback && activeNeedsCaching
+        ? automaticReadySourceIndex
+        : bestSourceShouldOwnStartup
         ? bestApprovedAutoplaySourceIndex
         : bestEnglishCandidateShouldOwnStartup
           ? bestEnglishAutoplayCandidateIndex
@@ -3587,6 +3605,11 @@ export default function VideoPlayer({
       backgroundCacheControllersRef.current.clear();
       backgroundCacheScheduledHashesRef.current.clear();
     };
+
+    if (sourcesPlayback) {
+      abortAllBackgroundCacheJobs();
+      return;
+    }
 
     if (backgroundCacheTitleKeyRef.current !== titleKey) {
       abortAllBackgroundCacheJobs();
@@ -3877,6 +3900,7 @@ export default function VideoPlayer({
     activeIdx,
     activeNeedsCaching,
     backgroundCacheNonce,
+    sourcesPlayback,
     fileSwitching,
     isLive,
     isProvider,
@@ -4255,6 +4279,7 @@ export default function VideoPlayer({
       isDirectFile ||
       isLive ||
       !isRdSource ||
+      awaitingCacheChoice ||
       !sourceNeedsCaching(active)
     ) {
       return undefined;
@@ -4410,10 +4435,16 @@ export default function VideoPlayer({
         // A completed download with no playable link, or a zero-peer torrent,
         // cannot start the video. Give automatic startup one verified-ready
         // backup attempt. A viewer's manual choice remains authoritative.
-        const preparationFailure = [
+        const preparationFailure = result.hashFailed === true || [
           "RD_CACHE_FINAL_LINK_TIMEOUT",
           "RD_CACHE_NO_PEERS",
         ].includes(result.errorCode);
+        if (!preserveUncachedSource) {
+          markSourceFailed(activeIdx);
+        }
+        if (result.hashFailed === true) {
+          markTorrentHashFailed(active);
+        }
         const backupState = preparationBackupRef.current;
         const currentPlayRequestId = source?.playRequestId ?? null;
         if (backupState.playRequestId !== currentPlayRequestId) {
@@ -4440,12 +4471,7 @@ export default function VideoPlayer({
           }
         }
 
-        if (!preserveUncachedSource) {
-          markSourceFailed(activeIdx);
-        }
-        if (result.hashFailed === true) {
-          markTorrentHashFailed(active);
-        }
+
 
         if (preserveUncachedSource) {
           setRdPreparation((current) => ({
@@ -4551,17 +4577,18 @@ export default function VideoPlayer({
         // and never start another uncached job during rate limiting.
         if (
           rdRateLimited &&
-          playbackMediaType === "tv" &&
+          (sourcesPlayback || playbackMediaType === "tv") &&
           !manualSourceLockActive()
         ) {
           const readyBackup = findNextPlayableSource(activeIdx, {
+            directOnly: true,
             allowCaching: false,
           });
           if (
             readyBackup >= 0 &&
             switchToSource(readyBackup, {
               preservePosition: true,
-              statusMessage: "Real-Debrid is rate limited. Trying a ready episode source…",
+              statusMessage: "Real-Debrid is rate limited. Trying a ready source…",
             })
           ) {
             return;
@@ -4569,7 +4596,7 @@ export default function VideoPlayer({
         }
         setRdError(
           rdRateLimited
-            ? "Playback lookup returned HTTP 429 (too many requests). This torrent is not ready to play. Please wait before retrying. Choose Sources to look for an already-ready file; VLC cannot play an uncached torrent."
+            ? (error?.code === "RD_RATE_LIMITED" ? error.message : "Real-Debrid is rate limited. Wait before retrying or choose a direct video source.")
             : `${error?.message || "The Real-Debrid cache engine stopped unexpectedly."} The same uncached source has been kept selected; Retry will reconnect to it.`
         );
       });
@@ -4586,6 +4613,7 @@ export default function VideoPlayer({
     activeResolutionKey,
     rdMediaContextKey,
     rdCacheEngineNonce,
+    awaitingCacheChoice,
     isYoutube,
     isProvider,
     isDirectFile,
@@ -8940,6 +8968,14 @@ export default function VideoPlayer({
         ).trim()
       : "";
 
+  const [browserFallbackSource, setBrowserFallbackSource] = useState("");
+  const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
+  const useBrowserSourceVlc = !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
+    !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
+    (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
+    typeof BroadcastChannel === "function" && typeof globalThis.crypto?.randomUUID === "function" &&
+    /^https?:\/\//i.test(resolvedSourceUrl) && browserFallbackSource !== resolvedSourceUrl;
+
   const nativePlaybackAvailable =
     nativeFireTvPlayer &&
     /^https?:\/\//i.test(nativePlaybackUrl) &&
@@ -10909,6 +10945,14 @@ export default function VideoPlayer({
                 )}
               </div>
             </div>
+          ) : awaitingCacheChoice ? (
+            <div className="flex flex-col items-center gap-3 p-6 text-center">
+              <p>This source needs caching before it can play.</p>
+              <button type="button" onClick={showSourceChooser}
+                className="rounded-lg bg-mg-green px-4 py-3 font-bold text-black">Choose another source</button>
+              <button type="button" onClick={() => setRequestedCacheJob(cacheJobKey)}
+                className="rounded-lg border border-white/30 px-4 py-3">Prepare this source</button>
+            </div>
           ) : displayedError ? (
             <div className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-400/20 bg-amber-400/10 text-amber-200">
@@ -11074,6 +11118,10 @@ export default function VideoPlayer({
                 Media God is handing this stream to the Android native video engine.
               </p>
             </div>
+          ) : useBrowserSourceVlc ? (
+            <BrowserSourceVlc key={resolvedSourceUrl} url={resolvedSourceUrl}
+              startTime={Number(source?.startTime) || 0} onProgress={saveProgress}
+              onFallback={() => setBrowserFallbackSource(resolvedSourceUrl)} />
           ) : rdOverride ? (
             <>
               <LiveVideo
