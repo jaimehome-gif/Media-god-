@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Loader2, RefreshCw, Radio, Tv, Film, AlertCircle, ExternalLink } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { INDEPENDENT_METADATA_API_URL } from "@/api/independentMetadata.js";
 import { readPublicSection, savePublicSection, orderUpcomingReleases } from "./publicSectionCache.js";
 
-const API = "https://media-god-metadata-api-production.up.railway.app/functions/publicDiscovery";
+const API = new URL("/functions/publicDiscovery", INDEPENDENT_METADATA_API_URL).href;
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value||"")) ? value : "";
 const tabs = [
-  { id: "sports", label: "Sports fixtures", icon: Radio },
-  { id: "tv", label: "TV schedule", icon: Tv },
   { id: "releases", label: "Film & TV releases", icon: Film },
+  { id: "tv", label: "TV schedule", icon: Tv },
+  { id: "sports", label: "Sports fixtures", icon: Radio },
 ];
 const normalise = item => ({
   id: item?.id || item?.tmdb_id || item?.title,
@@ -40,18 +41,35 @@ function DiscoveryCard({ item }) {
   </article>;
 }
 async function discovery(action, region, signal) {
-  const response = await fetch(API, {
-    method: "POST", credentials: "omit",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, region }),
-    signal,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) throw new Error(data.error || "Discovery service unavailable");
-  return Array.isArray(data.results) ? data.results : [];
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal.aborted) cancel();
+  else signal.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(cancel, 25000);
+  try {
+    const response = await fetch(API, {
+      method: "POST", credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, region, date: TODAY() }),
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok || data?.error || !Array.isArray(data?.results)) {
+      throw new Error(data?.error || "Discovery service unavailable");
+    }
+    return data.results;
+  } catch (error) {
+    if (controller.signal.aborted && !signal.aborted) {
+      throw new Error("Discovery request timed out. Please try Refresh.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", cancel);
+  }
 }
 export default function WatchmodeHub() {
-  const [tab, setTab] = useState("sports");
+  const [tab, setTab] = useState("releases");
   const [region, setRegion] = useState("GB");
   const [releaseType, setReleaseType] = useState("movie");
   const [rows, setRows] = useState([]);
@@ -71,6 +89,7 @@ export default function WatchmodeHub() {
     setRefreshing(Boolean(cached));
     try {
       let nextRows;
+      let stale = false;
       if (tab === "releases") {
         // Only request the selected release type. Previously each tab switch
         // waited for both film and TV lookups, doubling network traffic.
@@ -83,12 +102,21 @@ export default function WatchmodeHub() {
         const items = response?.data?.movies || response?.movies;
         if (!Array.isArray(items)) throw new Error("Film and TV release data is temporarily unavailable");
         nextRows = orderUpcomingReleases(items, releaseType, TODAY());
+        stale = response?.stale === true;
       } else {
         nextRows = await discovery(tab, region, signal);
       }
       if (signal.aborted) return;
-      setRows(nextRows);
-      savePublicSection(cacheKey, { rows: nextRows });
+      // An empty stale upstream cache must not replace a usable saved guide.
+      const displayRows = stale && !nextRows.length && savedRows.length ? savedRows : nextRows;
+      setRows(displayRows);
+      if (stale) {
+        setError(displayRows.length
+          ? "The live catalogue could not be refreshed. Showing previously saved releases; try again shortly."
+          : "The live catalogue is temporarily unavailable. Please try Refresh.");
+      } else {
+        savePublicSection(cacheKey, { rows: nextRows });
+      }
     } catch (e) {
       if (!signal.aborted) setError(savedRows.length
         ? "The live guide could not be refreshed. Showing the last saved results; try again shortly."

@@ -1,4 +1,5 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
+import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -856,6 +857,9 @@ const resolvedMediaEnglishMainState = (mediaInfo) => {
     ? "foreign"
     : "unknown";
 };
+
+// Keep empty subtitle props stable for website Sources playback only.
+const EMPTY_WEBSITE_SUBTITLES = Object.freeze([]);
 
 export default function VideoPlayer({
   source,
@@ -8970,7 +8974,17 @@ export default function VideoPlayer({
 
   const [browserFallbackSource, setBrowserFallbackSource] = useState("");
   const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
-  const useBrowserSourceVlc = !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
+  // Public website Sources alone use the existing HTML5/HLS playback engine.
+  // The exact resolved rendition must have verified audio and video metadata.
+  const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback({
+    hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
+    source, active, isLive,
+  });
+  const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
+    ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active,
+        ...getBrowserMediaCapabilities() })
+    : null;
+  const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
     typeof BroadcastChannel === "function" && typeof globalThis.crypto?.randomUUID === "function" &&
@@ -11118,6 +11132,16 @@ export default function VideoPlayer({
                 Media God is handing this stream to the Android native video engine.
               </p>
             </div>
+          ) : websiteDirectMediaCheck?.allowed === false ? (
+            <div role="alert" data-mg-website-codec-rejected="true"
+              className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
+              <p className="text-sm font-semibold text-white/85">No verified browser-compatible playback</p>
+              <p className="text-xs text-white/60">{websiteDirectMediaCheck.reason}</p>
+              <button type="button" onClick={showSourceChooser}
+                className="min-h-11 rounded-lg border border-white/20 px-4 text-sm font-semibold text-white">
+                Return to Sources
+              </button>
+            </div>
           ) : useBrowserSourceVlc ? (
             <BrowserSourceVlc key={resolvedSourceUrl} url={resolvedSourceUrl}
               startTime={Number(source?.startTime) || 0} onProgress={saveProgress}
@@ -11160,7 +11184,7 @@ export default function VideoPlayer({
                 subtitles={
                   Array.isArray(active?.subtitles)
                     ? active.subtitles
-                    : []
+                    : websiteSourcesPlayback ? EMPTY_WEBSITE_SUBTITLES : []
                 }
                 subtitlesEnabled={
                   trackPreferences.subtitlesEnabled
@@ -11300,7 +11324,7 @@ export default function VideoPlayer({
                 subtitles={
                   Array.isArray(active?.subtitles)
                     ? active.subtitles
-                    : []
+                    : websiteSourcesPlayback ? EMPTY_WEBSITE_SUBTITLES : []
                 }
                 subtitlesEnabled={
                   trackPreferences.subtitlesEnabled

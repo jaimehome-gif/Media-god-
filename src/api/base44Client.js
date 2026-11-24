@@ -36,6 +36,8 @@ const asError = (response, data) => {
 };
 // A gateway rate limit applies across torrent choices in the same session.
 let playbackCooldown = { session: "", until: 0 };
+// Briefly suppress repeated private requests for a rejected session, without clearing valid local credentials.
+let rejectedRdSession = { token: "", until: 0 };
 const playbackRateLimitError = seconds => {
   const error = new Error(`Real-Debrid is busy. Try again in ${seconds} seconds.`);
   error.status = 429;
@@ -45,6 +47,10 @@ const playbackRateLimitError = seconds => {
 };
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
+  const privateRdRequest = endpoint === RD_API && PRIVATE_FUNCTIONS.has(path.replace(/^\/functions\//, ""));
+  if (privateRdRequest && token && rejectedRdSession.token === token && rejectedRdSession.until > Date.now()) {
+    throw asError({ status: 401 }, { error: AUTH_ERROR, code: "SESSION_REJECTED" });
+  }
   if (playbackRequest && playbackCooldown.session === token && playbackCooldown.until > Date.now()) {
     throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
   }
@@ -68,6 +74,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       const until = Date.now() + wait * 1000;
       playbackCooldown = { session: token, until: Math.max(until, playbackCooldown.session === token ? playbackCooldown.until : 0) };
       throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
+    }
+    if (privateRdRequest && token && response.status === 401 && getIndependentSessionToken() === token) {
+      rejectedRdSession = { token, until: Date.now() + 15_000 };
     }
     if (!response.ok) throw asError(response,data);
     return data;
