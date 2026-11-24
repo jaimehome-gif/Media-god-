@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import LiveVideo from "../../src/components/mg/LiveVideo.jsx";
 import { checkWebsiteDirectMedia, getBrowserMediaCapabilities } from "../../src/components/mg/websiteDirectMediaPolicy.js";
 
+const EMPTY_SUBTITLES = Object.freeze([]);
 const root = createRoot(document.getElementById("root"));
 export function mountSample({ url, videoCodec, audioCodec }) {
   const gate = checkWebsiteDirectMedia({
@@ -13,7 +14,7 @@ export function mountSample({ url, videoCodec, audioCodec }) {
   if (!gate.allowed) return gate;
   flushSync(() => root.render(
     <LiveVideo key={url} src={url} sourceLabel={url} isLive={false} allowMutedAutoplay={false}
-      showCastButton={false} subtitlesEnabled={false} />
+      showCastButton={false} subtitles={EMPTY_SUBTITLES} subtitlesEnabled={false} />
   ));
   if (!document.querySelector('video[data-mg-playback-surface="active"]')) {
     throw new Error("LiveVideo did not mount: " + document.getElementById("root").innerHTML.slice(0, 1000));
