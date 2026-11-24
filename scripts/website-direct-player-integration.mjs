@@ -83,10 +83,26 @@ try {
     });
     try {
       await page.goto(base);
-      const gate = await page.evaluate(async ({name,v,a,full})=>{
+      // Puppeteer's page.evaluate grants a user gesture. The strict case must
+      // mount without activation, using CDP explicitly with userGesture:false.
+      const input = {name,v,a,full};
+      const mount = async ({name,v,a,full})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
         return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
-      },{name,v,a,full});
+      };
+      let gate;
+      if (strict) {
+        const session = await page.createCDPSession();
+        const response = await session.send("Runtime.evaluate", {
+          expression:"("+mount.toString()+")("+JSON.stringify(input)+")",
+          awaitPromise:true, returnByValue:true, userGesture:false
+        });
+        assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails || {}));
+        gate = response.result.value;
+        await session.detach();
+      } else {
+        gate = await page.evaluate(mount,input);
+      }
       if(full) assert.equal(gate.route,true,host+" real website route");
       assert.equal(gate.allowed,!rejected,name+" compatibility gate");
       if (rejected) {
