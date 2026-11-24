@@ -64,7 +64,7 @@ test("public metadata cache survives a temporary endpoint outage without deletin
 
 // Exercise the independent compatibility facade rather than requiring the
 // retired Base44 SDK call and legacy device token to remain in production.
-function publicFacadeHarness() {
+function publicFacadeHarness({ session = "synthetic-account-session", networkResponse } = {}) {
   const calls = [];
   const network = [];
   const route = name => async (...args) => {
@@ -74,10 +74,11 @@ function publicFacadeHarness() {
   const source = read("src/api/base44Client.js")
     .replace(/^import\s+[\s\S]*?from\s+["'][^"']+["'];/gm, "")
     .replace(/^export\s+/gm, "");
-  const localStorage = { getItem: () => "synthetic-account-session" };
+  const localStorage = { getItem: () => session };
   const client = vm.runInNewContext(source + "\nbase44;", {
     window: { localStorage }, AbortController, setTimeout, clearTimeout,
-    fetch: async (...args) => { network.push(args); throw Error("Unexpected network fallback"); },
+    fetch: async (...args) => { network.push(args); if (networkResponse) return networkResponse(); throw Error("Unexpected network fallback"); },
+    invokeIndependentAddonSources: route("public-discovery"),
     invokeIndependentMetadata: route("catalogue"),
     invokeIndependentImdbResolver: route("identity"),
     invokeIndependentPublicFeature: route("feature"),
@@ -163,12 +164,18 @@ test("credit-independent public source lookup strips secret-bearing fields", asy
   assert.deepEqual(response.data, data);
   assert.doesNotMatch(body, /SECRET|rd_token|addon_manifest_url/);
   assert.equal(options.credentials, "omit");
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'fetchAddonStreams' && !payload\?\.action/);
-  assert.match(client, /searchAddonSourcesWithPublicFallback\(payload/);
-  assert.match(client, /searchPublic: invokeIndependentAddonSources/);
-  const recovery = read("src/api/addonSourceRecovery.js");
-  assert.match(recovery, /const recoverPublic = \(\) => withDeadline\(\(\) => searchPublic\(payload\), publicTimeoutMs\)/);
+  const anonymous = publicFacadeHarness({ session: "" });
+  await assert.rejects(anonymous.client.functions.invoke("fetchAddonStreams", { action: "status" }), error => error.status === 401);
+  assert.equal(anonymous.network.length, 0);
+  assert.equal(anonymous.calls.length, 0);
+  const rejected = publicFacadeHarness({
+    networkResponse: () => Response.json({ error: "Denied" }, { status: 401 }),
+  });
+  await assert.rejects(rejected.client.functions.invoke("fetchAddonStreams", { action: "status" }), error => error.status === 401);
+  assert.equal(rejected.network.length, 1);
+  assert.match(rejected.network[0][0], /\/functions\/fetchAddonStreams$/);
+  assert.equal(rejected.network[0][1].headers.Authorization, "Bearer synthetic-account-session");
+  assert.equal(rejected.calls.length, 0, "Private actions must not fall back to anonymous routes");
 });
 
 test("public source gateway never queries other viewers' configured addons", () => {
