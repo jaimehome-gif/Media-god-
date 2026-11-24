@@ -11210,7 +11210,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  rdOverride.src
+                  websiteSourcesPlayback ? `website-controls:${rdOverride.src}` : rdOverride.src
                 }
                 videoRef={
                   videoRef
@@ -11350,7 +11350,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  active.src
+                  websiteSourcesPlayback ? `website-controls:${active.src}` : active.src
                 }
                 videoRef={
                   liveVideoRef
