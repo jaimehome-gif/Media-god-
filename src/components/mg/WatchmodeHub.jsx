@@ -8,9 +8,9 @@ const API = new URL("/functions/publicDiscovery", INDEPENDENT_METADATA_API_URL).
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value||"")) ? value : "";
 const tabs = [
-  { id: "sports", label: "Sports fixtures", icon: Radio },
-  { id: "tv", label: "TV schedule", icon: Tv },
   { id: "releases", label: "Film & TV releases", icon: Film },
+  { id: "tv", label: "TV schedule", icon: Tv },
+  { id: "sports", label: "Sports fixtures", icon: Radio },
 ];
 const normalise = item => ({
   id: item?.id || item?.tmdb_id || item?.title,
@@ -69,7 +69,7 @@ async function discovery(action, region, signal) {
   }
 }
 export default function WatchmodeHub() {
-  const [tab, setTab] = useState("sports");
+  const [tab, setTab] = useState("releases");
   const [region, setRegion] = useState("GB");
   const [releaseType, setReleaseType] = useState("movie");
   const [rows, setRows] = useState([]);
@@ -89,6 +89,7 @@ export default function WatchmodeHub() {
     setRefreshing(Boolean(cached));
     try {
       let nextRows;
+      let stale = false;
       if (tab === "releases") {
         // Only request the selected release type. Previously each tab switch
         // waited for both film and TV lookups, doubling network traffic.
@@ -101,12 +102,19 @@ export default function WatchmodeHub() {
         const items = response?.data?.movies || response?.movies;
         if (!Array.isArray(items)) throw new Error("Film and TV release data is temporarily unavailable");
         nextRows = orderUpcomingReleases(items, releaseType, TODAY());
+        stale = response?.stale === true;
       } else {
         nextRows = await discovery(tab, region, signal);
       }
       if (signal.aborted) return;
       setRows(nextRows);
-      savePublicSection(cacheKey, { rows: nextRows });
+      if (stale) {
+        setError(nextRows.length
+          ? "The live catalogue could not be refreshed. Showing previously saved releases; try again shortly."
+          : "The live catalogue is temporarily unavailable. Please try Refresh.");
+      } else {
+        savePublicSection(cacheKey, { rows: nextRows });
+      }
     } catch (e) {
       if (!signal.aborted) setError(savedRows.length
         ? "The live guide could not be refreshed. Showing the last saved results; try again shortly."
