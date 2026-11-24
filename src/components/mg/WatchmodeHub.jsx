@@ -39,7 +39,7 @@ function DiscoveryCard({ item }) {
     </div>
   </article>;
 }
-async function discovery(action, region, signal) {
+async function discovery(action, region, signal, date) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal.aborted) cancel();
@@ -49,7 +49,7 @@ async function discovery(action, region, signal) {
     const response = await fetch(API, {
       method: "POST", credentials: "omit",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, region }),
+      body: JSON.stringify({ action, region, date }),
       signal: controller.signal,
     });
     const data = await response.json();
@@ -103,7 +103,7 @@ export default function WatchmodeHub() {
         nextRows = orderUpcomingReleases(items, releaseType, TODAY());
         stale = response?.stale === true;
       } else {
-        nextRows = await discovery(tab, region, signal);
+        nextRows = await discovery(tab, region, signal, TODAY());
       }
       if (signal.aborted) return;
       // An empty stale response is not evidence that scheduled releases disappeared.
