@@ -203,7 +203,7 @@ test("authenticated Real-Debrid cache-check route returns valid structures", asy
   assert.deepEqual(data.bestProviderByHash, {});
 });
 
-function privateFacadeHarness(fetch) {
+function privateFacadeHarness(fetch, publicLookup = async () => { throw new Error("Unexpected public lookup"); }) {
   let token = "synthetic-session-A";
   const localStorage = {getItem:()=>token,setItem:(_key,value)=>{token=value;},removeItem:()=>{token="";}};
   const code = source("src/api/base44Client.js")
@@ -211,6 +211,7 @@ function privateFacadeHarness(fetch) {
     .replace(/^export\s+/gm, "");
   return vm.runInNewContext(code + "\nbase44;", {
     window:{localStorage}, fetch, AbortController, setTimeout, clearTimeout,
+    invokeIndependentAddonSources: publicLookup,
   });
 }
 
@@ -265,4 +266,25 @@ test("Railway Dockerfile packages every local Real-Debrid server import", () => 
   inspect(server);
   assert.ok(visited.has("deviceClient.mjs"), "Verified account client must be packaged");
   assert.ok(visited.has("verifiedUserClient.mjs"), "Verified request helper must be packaged");
+});
+
+
+test("authenticated addon actions never degrade into anonymous discovery", async () => {
+  for (const status of [401, 403, 429, 503]) {
+    let privateCalls = 0, publicCalls = 0;
+    const client = privateFacadeHarness(async (url, options) => {
+      privateCalls++;
+      assert.equal(url, "https://media-god-rd-independent-api-production.up.railway.app/functions/fetchAddonStreams");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-session-A");
+      assert.equal(JSON.parse(options.body).action, "health");
+      return Response.json({error:"Unavailable"}, {status});
+    }, async () => { publicCalls++; return {data:{streams:[]}}; });
+    await assert.rejects(client.functions.invoke("fetchAddonStreams",{action:"health"}), error=>error.status===status);
+    client.auth.setToken("");
+    await assert.rejects(client.functions.invoke("fetchAddonStreams",{action:"health"}), error=>error.status===401);
+    assert.equal(privateCalls,1);
+    assert.equal(publicCalls,0);
+    await client.functions.invoke("fetchAddonStreams",{media_type:"movie",imdb_id:"tt0000001"});
+    assert.equal(publicCalls,1);
+  }
 });
