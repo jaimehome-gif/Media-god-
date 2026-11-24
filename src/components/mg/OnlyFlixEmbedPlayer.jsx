@@ -372,6 +372,18 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
             <ListVideo className="h-4 w-4" />
             Sources
           </button>
+          {!isFireTv && activeEpisodePlayer !== "vyla" && typeof onOpenSources === "function" && (
+            <button
+              type="button"
+              data-mg-embedded-top-web-sound-recovery="true"
+              onClick={onOpenSources}
+              aria-label="Fix website sound with Media God"
+              title="The embedded provider controls its audio. Find a different playable source in Media God's browser player."
+              className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 text-xs font-semibold text-amber-200 hover:bg-amber-400/20 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <span>Fix web sound</span>
+            </button>
+          )}
           {isFireTv && (
             <button
               type="button"
