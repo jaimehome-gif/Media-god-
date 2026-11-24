@@ -10,7 +10,7 @@ test("What to Watch starts on catalogue releases and retains the other public gu
   for (const tab of ["sports", "tv", "releases"]) assert.ok(source.includes('id: "' + tab + '"'));
 });
 
-async function runLoad(stale, items) {
+async function runLoad(stale, items, savedRows = []) {
   const rows = [];
   const errors = [];
   const saves = [];
@@ -20,7 +20,7 @@ async function runLoad(stale, items) {
   const context = {
     tab: "releases", releaseType: "movie", region: "GB", cacheKey: "test",
     TODAY: () => "2026-11-24",
-    readPublicSection: () => null,
+    readPublicSection: () => savedRows.length ? { data: { rows: savedRows } } : null,
     setRows: x => rows.push(x),
     setError: x => errors.push(x),
     setLoading: () => {},
@@ -54,4 +54,21 @@ test("an empty stale response shows an unavailable state", async () => {
   const result = await runLoad(true, []);
   assert.match(result.errors.at(-1), /temporarily unavailable/);
   assert.equal(result.saves.length, 0);
+});
+
+test("empty stale metadata retains useful previously saved releases without renewing cache", async () => {
+  const saved = [{ id: 2, title: "Previously saved release" }];
+  const result = await runLoad(true, [], saved);
+  assert.equal(result.rows.at(-1), saved);
+  assert.match(result.errors.at(-1), /previously saved releases/);
+  assert.equal(result.saves.length, 0);
+});
+
+test("fresh empty metadata clears prior results", async () => {
+  const saved = [{ id: 2, title: "Previously saved release" }];
+  const fresh = [];
+  const result = await runLoad(false, fresh, saved);
+  assert.equal(result.rows.at(-1), fresh);
+  assert.equal(result.errors.at(-1), "");
+  assert.equal(result.saves.length, 1);
 });
