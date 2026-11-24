@@ -335,6 +335,10 @@ export default function RealDebridDeviceConnect({
 
   const startConnect =
     async () => {
+      if (!base44.auth.getAccessToken()) {
+        setError("Sign in to Media God before linking Real-Debrid. Guest linking is currently unavailable.");
+        return;
+      }
       clearTimer();
       setStarting(true);
       setDeviceFlow(null);
@@ -500,7 +504,7 @@ export default function RealDebridDeviceConnect({
           </h2>
 
           <p className="mt-1 max-w-2xl text-xs leading-5 text-white/50 3xl:text-sm">
-            Link your own Real-Debrid account to your signed-in Media God account. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection across your devices.
+            Link your own Real-Debrid account to your signed-in Media God account. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection across your devices. Guest linking is currently unavailable.
           </p>
         </div>
 
