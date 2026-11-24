@@ -4684,6 +4684,9 @@ export function PlayerProvider({
             preferRd: true,
             resumeFromHistory: true,
             verifiedPlaybackPolicy: "strict",
+            // Pressing Sources must enter the first-party player with its
+            // source list visible, not return to an embedded provider.
+            openSourcesDrawer: true,
           });
         }}
       />
