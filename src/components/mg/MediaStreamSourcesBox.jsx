@@ -1104,7 +1104,15 @@ export default function StreamSourcesBox({
       // explicitly chooses one. Sources Play never silently opens an iframe.
       const sourceKind = classifyTvBoxSource(stream);
       if (mediaType !== "live" && sourceKind.kind === "webpage") {
-        setMessage("This is a web-player page, not a video file. Use Play in Media God to find a playable file, or choose a labelled web-player backup.");
+        // A provider's page cannot play inside our video element or LibVLC.
+        // When Real-Debrid is connected, discover the correct playable file
+        // instead of opening the page as an embedded/silent player.
+        if (hasDebrid) {
+          setMessage("Finding a direct video for the Media God player…");
+          await playCombinedDebrid({ readyOnly: mediaType === "tv" });
+          return;
+        }
+        setMessage("This is a web-player page, not a video file. Use Play in Media God to search direct sources, or choose a labelled web-player backup.");
         return;
       }
 
