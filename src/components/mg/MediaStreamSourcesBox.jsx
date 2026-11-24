@@ -26,6 +26,8 @@ import {
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import { isFireTvRuntime } from "@/components/mg/runtimePlatform";
+import { getPlaybackDeviceProfile } from "./mediaCompatibility";
+import { isWebsiteSourcesRuntime } from "./webSourcesCompatibility.js";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
 import { buildVidCoreEmbedUrl } from "@/components/mg/vidCoreEmbed";
@@ -923,6 +925,8 @@ export default function StreamSourcesBox({
 
       try {
         await player.play({
+          ...(mediaType !== "live" && isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
+            ? { webSourcesRequest: true } : {}),
           // Keep the stored seek point when opened from Continue Watching.
           startTime: Math.max(0, Number(resumeAt) || 0),
           id:
@@ -1086,6 +1090,8 @@ export default function StreamSourcesBox({
       );
 
       await player.play({
+          ...(mediaType !== "live" && isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
+            ? { webSourcesRequest: true } : {}),
         startTime: Math.max(0, Number(resumeAt) || 0),
         id:
           tmdbId,
