@@ -168,7 +168,7 @@ export async function invokeIndependentImdbResolver(name, payload = {}, {
     "title", "year", "media_type", "mediaType",
   ];
   const request = Object.fromEntries(
-    allowed.filter(key => input[key] !== undefined).map(key => [key, input[key]]),
+    allowed.filter(key => publicScalar(input[key])).map(key => [key, input[key]]),
   );
   const cacheRequest = { __resolver: name, ...request };
   // Identity mappings are stable: avoid another network round trip (and quota
@@ -296,7 +296,7 @@ export async function invokeIndependentPublicFeature(name, payload = {}, {
     ? payload : {};
   const fields = PUBLIC_FEATURE_FIELDS[name];
   const request = Object.fromEntries(
-    fields.filter(key => input[key] !== undefined).map(key => [key, input[key]]),
+    fields.filter(key => publicScalar(input[key])).map(key => [key, input[key]]),
   );
   const controller = new AbortController();
   const duration = Number(timeoutMs);
