@@ -59,9 +59,11 @@ try {
   const base = "https://127.0.0.1:"+vite.httpServer.address().port+"/__mg_fixture/";
   for (const [name,v,a] of [["sample.mp4","h264","aac"],["sample.webm","vp9","opus"],["sample.m3u8","h264","aac"]]) {
     const page = await browser.newPage();
-    page.on("pageerror",error=>console.error("Fixture page:",error.message));
+    const renderErrors = [];
+    page.on("pageerror",error=>{ renderErrors.push(error.message); console.error("Fixture page:",error.message); });
     page.on("console",message=>{
       if (["error","warning"].includes(message.type())) console.error("Fixture browser:",message.text().slice(0,1200));
+      if (/Maximum update depth exceeded|Too many re-renders/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
     });
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
     await page.setRequestInterception(true);
@@ -115,6 +117,7 @@ try {
       console.log(name,JSON.stringify(result));
       assert.ok(result.time>0 && result.decodedFrames>0 && result.width>0 && result.height>0,name+" actual component picture");
       assert.ok(result.audioRms>0.001 && !result.muted,name+" actual component audio");
+      assert.deepEqual(renderErrors, [], name+" no browser exceptions or render loops");
     } finally {await page.close();}
   }
   console.log("PASS: actual LiveVideo component decoded generated MP4, WebM and HLS; not a production catalogue test.");
