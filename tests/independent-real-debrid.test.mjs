@@ -163,7 +163,7 @@ test("Railway RD service requires a verified account, protects actions and exclu
   const serve = vm.runInNewContext(server + "\nserve", {
     process: {env: {IDENTITY_VERIFY_URL:"https://identity.invalid/auth/me",
       RD_ACCOUNT_DERIVATION_KEY:"synthetic-secret-".repeat(4)}},
-    createHash, createHmac, AbortSignal, Request, Buffer, console,
+    createHash, createHmac, AbortSignal, Request, Response, Buffer, console,
     realDebrid: handler, realDebridAuth: handler, findRdLibrary: handler,
     multiDebrid: handler, fetchAddonStreams: handler,
     fetch: async (_url, options) => options.headers.Authorization === "Bearer " + token
