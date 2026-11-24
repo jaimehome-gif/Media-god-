@@ -10891,6 +10891,7 @@ export default function VideoPlayer({
 
         <div
           data-mg-player-stage="true"
+          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
           }
@@ -11209,7 +11210,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  rdOverride.src
+                  websiteSourcesPlayback ? `website-controls:${rdOverride.src}` : rdOverride.src
                 }
                 videoRef={
                   videoRef
@@ -11349,7 +11350,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  active.src
+                  websiteSourcesPlayback ? `website-controls:${active.src}` : active.src
                 }
                 videoRef={
                   liveVideoRef
@@ -11393,7 +11394,9 @@ export default function VideoPlayer({
             </>
           ) : (
             <div className="flex flex-col items-center gap-3 p-6 text-center">
-              <Loader2 className="w-8 h-8 text-mg-green animate-spin" />
+              {websiteSourcesPlayback && !resolvedSourceUrl ? (
+                <p role="status" className="max-w-md text-sm text-white/70">No verified direct media is ready. The browser has not received a video file to decode. Return to Sources or retry when an authorised file is ready.</p>
+              ) : <Loader2 className="w-8 h-8 text-mg-green animate-spin" />}
               {isRdSource && (
                 <button type="button" onClick={retryResolution} className="flex items-center gap-2 px-3 py-2 rounded-md bg-mg-green text-black text-xs font-semibold hover:bg-mg-green-dim">
                   <RefreshCw className="w-3.5 h-3.5" /> Try Again

@@ -10,7 +10,7 @@ import puppeteer from "puppeteer-core";
 // No provider requests, account credentials, or production data. The real
 // LiveVideo component receives only locally generated, self-owned media.
 const dir = await mkdtemp(join(tmpdir(), "mg-player-integration-"));
-let browser, vite;
+let browser, strictBrowser, vite;
 const run = (exe, args) => {
   const result = spawnSync(exe, args, { stdio: "inherit" });
   if (result.error) throw result.error;
@@ -35,7 +35,7 @@ try {
     configFile:false, root:fileURLToPath(new URL("../",import.meta.url)),
     resolve:{alias:{"@":fileURLToPath(new URL("../src",import.meta.url))}},
     appType:"custom",
-    server:{host:"127.0.0.1",port:0,https:{key:await readFile(join(dir,"key.pem")),cert:await readFile(join(dir,"cert.pem"))}},
+    server:{host:"127.0.0.1",port:0,allowedHosts:["underworldhub.co.uk","www.underworldhub.co.uk"],https:{key:await readFile(join(dir,"key.pem")),cert:await readFile(join(dir,"cert.pem"))}},
     plugins:[{name:"generated-media-only",configureServer(server){
       server.middlewares.use((req,res,next)=>{
         if (req.url === "/__mg_fixture/") {
@@ -55,15 +55,22 @@ try {
   });
   await vite.listen();
   browser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
-    headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required"]});
-  const base = "https://127.0.0.1:"+vite.httpServer.address().port+"/__mg_fixture/";
-  for (const [name,v,a] of [["sample.mp4","h264","aac"],["sample.webm","vp9","opus"],["sample.m3u8","h264","aac"]]) {
-    const page = await browser.newPage();
+    headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
+  strictBrowser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
+    headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=document-user-activation-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
+  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],["sample.mp4","h264","dts","www.underworldhub.co.uk",true,false,false,true],["sample.mp4","h264","","www.underworldhub.co.uk",true,false,false,true]];
+  for (const [name,v,a,host,full,mobile,strict,rejected] of cases) {
+    const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
+    const page = await (strict ? strictBrowser : browser).newPage();
+    if (mobile) {
+      await page.setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36");
+      await page.setViewport({width:393,height:873,deviceScaleFactor:2,isMobile:true,hasTouch:true});
+    }
     const renderErrors = [];
     page.on("pageerror",error=>{ renderErrors.push(error.message); console.error("Fixture page:",error.message); });
     page.on("console",message=>{
       if (["error","warning"].includes(message.type())) console.error("Fixture browser:",message.text().slice(0,1200));
-      if (/Maximum update depth exceeded|Too many re-renders/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
+      if (/Maximum update depth exceeded|Too many re-renders|Encountered two children with the same key/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
     });
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
     await page.setRequestInterception(true);
@@ -76,11 +83,35 @@ try {
     });
     try {
       await page.goto(base);
-      const gate = await page.evaluate(async ({name,v,a})=>{
+      // Puppeteer's page.evaluate grants a user gesture. The strict case must
+      // mount without activation, using CDP explicitly with userGesture:false.
+      const input = {name,v,a,full};
+      const mount = async ({name,v,a,full})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return harness.mountSample({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
-      },{name,v,a});
-      assert.equal(gate.allowed,true,name+" compatibility gate");
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
+      };
+      let gate;
+      if (strict) {
+        const session = await page.createCDPSession();
+        const response = await session.send("Runtime.evaluate", {
+          expression:"("+mount.toString()+")("+JSON.stringify(input)+")",
+          awaitPromise:true, returnByValue:true, userGesture:false
+        });
+        assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails || {}));
+        gate = response.result.value;
+        await session.detach();
+      } else {
+        gate = await page.evaluate(mount,input);
+      }
+      if(full) assert.equal(gate.route,true,host+" real website route");
+      assert.equal(gate.allowed,!rejected,name+" compatibility gate");
+      if (rejected) {
+        await page.waitForSelector('[data-mg-website-codec-rejected="true"]',{timeout:15000});
+        assert.equal(await page.$('video[data-mg-playback-surface="active"]'),null,"rejected fixture must not start video");
+        assert.deepEqual(renderErrors, [], "no exceptions in rejection path");
+        console.log(host,"rejected fixture",a || "unknown audio",gate.reason);
+        continue;
+      }
       try {
         await page.waitForSelector('video[data-mg-playback-surface="active"]',{timeout:20000});
       } catch (error) {
@@ -90,6 +121,13 @@ try {
           videoCount:document.querySelectorAll("video").length
         })));
         throw error;
+      }
+      if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
+      if (strict) {
+        const unlock = await page.waitForSelector('[data-mg-audio-unlock="true"] button',{timeout:15000});
+        await unlock.click();
+        await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
+        console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }
       const result = await page.evaluate(async ()=>{
         const video = document.querySelector('video[data-mg-playback-surface="active"]');
@@ -114,14 +152,15 @@ try {
             error:video.error?.message || ""};
         } finally {await context.close();}
       });
-      console.log(name,JSON.stringify(result));
+      console.log(host,mobile?"mobile Chrome emulation": "desktop",full?"Sources VideoPlayer":"LiveVideo",name,JSON.stringify(result));
       assert.ok(result.time>0 && result.decodedFrames>0 && result.width>0 && result.height>0,name+" actual component picture");
       assert.ok(result.audioRms>0.001 && !result.muted,name+" actual component audio");
       assert.deepEqual(renderErrors, [], name+" no browser exceptions or render loops");
     } finally {await page.close();}
   }
-  console.log("PASS: actual LiveVideo component decoded generated MP4, WebM and HLS; not a production catalogue test.");
+  console.log("PASS: LiveVideo and website Sources VideoPlayer decoded locally generated media; no production catalogue or provider access.");
 } finally {
+  if (strictBrowser) await strictBrowser.close();
   if (browser) await browser.close();
   if (vite) await vite.close();
   await rm(dir,{recursive:true,force:true});
