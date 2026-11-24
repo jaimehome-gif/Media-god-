@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { INDEPENDENT_METADATA_API_URL } from "@/api/independentMetadata.js";
 import { readPublicSection, savePublicSection, orderUpcomingReleases } from "./publicSectionCache.js";
 
-const API = new URL("/functions/publicDiscovery", INDEPENDENT_METADATA_API_URL).href;
+const API = new URL("./publicDiscovery", INDEPENDENT_METADATA_API_URL).href;
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value||"")) ? value : "";
 const tabs = [
@@ -40,17 +40,17 @@ function DiscoveryCard({ item }) {
     </div>
   </article>;
 }
-async function discovery(action, region, signal) {
+async function discovery(action, region, signal, date) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal.aborted) cancel();
   else signal.addEventListener("abort", cancel, { once: true });
-  const timeout = setTimeout(cancel, 25000);
+  const timeout = setTimeout(cancel, 15000);
   try {
     const response = await fetch(API, {
       method: "POST", credentials: "omit",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, region, date: TODAY() }),
+      body: JSON.stringify({ action, region, date }),
       signal: controller.signal,
     });
     const data = await response.json();
@@ -60,7 +60,7 @@ async function discovery(action, region, signal) {
     return data.results;
   } catch (error) {
     if (controller.signal.aborted && !signal.aborted) {
-      throw new Error("Discovery request timed out. Please try Refresh.");
+      throw new Error("Discovery service timed out. Please try Refresh.");
     }
     throw error;
   } finally {
@@ -104,9 +104,11 @@ export default function WatchmodeHub() {
         nextRows = orderUpcomingReleases(items, releaseType, TODAY());
         stale = response?.stale === true;
       } else {
-        nextRows = await discovery(tab, region, signal);
+        nextRows = await discovery(tab, region, signal, TODAY());
       }
       if (signal.aborted) return;
+      // An empty stale response is not evidence that scheduled releases disappeared.
+      if (stale && !nextRows.length && savedRows.length) nextRows = savedRows;
       setRows(nextRows);
       if (stale) {
         setError(nextRows.length
