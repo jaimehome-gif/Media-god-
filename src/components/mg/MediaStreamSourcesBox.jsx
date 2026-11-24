@@ -925,7 +925,8 @@ export default function StreamSourcesBox({
 
       try {
         await player.play({
-          ...(mediaType !== "live" && isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
+          ...(mediaType !== "live" && /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
+            isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
             ? { webSourcesRequest: true } : {}),
           // Keep the stored seek point when opened from Continue Watching.
           startTime: Math.max(0, Number(resumeAt) || 0),
@@ -1090,7 +1091,8 @@ export default function StreamSourcesBox({
       );
 
       await player.play({
-          ...(mediaType !== "live" && isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
+          ...(mediaType !== "live" && /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
+            isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
             ? { webSourcesRequest: true } : {}),
         startTime: Math.max(0, Number(resumeAt) || 0),
         id:
