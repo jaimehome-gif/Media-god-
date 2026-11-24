@@ -1,5 +1,6 @@
 import useBrowseReturn from "@/components/mg/useBrowseReturn";
 import { launchFireTvCardPlay } from "@/components/mg/fireTvCardPlay";
+import { launchMediaGodWebsitePlay } from "@/components/mg/mediaGodWebsitePlay";
 import { profiledLibrary } from "@/components/mg/householdProfiles";
 import { catalogueSourceChecker, showBrowseTitleWithSourceEvidence } from "@/components/mg/catalogueSourceCheckerClient";
 import { createRollingSourceChecks } from "@/components/mg/rollingSourceChecks";
@@ -1014,6 +1015,7 @@ export default function HomeDashboard({ onOpenTvService }) {
         media_type: "movie",
       };
 
+      if (launchMediaGodWebsitePlay(player, media)) return;
       if (launchFireTvCardPlay(player, media)) return;
       if (player.playOnlyFlix(media)) {
         return;
