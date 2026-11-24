@@ -858,6 +858,9 @@ const resolvedMediaEnglishMainState = (mediaInfo) => {
     : "unknown";
 };
 
+// Keep empty subtitle props stable for website Sources playback only.
+const EMPTY_WEBSITE_SUBTITLES = Object.freeze([]);
+
 export default function VideoPlayer({
   source,
   onClose,
@@ -11181,7 +11184,7 @@ export default function VideoPlayer({
                 subtitles={
                   Array.isArray(active?.subtitles)
                     ? active.subtitles
-                    : []
+                    : websiteSourcesPlayback ? EMPTY_WEBSITE_SUBTITLES : []
                 }
                 subtitlesEnabled={
                   trackPreferences.subtitlesEnabled
@@ -11321,7 +11324,7 @@ export default function VideoPlayer({
                 subtitles={
                   Array.isArray(active?.subtitles)
                     ? active.subtitles
-                    : []
+                    : websiteSourcesPlayback ? EMPTY_WEBSITE_SUBTITLES : []
                 }
                 subtitlesEnabled={
                   trackPreferences.subtitlesEnabled
