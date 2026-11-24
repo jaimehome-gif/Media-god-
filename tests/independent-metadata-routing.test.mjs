@@ -280,3 +280,20 @@ test("invalid or future cache timestamps cannot make public results indefinitely
     }), /Catalogue temporarily unavailable/);
   }
 });
+
+test("nested account information cannot be forwarded inside public metadata fields", async () => {
+  const secret = { access_token: "SYNTHETIC_PRIVATE_VALUE" };
+  const seen = [];
+  const fetchImpl = async (_url, options) => {
+    seen.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ imdb_id: "tt1234567" }) };
+  };
+  await invokeIndependentImdbResolver("resolveImdb", { title: secret, tmdb_id: 123 }, {
+    fetchImpl, storage: storage(),
+  });
+  await invokeIndependentPublicFeature("getEntertainmentNews", {
+    section: secret, forceRefresh: true,
+  }, { fetchImpl });
+  assert.deepEqual(seen, [{ tmdb_id: 123 }, { forceRefresh: true }]);
+  assert.doesNotMatch(JSON.stringify(seen), /SYNTHETIC_PRIVATE_VALUE/);
+});
