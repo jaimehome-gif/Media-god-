@@ -108,16 +108,18 @@ test("confirmed cached episode torrent still opens exact selected VLC media rout
   assert.match(provider, /if \(preparedEpisodeHandoff\) \{\s*return true;/);
 });
 
-test("direct HTTP TV stream uses VLC route; provider webpages keep web players", async () => {
+test("direct HTTP TV source stays manually selected; HTML webpages rediscover Media God files", async () => {
   const direct = selectedEpisodeSource({ type: "url", src: "https://example.test/episode.mp4" });
   await direct.run();
   assert.equal(direct.captured[0].preparedEpisodeHandoff, true);
   assert.equal(direct.captured[0].manualSourceSelection, true);
   const webpage = selectedEpisodeSource({ type: "provider", src: "https://example.test/watch" });
   await webpage.run();
-  assert.equal(webpage.captured[0].preparedEpisodeHandoff, false);
-  assert.equal(webpage.captured[0].manualSourceSelection, false);
-  assert.equal(webpage.captured[0].allowNonPlaybackFallback, true);
+  assert.equal(webpage.captured.length, 1);
+  assert.equal(webpage.captured[0].skipEpisodeAutoPrepare, true);
+  assert.equal(webpage.captured[0].sources.length, 0);
+  assert.equal(webpage.captured[0].completeSources.length, 1);
+  assert.equal(webpage.captured[0].completeSources[0].src, "https://example.test/episode-other.mp4");
   for (const router of [phone, fire]) {
     assert.match(router, /!payload\.optBoolean\("live", false\)[\s\S]{0,430}?return Decision\(true, "default-libvlc-vod"\)/);
   }
@@ -135,7 +137,10 @@ test("TV-box handler preserves direct media and rejects HTML before native hando
   ]) {
     const page = selectedEpisodeSource({ tvBox: true, ...source });
     await page.run();
-    assert.equal(page.captured.length, 0, "HTML must never reach the native player");
+    assert.equal(page.captured.length, 1, "HTML selection must trigger direct-file discovery");
+    assert.equal(page.captured[0].sources.length, 0, "HTML must never be a native video source");
+    assert.equal(page.captured[0].completeSources.length, 1);
+    assert.equal(page.captured[0].completeSources[0].src, "https://example.test/episode-other.mp4");
   }
 });
 
