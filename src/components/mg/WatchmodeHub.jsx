@@ -40,15 +40,32 @@ function DiscoveryCard({ item }) {
   </article>;
 }
 async function discovery(action, region, signal) {
-  const response = await fetch(API, {
-    method: "POST", credentials: "omit",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, region }),
-    signal,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) throw new Error(data.error || "Discovery service unavailable");
-  return Array.isArray(data.results) ? data.results : [];
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal.aborted) cancel();
+  else signal.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(cancel, 15000);
+  try {
+    const response = await fetch(API, {
+      method: "POST", credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, region }),
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok || data?.error || !Array.isArray(data?.results)) {
+      throw new Error(data?.error || "Discovery service unavailable");
+    }
+    return data.results;
+  } catch (error) {
+    if (controller.signal.aborted && !signal.aborted) {
+      throw new Error("Discovery service timed out. Please try Refresh.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener("abort", cancel);
+  }
 }
 export default function WatchmodeHub() {
   const [tab, setTab] = useState("releases");
@@ -89,6 +106,8 @@ export default function WatchmodeHub() {
         nextRows = await discovery(tab, region, signal);
       }
       if (signal.aborted) return;
+      // An empty stale response is not evidence that scheduled releases disappeared.
+      if (stale && !nextRows.length && savedRows.length) nextRows = savedRows;
       setRows(nextRows);
       if (stale) {
         setError(nextRows.length
