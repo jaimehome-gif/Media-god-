@@ -265,6 +265,15 @@ async function invoke(name,payload={}) {
   if (functionName==="getEntertainmentNews"||functionName==="getSkipSegments"||functionName==="getFireTvApkLink") {
     return invokeIndependentPublicFeature(functionName,payload);
   }
+  // Action requests may inspect or mutate account/provider state. Never
+  // turn an action into an anonymous discovery request on auth failure.
+  if (functionName==="fetchAddonStreams" && payload?.action) {
+    requireSession();
+    const accountPayload = { ...payload };
+    delete accountPayload.guest_device_key;
+    const data=await call(RD_API,"/functions/fetchAddonStreams",{method:"POST",body:accountPayload,timeoutMs:30000});
+    return {data};
+  }
   if (functionName==="fetchAddonStreams") {
     if (getIndependentSessionToken()) {
       try {
