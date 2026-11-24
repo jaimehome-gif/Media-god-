@@ -155,6 +155,7 @@ test("Railway RD service requires a verified account, protects actions and exclu
   const id = "11111111-1111-4111-8111-111111111111";
   const token = "A".repeat(40);
   const calls = [];
+  let verifiedStoreId = "account-store";
   const handler = async req => {
     calls.push(req.__mediaGodVerifiedUserId);
     return Response.json({ok:true});
@@ -167,7 +168,7 @@ test("Railway RD service requires a verified account, protects actions and exclu
     multiDebrid: handler, fetchAddonStreams: handler,
     fetch: async (_url, options) => options.headers.Authorization === "Bearer " + token
       ? Response.json({id}) : new Response(null,{status:401}),
-    deviceClient: async () => ({user:{id:"account-store"},client:{auth:{me:async()=>({id:"account-store"})}}}),
+    deviceClient: async () => ({user:{id:"account-store"},client:{auth:{me:async()=>({id:verifiedStoreId})}}}),
   });
   async function requestServer(authorization, body = {}, origin = "https://underworldhub.co.uk") {
     const request = {headers:{authorization,origin},url:"/functions/realDebridAuth",method:"POST",
@@ -181,7 +182,7 @@ test("Railway RD service requires a verified account, protects actions and exclu
   for (const authorization of ["", "Device " + token, "Bearer " + "B".repeat(40)]) {
     assert.equal((await requestServer(authorization)).status,401);
   }
-  for (const body of [{user_id:"other"}, {guest_device_key:"other"}, {rd_token:"other"}]) {
+  for (const body of [{user_id:"other"}, {guest_device_key:"other"}, {rd_token:"other"}, {rd_client_id:"other"}]) {
     assert.equal((await requestServer("Bearer " + token,body)).status,400);
   }
   assert.equal((await requestServer("Bearer " + token,{}, "https://untrusted.invalid")).status,403);
@@ -190,6 +191,9 @@ test("Railway RD service requires a verified account, protects actions and exclu
   assert.equal(accepted.status,200);
   assert.equal(accepted.headers["Cache-Control"],"private,no-store");
   assert.deepEqual(calls,["account-store"]);
+  verifiedStoreId = "another-account";
+  assert.equal((await requestServer("Bearer " + token,{action:"status"})).status,401);
+  assert.deepEqual(calls,["account-store"], "Mismatched account must never reach a handler");
   const guests = source("deploy/media-god-rd-api/guestDebrid.mjs");
   assert.doesNotMatch(guests, /asServiceRole|process\.env\..*TOKEN/);
 });
