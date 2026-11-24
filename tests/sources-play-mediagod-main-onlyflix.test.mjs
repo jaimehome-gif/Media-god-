@@ -103,11 +103,20 @@ test("individual direct source Play opens the same Media God player, not an ifra
   assert.equal(req.sources[0].preferNativeVlc,true);
 });
 
-test("Sources will not put a provider HTML watch page into the first-party player",async()=>{
+test("Sources resolves an HTML watch-page selection to real media, never passes HTML as a file",async()=>{
   const page={type:"url",src:"https://onlyflix.to/watch/123"};
   const ctx=createSources({savedSources:[page]});
   await ctx.playAddonStream(page);
   assert.equal(ctx.calls.length,0);
+  assert.equal(ctx.combined.length,1);
+  assert.equal(ctx.combined[0].readyOnly,false);
+});
+test("without Real-Debrid, HTML sources give safe feedback instead of opening a silent web player",async()=>{
+  const page={type:"url",src:"https://onlyflix.to/watch/123"};
+  const ctx=createSources({savedSources:[page],hasDebrid:false});
+  await ctx.playAddonStream(page);
+  assert.equal(ctx.calls.length,0);
+  assert.equal(ctx.combined.length,0);
   assert.match(ctx.messages.join(" "),/web-player page/);
 });
 
