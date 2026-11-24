@@ -37,6 +37,7 @@ export async function mountSourcesSample({ url, videoCodec, audioCodec }) {
     allowNonPlaybackFallback:false,verifiedPlaybackPolicy:"manual",sources:[item],completeSources:[item]};
   const route = isWebsiteSourcesPlayback({hostname:location.hostname,profile:getPlaybackDeviceProfile(),source,active:item,isLive:false});
   const gate = checkWebsiteDirectMedia({url,item,...getBrowserMediaCapabilities()});
-  if (route && gate.allowed) flushSync(()=>root.render(<VideoPlayer source={source} onClose={()=>root.render(null)} />));
+  // Mount even when the policy rejects: assert that the real player refuses it.
+  if (route) flushSync(()=>root.render(<VideoPlayer source={source} onClose={()=>root.render(null)} />));
   return {route,allowed:gate.allowed,reason:gate.reason};
 }
