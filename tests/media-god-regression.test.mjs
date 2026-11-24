@@ -2846,9 +2846,11 @@ test("strict VOD autoplay keeps the full chooser and falls back to cached runtim
   assert.match(providerSource, /const runtimeFallbackSources/);
   assert.match(providerSource, /runtimeQualificationFallback:\s*true/);
   assert.match(providerSource, /native-runtime-audio-rescue/);
+  // The deployed migration baseline lowered the scan budget from 20 to 12.
+  // Keep the full chooser assertions above; do not increase provider load.
   assert.match(
     providerSource,
-    /targetCount:\s*5[\s\S]{0,80}scanLimit:\s*20[\s\S]{0,80}timeBudgetMs:\s*6500/
+    /targetCount:\s*3[\s\S]{0,80}scanLimit:\s*12[\s\S]{0,80}timeBudgetMs:\s*6500/
   );
 });
 
@@ -3976,9 +3978,11 @@ test("authoritative IDs stay isolated and English autoplay never falls back blin
     /native-runtime-english-track-validation/
   );
   assert.match(providerSource, /prioritiseEnglishAutoplayCandidates/);
+  // Account request budget was reduced before the website repair branch.
+  // Identity and explicit-language assertions remain unchanged.
   assert.match(
     providerSource,
-    /targetCount:\s*1,[\s\S]{0,120}?scanLimit:\s*40,[\s\S]{0,120}?timeBudgetMs:\s*10000/
+    /targetCount:\s*1,[\s\S]{0,120}?scanLimit:\s*16,[\s\S]{0,120}?timeBudgetMs:\s*10000/
   );
 });
 
