@@ -17,8 +17,9 @@ const canPlay = (probe, mime) => {
   catch { return false; }
 };
 
-export function checkWebsiteDirectMedia({ url, item, canPlayType, mseSupports } = {}) {
-  if (!url || !item || item.drm) return { allowed: false, reason: "No verified direct media file is ready." };
+export function checkWebsiteDirectMedia({ url, item, originalItem, canPlayType, mseSupports } = {}) {
+  if (item?.drm || originalItem?.drm) return { allowed: false, reason: "Protected media requires its authorised playback route." };
+  if (!url || !item) return { allowed: false, reason: "No verified direct media file is ready." };
   let parsed;
   try { parsed = new URL(url); } catch { return { allowed: false, reason: "Invalid video URL." }; }
   if (parsed.protocol !== "https:" || parsed.username || parsed.password) return { allowed: false, reason: "Only secure direct media without embedded credentials is supported." };
