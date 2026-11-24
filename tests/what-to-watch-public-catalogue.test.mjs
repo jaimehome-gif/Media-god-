@@ -135,3 +135,14 @@ test("an explicitly empty sports schedule is still a valid response", async () =
   assert.equal(result.status, 200);
   assert.deepEqual((await result.json()).results, []);
 });
+
+test("What to Watch shares the configured independent catalogue host", () => {
+  const metadata = readFileSync(new URL("../src/api/independentMetadata.js", import.meta.url), "utf8");
+  const endpoint = metadata.match(/INDEPENDENT_METADATA_API_URL\s*=\s*"([^"]+)"/)?.[1];
+  assert.ok(endpoint);
+  const declaration = source.match(/const API = (.*);/)?.[1];
+  assert.ok(declaration);
+  const actual = vm.runInNewContext(declaration, { URL, INDEPENDENT_METADATA_API_URL: endpoint });
+  assert.equal(new URL(actual).origin, new URL(endpoint).origin);
+  assert.equal(new URL(actual).pathname, "/functions/publicDiscovery");
+});
