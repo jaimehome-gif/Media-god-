@@ -10739,6 +10739,26 @@ export default function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {!isLive && !nativeFireTvPlayer && (isDirectFile || Boolean(rdOverride?.src)) && (
+              <button
+                type="button"
+                data-mg-web-audio-recovery="true"
+                disabled={busy || fileSwitching}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  // First try an audible replay / alternate audio track,
+                  // then a compatible ready source. Never use an iframe here.
+                  void handleNoSound();
+                }}
+                aria-label="Fix website audio"
+                title="Unmute this video, try another English audio track or find a browser-compatible source"
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 text-xs font-bold text-amber-200 hover:bg-amber-400/20 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50 sm:min-h-10"
+              >
+                <VolumeX className="h-4 w-4" />
+                <span className="hidden sm:inline">Fix sound</span>
+              </button>
+            )}
             {!isLive && (
               <button
                 type="button"
