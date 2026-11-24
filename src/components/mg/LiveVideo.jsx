@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import Hls from "hls.js";
 import { hasUnusableEpisodeAudio } from "./episodeAudio";
+import { browserHlsAudioPenalty } from "./browserHlsAudioPriority.js";
 import {
   claimExclusivePlayback,
   releaseExclusivePlayback,
@@ -220,7 +221,8 @@ const choosePreferredHlsAudioTrack = (
   preferredLanguage = "en",
   excludeIndex = -1,
   skipIndices = [],
-  requireEnglish = false
+  requireEnglish = false,
+  browserVod = false
 ) => {
   let bestIndex = -1;
   let bestScore = -Infinity;
@@ -229,10 +231,20 @@ const choosePreferredHlsAudioTrack = (
     if (index === excludeIndex || skipIndices.includes(index)) return;
     if (requireEnglish && hasUnusableEpisodeAudio({ audioTracks: [track] })) return;
 
-    const score = audioTrackPreferenceScore(
+    const audioPreference = audioTrackPreferenceScore(
       track,
       requireEnglish ? "en" : preferredLanguage
     );
+    const browserAudioSupport = browserVod
+      ? browserHlsAudioPenalty(track, (mime) => {
+          try {
+            return Boolean(document.createElement("audio").canPlayType(mime));
+          } catch {
+            return false;
+          }
+        })
+      : 0;
+    const score = audioPreference + browserAudioSupport;
 
     if (score > bestScore) {
       bestScore = score;
@@ -1181,7 +1193,8 @@ const LiveVideo = forwardRef(
             Array.isArray(event?.detail?.skipIndices)
               ? event.detail.skipIndices
               : [],
-            requireEnglishAudioRef.current
+            requireEnglishAudioRef.current,
+            !isLive
           );
 
         if (targetIndex < 0) {
@@ -1759,7 +1772,8 @@ const LiveVideo = forwardRef(
                     preferredAudioLanguageRef.current,
                     -1,
                     [],
-                    requireEnglishAudioRef.current
+                    requireEnglishAudioRef.current,
+                    !isLive
                   );
 
                 if (
