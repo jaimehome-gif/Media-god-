@@ -165,8 +165,12 @@ try {
       }
       if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
       if (strict) {
-        const unlock = await page.waitForSelector('[data-mg-audio-unlock="true"] button',{timeout:15000});
-        await unlock.click();
+        const unlockSelector = '[data-mg-audio-unlock="true"] button';
+        await page.waitForSelector(unlockSelector,{visible:true,timeout:15000});
+        // A trusted keyboard activation works even when React replaces the
+        // overlay between locating and clicking an element on mobile.
+        await page.focus(unlockSelector);
+        await page.keyboard.press("Enter");
         await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
         console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }
