@@ -372,6 +372,19 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
             <ListVideo className="h-4 w-4" />
             Sources
           </button>
+          {!isFireTv && activeEpisodePlayer !== "vyla" && typeof onOpenSources === "function" && (
+            <button
+              type="button"
+              data-mg-embedded-top-web-sound-recovery="true"
+              onClick={onOpenSources}
+              aria-label="Fix website sound with Media God"
+              title="The embedded provider controls its audio. Find a different playable source in Media God's browser player."
+              className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <span className="sm:hidden">Sound</span>
+              <span className="hidden sm:inline">Fix web sound</span>
+            </button>
+          )}
           {isFireTv && (
             <button
               type="button"
@@ -547,7 +560,18 @@ export default function OnlyFlixEmbedPlayer({ url, title, media, onBack, onOpenS
         </SafeEmbedStage>
 
         {!isFireTv && <div data-mg-embed-footer="true" className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/70 p-2.5 text-xs text-white/60 transition-opacity duration-500 ${chromeFade}`}>
-          <span>{activeEpisodePlayer === "vyla" ? "Select a returned source to try it, or choose OnlyFlix to return to the usual player." : isNativeFireTvEmbedRemoteAvailable() ? "Use Menu for all movie/episode sources, Left/Right to choose and Select to switch. Press Down to return to the video pointer; press Back to exit." : <>{providerLabel} has its own player controls. Use {backLabel} to return to Media God.</>}</span>
+          <span>{activeEpisodePlayer === "vyla" ? "Select a returned source to try it, or choose OnlyFlix to return to the usual player." : isNativeFireTvEmbedRemoteAvailable() ? "Use Menu for all movie/episode sources, Left/Right to choose and Select to switch. Press Down to return to the video pointer; press Back to exit." : <>{providerLabel} controls its own sound. If the video is muted, use its speaker icon. Otherwise, switch to a direct file in Media God for browser audio recovery.</>}</span>
+          {activeEpisodePlayer !== "vyla" && typeof onOpenSources === "function" && (
+            <button
+              type="button"
+              data-mg-embed-web-sound-recovery="true"
+              onClick={onOpenSources}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-mg-green/50 bg-mg-green/10 px-3 text-xs font-semibold text-mg-green hover:bg-mg-green/20 focus:outline-none focus:ring-2 focus:ring-mg-green"
+              title="The external web provider owns iframe audio. Try a different video file in Media God's built-in browser player."
+            >
+              No sound? Try Media God audio
+            </button>
+          )}
           {activeEpisodePlayer !== "vyla" && <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent("mg:embed-toggle-fullscreen"))}
