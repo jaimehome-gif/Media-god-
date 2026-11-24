@@ -60,6 +60,18 @@ try {
   for (const [name,v,a] of [["sample.mp4","h264","aac"],["sample.webm","vp9","opus"],["sample.m3u8","h264","aac"]]) {
     const page = await browser.newPage();
     page.on("pageerror",error=>console.error("Fixture page:",error.message));
+    page.on("console",message=>{
+      if (["error","warning"].includes(message.type())) console.error("Fixture browser:",message.text().slice(0,1200));
+    });
+    page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
+    await page.setRequestInterception(true);
+    page.on("request",request=>{
+      if (request.url().startsWith(base.slice(0,base.indexOf("/__mg_fixture/"))+"/") || request.url().startsWith("blob:") || request.url().startsWith("data:")) {
+        void request.continue();
+      } else {
+        void request.abort();
+      }
+    });
     try {
       await page.goto(base);
       const gate = await page.evaluate(async ({name,v,a})=>{
@@ -67,7 +79,16 @@ try {
         return harness.mountSample({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
       },{name,v,a});
       assert.equal(gate.allowed,true,name+" compatibility gate");
-      await page.waitForSelector('video[data-mg-playback-surface="true"]',{timeout:20000});
+      try {
+        await page.waitForSelector('video[data-mg-playback-surface="true"]',{timeout:20000});
+      } catch (error) {
+        console.error("Mount diagnostics",await page.evaluate(()=>({
+          readyState:document.readyState,
+          root:document.getElementById("root")?.innerHTML.slice(0,1000),
+          videoCount:document.querySelectorAll("video").length
+        })));
+        throw error;
+      }
       const result = await page.evaluate(async ()=>{
         const video = document.querySelector('video[data-mg-playback-surface="true"]');
         const context = new AudioContext();
