@@ -211,3 +211,32 @@ test("public catalogue requests and cache retain only public query data", async 
   assert.ok(local.keys().length > 0);
   for (const key of local.keys()) assert.doesNotMatch(local.getItem(key), /DO_NOT_FORWARD/);
 });
+
+test("invalid release response does not overwrite a usable catalogue cache", async () => {
+  const local = storage();
+  const request = { category: "upcoming", media_type: "movie" };
+  const data = { movies: [{ id: 1, title: "Synthetic release" }] };
+  await invokeIndependentMetadata(request, {
+    storage: local, fetchImpl: async () => ({ ok: true, json: async () => data }),
+  });
+  const response = await invokeIndependentMetadata(request, {
+    storage: local, fetchImpl: async () => ({ ok: true, json: async () => ({ unexpected: true }) }),
+  });
+  assert.deepEqual(response, { data, stale: true });
+  assert.deepEqual(JSON.parse(local.getItem(local.keys()[0])).data, data);
+});
+
+test("invalid or future cache timestamps cannot make public results indefinitely fresh", async () => {
+  const request = { category: "upcoming", media_type: "movie" };
+  for (const savedAt of ["not-a-timestamp", Date.now() + 86400000]) {
+    const local = storage();
+    await invokeIndependentMetadata(request, {
+      storage: local, fetchImpl: async () => ({ ok: true, json: async () => ({ movies: [] }) }),
+    });
+    const key = local.keys()[0];
+    local.setItem(key, JSON.stringify({ ...JSON.parse(local.getItem(key)), savedAt }));
+    await assert.rejects(invokeIndependentMetadata(request, {
+      storage: local, fetchImpl: async () => { throw new Error("offline"); },
+    }), /Catalogue temporarily unavailable/);
+  }
+});
