@@ -65,3 +65,10 @@ test("invalid bearer and temporary verifier outages never grant account access",
   assert.ok(await verify("Bearer " + tokenA));
   assert.equal(calls, 2);
 });
+
+test("malformed account identifiers never produce a private account client", async () => {
+  for (const id of ["-".repeat(36), "a".repeat(36), "not-an-account"]) {
+    const verify = makeVerifier(async () => response(id));
+    assert.equal(await verify("Bearer " + tokenA), null);
+  }
+});
