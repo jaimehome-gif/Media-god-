@@ -25,3 +25,5 @@ jobs:
           google-chrome --version
       - name: Verify actual browser decoded frames and non-silent audio
         run: node scripts/website-direct-codecs-browser-smoke.mjs
+      - name: Verify actual Media God HTML5/HLS component
+        run: node scripts/website-direct-player-integration.mjs
