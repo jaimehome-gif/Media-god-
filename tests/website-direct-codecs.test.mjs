@@ -51,3 +51,13 @@ test("HLS requires AAC video/audio support in addition to native container suppo
 test("direct browser URLs do not accept embedded credentials",()=>{
   assert.equal(check(item(),"https://user:pass@media.example.test/owned-sample.mp4").allowed,false);
 });
+
+test("original protected source remains excluded even when resolved rendition lacks protection metadata",()=>{
+  const originalItem = { ...item(), drm: { type: "widevine" } };
+  const result = checkWebsiteDirectMedia({url,item:item(),originalItem,...caps});
+  assert.equal(result.allowed,false);
+  assert.match(result.reason,/Protected media/);
+  assert.equal(checkWebsiteDirectMedia({url,item:item(),originalItem:item(),...caps}).allowed,true);
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/item: rdOverride \|\| active, originalItem: active/);
+});
