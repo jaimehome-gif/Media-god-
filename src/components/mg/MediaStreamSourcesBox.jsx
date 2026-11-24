@@ -1857,7 +1857,7 @@ export default function StreamSourcesBox({
     : rows.filter(row => !isNonVlcBackup(row));
   const displayedSourceRows = torrentOnly
     ? rows.filter(row =>
-        row.kind === "rd" || row.kind === "paste" ||
+        row.kind === "media-god" || row.kind === "rd" || row.kind === "paste" ||
         (row.kind === "addon-stream" && row.selectableTorrentSource))
     : mediaType !== "live"
       ? [
