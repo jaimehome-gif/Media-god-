@@ -71,7 +71,7 @@ async function verifiedIdentityId(token) {
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) throw Error("Identity service unavailable");
     const user = await response.json();
-    return /^[0-9a-f-]{36}$/i.test(String(user?.id || "")) ? user.id : null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(user?.id || "")) ? user.id : null;
   })();
   verificationPending.set(key, task);
   try { return await task; }
