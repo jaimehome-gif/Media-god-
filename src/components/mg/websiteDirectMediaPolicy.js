@@ -21,7 +21,7 @@ export function checkWebsiteDirectMedia({ url, item, canPlayType, mseSupports } 
   if (!url || !item || item.drm) return { allowed: false, reason: "No verified direct media file is ready." };
   let parsed;
   try { parsed = new URL(url); } catch { return { allowed: false, reason: "Invalid video URL." }; }
-  if (parsed.protocol !== "https:") return { allowed: false, reason: "Only secure direct media is supported." };
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) return { allowed: false, reason: "Only secure direct media without embedded credentials is supported." };
   const info = item.mediaInfo || item.media_info;
   const videos = info?.video_tracks || info?.videoTracks;
   const audios = info?.audio_tracks || info?.audioTracks;
@@ -41,10 +41,13 @@ export function checkWebsiteDirectMedia({ url, item, canPlayType, mseSupports } 
   const avcMime = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
   let allowed = false;
   if (hls || mp4) {
-    const supported = hls
-      ? canPlay(canPlayType, "application/vnd.apple.mpegurl") ||
-        (canPlay(canPlayType, avcMime) && mseSupports?.(avcMime) === true)
-      : canPlay(canPlayType, avcMime);
+    // Native HLS container support does not alone prove AAC audio decoding.
+    // Require the actual advertised audio/video combination in both paths.
+    const supportsAvcAac = canPlay(canPlayType, avcMime);
+    let supportsMse = false;
+    try { supportsMse = mseSupports?.(avcMime) === true; } catch { /* fail closed */ }
+    const supported = supportsAvcAac &&
+      (!hls || canPlay(canPlayType, "application/vnd.apple.mpegurl") || supportsMse);
     allowed = videos.every(v => h264(codec(v))) && audios.every(a => aac(codec(a))) && supported;
   } else if (webm) {
     allowed = videos.every(v => vp(codec(v))) && audios.every(a => webAudio(codec(a))) &&
