@@ -13,6 +13,7 @@ test("device approval reports the saved account immediately and after reopening 
   t.mock.method(globalThis, "fetch", async input => {
     const path = new URL(input).pathname;
     const responses = {
+      "/oauth/v2/device/code": { device_code: "test-code", user_code: "TESTCODE", expires_in: 600 },
       "/oauth/v2/device/credentials": { client_id: "test-client", client_secret: "test-secret" },
       "/oauth/v2/token": { access_token: "test-access", refresh_token: "test-refresh", expires_in: 3600 },
       "/rest/1.0/user": { username: "device-test" },
@@ -20,7 +21,7 @@ test("device approval reports the saved account immediately and after reopening 
     assert.ok(responses[path], path);
     return Response.json(responses[path]);
   });
-  for (const body of [{ action: "poll_device", device_code: "test-code" }, { action: "status" }]) {
+  for (const body of [{ action: "start_device" }, { action: "poll_device", device_code: "test-code" }, { action: "status" }]) {
     const { client, user } = await deviceClient(owner, directory);
     const req = new Request("http://localhost/functions/realDebridAuth", {
       method: "POST", body: JSON.stringify(body),
@@ -30,6 +31,12 @@ test("device approval reports the saved account immediately and after reopening 
     });
     const response = await realDebridAuth(req);
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).connected, true);
+    const result = await response.json();
+    if (body.action === "start_device") {
+      assert.equal(result.device_code, "test-code");
+      assert.equal(result.user_code, "TESTCODE");
+    } else {
+      assert.equal(result.connected, true);
+    }
   }
 });
