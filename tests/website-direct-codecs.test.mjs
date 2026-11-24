@@ -41,3 +41,13 @@ test("public website rejects before existing browser playback and keeps native r
   assert.match(player,/item: rdOverride \|\| active/);
   assert.match(player,/useNativePlayback \? \(/);
 });
+
+test("HLS requires AAC video/audio support in addition to native container support",()=>{
+  const hls = "https://media.example.test/owned-sample.m3u8";
+  assert.equal(check(item(),hls,{canPlayType:mime=>mime.includes("mpegurl")?"maybe":""}).allowed,false);
+  assert.equal(check(item(),hls,{canPlayType:()=> "probably",mseSupports:()=>{throw Error("unavailable");}}).allowed,true);
+  assert.equal(check(item(),hls,{canPlayType:mime=>mime.includes("avc1")?"probably":"",mseSupports:()=>{throw Error("unavailable");}}).allowed,false);
+});
+test("direct browser URLs do not accept embedded credentials",()=>{
+  assert.equal(check(item(),"https://user:pass@media.example.test/owned-sample.mp4").allowed,false);
+});
