@@ -1,3 +1,4 @@
+import BrowserSourceVlc from "./BrowserSourceVlc";
 import React, {
   useCallback,
   useEffect,
@@ -8946,6 +8947,14 @@ export default function VideoPlayer({
         ).trim()
       : "";
 
+  const [browserFallbackSource, setBrowserFallbackSource] = useState("");
+  const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
+  const useBrowserSourceVlc = !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
+    !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
+    (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
+    typeof BroadcastChannel === "function" && typeof globalThis.crypto?.randomUUID === "function" &&
+    /^https?:\/\//i.test(resolvedSourceUrl) && browserFallbackSource !== resolvedSourceUrl;
+
   const nativePlaybackAvailable =
     nativeFireTvPlayer &&
     /^https?:\/\//i.test(nativePlaybackUrl) &&
@@ -11080,6 +11089,10 @@ export default function VideoPlayer({
                 Media God is handing this stream to the Android native video engine.
               </p>
             </div>
+          ) : useBrowserSourceVlc ? (
+            <BrowserSourceVlc key={resolvedSourceUrl} url={resolvedSourceUrl}
+              startTime={Number(source?.startTime) || 0} onProgress={saveProgress}
+              onFallback={() => setBrowserFallbackSource(resolvedSourceUrl)} />
           ) : rdOverride ? (
             <>
               <LiveVideo

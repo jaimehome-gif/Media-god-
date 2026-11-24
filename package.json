@@ -20,7 +20,9 @@
     "test:playback": "node scripts/episode-playback-regression-check.mjs && node scripts/playback-invariant-check.mjs",
     "test:regression": "npm run test && npm run lint && npm run build && npm run test:playback && npm run test:protected && npm run test:privacy && npm run test:backend && npm run test:ui && npm run test:smoke && npm run test:native",
     "test:full": "npm run test:regression && npm run typecheck",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prebuild": "node scripts/stage-web-vlc.mjs",
+    "predev": "node scripts/stage-web-vlc.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.63",
@@ -68,6 +70,7 @@
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "jspdf": "^4.2.1",
+    "libvlc-wasm": "0.2.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.475.0",
     "moment": "^2.30.1",
