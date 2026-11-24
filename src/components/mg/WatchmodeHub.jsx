@@ -107,9 +107,11 @@ export default function WatchmodeHub() {
         nextRows = await discovery(tab, region, signal);
       }
       if (signal.aborted) return;
-      setRows(nextRows);
+      // An empty stale upstream cache must not replace a usable saved guide.
+      const displayRows = stale && !nextRows.length && savedRows.length ? savedRows : nextRows;
+      setRows(displayRows);
       if (stale) {
-        setError(nextRows.length
+        setError(displayRows.length
           ? "The live catalogue could not be refreshed. Showing previously saved releases; try again shortly."
           : "The live catalogue is temporarily unavailable. Please try Refresh.");
       } else {
