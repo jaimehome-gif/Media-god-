@@ -93,6 +93,7 @@ try {
         })));
         throw error;
       }
+      if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
       const result = await page.evaluate(async ()=>{
         const video = document.querySelector('video[data-mg-playback-surface="active"]');
         const context = new AudioContext();
