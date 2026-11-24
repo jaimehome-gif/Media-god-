@@ -44,7 +44,8 @@ test("identity service only approves existing authenticated user IDs and consume
   assert.match(oauth,/WHERE code_hash=\$1 AND approved_user IS NULL AND expires_at>NOW\(\)/);
   assert.match(oauth,/\[sha\(code\),owner\.id\]/);
   assert.match(oauth,/DELETE FROM identity_device_logins WHERE token_hash=\$1 AND expires_at>NOW\(\) AND approved_user IS NOT NULL/);
-  assert.match(oauth,/return respond\(res,410,\{error:"Device sign-in expired or already completed"\}/);
+  assert.match(oauth,/SELECT provider FROM identity_device_logins WHERE token_hash=\$1 AND approved_user IS NULL AND expires_at>NOW\(\)/);
+  assert.match(oauth,/return pending\.rows\[0\]\s*\? respond\(res,200,\{status:"pending"\},origin\)\s*:\s*respond\(res,410,\{error:"Device sign-in expired or already completed"\},origin\)/);
   assert.doesNotMatch(oauth,/body\.approved_user|body\.user_id/);
 });
 

@@ -37,9 +37,11 @@ const readCache = (payload, storage = safeStorage()) => {
   if (!storage) return null;
   try {
     const entry = JSON.parse(storage.getItem(keyFor(payload)) || "null");
+    const age = Date.now() - entry?.savedAt;
     if (!entry || entry.payload !== JSON.stringify(payload || {}) ||
-      Date.now() - Number(entry.savedAt || 0) > (payload?.__resolver ? 7 * CACHE_LIFETIME_MS : CACHE_LIFETIME_MS) ||
-      !entry.data || typeof entry.data !== "object") return null;
+      !Number.isFinite(entry.savedAt) || age < 0 ||
+      age > (payload?.__resolver ? 7 * CACHE_LIFETIME_MS : CACHE_LIFETIME_MS) ||
+      !entry.data || typeof entry.data !== "object" || Array.isArray(entry.data)) return null;
     return entry.data;
   } catch {
     return null;
@@ -71,14 +73,46 @@ const saveCache = (payload, data, storage = safeStorage()) => {
   }
 };
 
+// Only public catalogue query fields belong in the unauthenticated request
+// and its persistent public cache. Never copy arbitrary caller properties.
+const catalogueFields = new Set([
+  "category", "community_reviews", "country", "date", "genre",
+  "include_global_releases", "language", "media_type", "movie_id",
+  "multi_search", "person_id", "provider_catalog", "provider_id", "provider_ids",
+  "provider_pages", "providers_only", "query", "region", "season_number",
+  "timezone", "tmdb_id", "year", "page", "forceRefresh",
+]);
+const publicScalar = value =>
+  typeof value === "string" || typeof value === "boolean" ||
+  (typeof value === "number" && Number.isFinite(value));
+function publicCatalogueRequest(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  const request = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === "release_alerts" && Array.isArray(value)) {
+      request[key] = value.slice(0, 24).flatMap(item => {
+        if (!item || typeof item !== "object") return [];
+        const id = item.tmdb_id ?? item.id;
+        if (!publicScalar(id) || !/^[1-9]\d{0,8}$/.test(String(id))) return [];
+        return [{ tmdb_id: String(id), media_type: item.media_type === "tv" ? "tv" : "movie" }];
+      });
+    } else if (catalogueFields.has(key)) {
+      if (publicScalar(value)) request[key] = value;
+      else if (key === "provider_ids" && Array.isArray(value)) {
+        request[key] = value.filter(publicScalar);
+      }
+    }
+  }
+  return request;
+}
+
 export async function invokeIndependentMetadata(payload = {}, {
   fetchImpl = globalThis.fetch,
   storage = safeStorage(),
   timeoutMs = REQUEST_TIMEOUT_MS,
 } = {}) {
   if (!fetchImpl) throw new Error("Catalogue network unavailable");
-  const request = payload && typeof payload === "object" && !Array.isArray(payload)
-    ? payload : {};
+  const request = publicCatalogueRequest(payload);
   try {
     // The home grid can request the same catalogue segment from several
     // components at once. On TV-box WebViews, share just the pending network
@@ -97,7 +131,8 @@ export async function invokeIndependentMetadata(payload = {}, {
           });
           if (!response.ok) throw new Error(`Independent metadata returned ${response.status}`);
           const parsed = await response.json();
-          if (!parsed || typeof parsed !== "object" || parsed.error) {
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.error ||
+              (["upcoming", "tv_upcoming"].includes(request.category) && !Array.isArray(parsed.movies))) {
             throw new Error("Independent metadata response invalid");
           }
           return parsed;
@@ -133,7 +168,7 @@ export async function invokeIndependentImdbResolver(name, payload = {}, {
     "title", "year", "media_type", "mediaType",
   ];
   const request = Object.fromEntries(
-    allowed.filter(key => input[key] !== undefined).map(key => [key, input[key]]),
+    allowed.filter(key => publicScalar(input[key])).map(key => [key, input[key]]),
   );
   const cacheRequest = { __resolver: name, ...request };
   // Identity mappings are stable: avoid another network round trip (and quota
@@ -261,7 +296,7 @@ export async function invokeIndependentPublicFeature(name, payload = {}, {
     ? payload : {};
   const fields = PUBLIC_FEATURE_FIELDS[name];
   const request = Object.fromEntries(
-    fields.filter(key => input[key] !== undefined).map(key => [key, input[key]]),
+    fields.filter(key => publicScalar(input[key])).map(key => [key, input[key]]),
   );
   const controller = new AbortController();
   const duration = Number(timeoutMs);

@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 
 import { base44 } from "@/api/base44Client";
-import { withGuestDebridPayload } from "@/components/mg/guestDebridDevice";
 
 const clean = (value) =>
   String(value ?? "").trim();
@@ -82,16 +81,21 @@ export default function RealDebridDeviceConnect({
     async ({
       quiet = true,
     } = {}) => {
+      if (!base44.auth.getAccessToken()) {
+        setStatus(null);
+        setError(quiet ? "" : "Sign in to Media God to check your account connection.");
+        return null;
+      }
       setChecking(true);
 
       try {
         const response =
           await base44.functions.invoke(
             "realDebridAuth",
-            withGuestDebridPayload({
+            {
               action:
                 "status",
-            })
+            }
           );
 
         const next =
@@ -183,6 +187,13 @@ export default function RealDebridDeviceConnect({
         if (!deviceCode) {
           return false;
         }
+        if (!base44.auth.getAccessToken()) {
+          clearTimer();
+          setDeviceFlow(null);
+          setStatus(null);
+          setError("Sign in again and request a new device code.");
+          return true;
+        }
 
         const expiresMs =
           Math.max(
@@ -214,12 +225,12 @@ export default function RealDebridDeviceConnect({
           const response =
             await base44.functions.invoke(
               "realDebridAuth",
-              withGuestDebridPayload({
+              {
                 action:
                   "poll_device",
                 device_code:
                   deviceCode,
-              })
+              }
             );
 
           const data =
@@ -335,6 +346,10 @@ export default function RealDebridDeviceConnect({
 
   const startConnect =
     async () => {
+      if (!base44.auth.getAccessToken()) {
+        setError("Sign in to Media God before linking Real-Debrid. Guest linking is currently unavailable.");
+        return;
+      }
       clearTimer();
       setStarting(true);
       setDeviceFlow(null);
@@ -346,10 +361,10 @@ export default function RealDebridDeviceConnect({
         const response =
           await base44.functions.invoke(
             "realDebridAuth",
-            withGuestDebridPayload({
+            {
               action:
                 "start_device",
-            })
+            }
           );
 
         const data =
@@ -430,6 +445,11 @@ export default function RealDebridDeviceConnect({
         return;
       }
 
+      if (!base44.auth.getAccessToken()) {
+        setStatus(null);
+        setError("Sign in to Media God to disconnect your account.");
+        return;
+      }
       setDisconnecting(
         true
       );
@@ -439,10 +459,10 @@ export default function RealDebridDeviceConnect({
       try {
         await base44.functions.invoke(
           "realDebridAuth",
-          withGuestDebridPayload({
+          {
             action:
               "disconnect",
-          })
+          }
         );
 
         clearTimer();
@@ -500,7 +520,7 @@ export default function RealDebridDeviceConnect({
           </h2>
 
           <p className="mt-1 max-w-2xl text-xs leading-5 text-white/50 3xl:text-sm">
-            Link your own Real-Debrid account to your signed-in Media God account. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection across your devices.
+            Link your own Real-Debrid account to your signed-in Media God account. Get the code here, enter it at Real-Debrid, and Media God remembers the approved connection across your devices. Guest linking is currently unavailable.
           </p>
         </div>
 

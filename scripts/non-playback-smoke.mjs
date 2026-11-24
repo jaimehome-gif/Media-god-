@@ -60,6 +60,14 @@ expect(
     watchmode.includes("TVmaze scheduled episodes"),
   "Public discovery features are missing"
 );
+expect(
+  watchmode.includes('new URL("/functions/publicDiscovery", INDEPENDENT_METADATA_API_URL)') &&
+    !watchmode.includes("media-god-metadata-api-production.up.railway.app") &&
+    watchmode.includes("setTimeout(cancel, 25000)") &&
+    watchmode.includes("!Array.isArray(data?.results)") &&
+    watchmode.includes('credentials: "omit"'),
+  "What to Watch must use the current public metadata endpoint, reject malformed results and bound discovery requests"
+);
 expect(watchmodeBackend.includes("WATCHMODE_API_KEY") && watchmodeBackend.includes("X-API-Key"), "Watchmode key is not securely proxied");
 expect(details.includes("data-mg-watchmode-title-data"), "Watchmode title enrichment is missing");
 expect(home.includes("<SettingsView"), "Settings view is missing");

@@ -264,7 +264,8 @@ async function publicDiscovery(req) {
       url.searchParams.set("country", region);
       url.searchParams.set("date", date);
       const data = await read(url);
-      const rows = Array.isArray(data) ? data.slice(0, 100).map(tvRow) : [];
+      if (!Array.isArray(data)) throw new Error("Invalid TV schedule response");
+      const rows = data.filter(episode => episode && typeof episode === "object" && episode.id != null).slice(0, 100).map(tvRow);
       return json({ results: rows, source: "TVmaze", region, date, liveSports: false });
     } catch { return json({ results: [], source: "TVmaze", error: "TV episode schedule temporarily unavailable" }, 502); }
   }
@@ -276,7 +277,11 @@ async function publicDiscovery(req) {
     const url = new URL("https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php");
     url.searchParams.set("id", String(id));
     const data = await read(url);
-    return Array.isArray(data?.events) ? data.events : [];
+    if (!data || !Object.prototype.hasOwnProperty.call(data, "events") ||
+        (data.events !== null && !Array.isArray(data.events))) {
+      throw new Error("Invalid sports schedule response");
+    }
+    return data.events || [];
   }));
   // Reject any mismatched league the provider might return. An event without
   // an idLeague came from one of the region's explicitly selected league URLs.

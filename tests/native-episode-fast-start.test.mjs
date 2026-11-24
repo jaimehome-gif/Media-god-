@@ -16,6 +16,7 @@ function gate(overrides = {}) {
     bestApprovedAutoplaySourceIndex: 0, bestEnglishAutoplayCandidateIndex: -1,
     bestNonAioTorrentAutoplayCandidateIndex: -1,
     sourceIsAioStreamsCandidate: () => false,
+    manualSourceLockActive: () => false,
     useNativePlayback: true, nativePlaybackUrl: 'https://media.test/episode.mp4',
     rdOverride: null, rdResolving: false, rdPolling: false, rdPreparation: null,
     window: { __MG_PLAYER_CONTEXT__: { skipMarkersPending: true } },

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash, createHmac } from "node:crypto";
+import vm from "node:vm";
 import realDebrid from "../deploy/media-god-rd-api/realDebrid.mjs";
 import realDebridAuth from "../deploy/media-god-rd-api/realDebridAuth.mjs";
 import multiDebrid from "../deploy/media-god-rd-api/multiDebrid.mjs";
@@ -146,17 +148,52 @@ test("mismatched verified-user IDs never gain an authenticated RD client", () =>
   assert.throws(() => createClientFromRequest(req), /Verified Media God account/);
 });
 
-test("Railway RD service requires a real Base44 session, protects actions and excludes guest impersonation", () => {
-  const server = source("deploy/media-god-rd-api/server.mjs");
-  assert.match(server, /createAccountVerificationCache\(/);
-  assert.match(server, /const verifiedClient = createAccountVerificationCache/);
-  assert.match(server, /if \(!verified\) \{/);
-  assert.match(server, /return respond\(res, 401, \{error: "Sign in to Media God to use Real-Debrid\."\}/);
-  assert.match(server, /credentials must not be supplied/i);
-  assert.match(server, /ALLOWED_ORIGINS/);
-  assert.match(server, /private, no-store/);
-  assert.match(server, /\/functions\/realDebridAuth/);
-  assert.match(server, /\/functions\/findRdLibrary/);
+test("Railway RD service requires a verified account, protects actions and excludes guest impersonation", async () => {
+  const server = source("deploy/media-god-rd-api/server.mjs")
+    .replace(/^import .*;$/gm, "")
+    .split("http.createServer(")[0];
+  const id = "11111111-1111-4111-8111-111111111111";
+  const token = "A".repeat(40);
+  const calls = [];
+  let verifiedStoreId = "account-store";
+  const handler = async req => {
+    calls.push(req.__mediaGodVerifiedUserId);
+    return Response.json({ok:true});
+  };
+  const serve = vm.runInNewContext(server + "\nserve", {
+    process: {env: {IDENTITY_VERIFY_URL:"https://identity.invalid/auth/me",
+      RD_ACCOUNT_DERIVATION_KEY:"synthetic-secret-".repeat(4)}},
+    createHash, createHmac, AbortSignal, Request, Response, Buffer, console,
+    realDebrid: handler, realDebridAuth: handler, findRdLibrary: handler,
+    multiDebrid: handler, fetchAddonStreams: handler,
+    fetch: async (_url, options) => options.headers.Authorization === "Bearer " + token
+      ? Response.json({id}) : new Response(null,{status:401}),
+    deviceClient: async () => ({user:{id:"account-store"},client:{auth:{me:async()=>({id:verifiedStoreId})}}}),
+  });
+  async function requestServer(authorization, body = {}, origin = "https://underworldhub.co.uk") {
+    const request = {headers:{authorization,origin},url:"/functions/realDebridAuth",method:"POST",
+      async *[Symbol.asyncIterator]() {yield Buffer.from(JSON.stringify(body));}};
+    const headers = {};
+    const reply = {setHeader:(key,value)=>{headers[key]=value;},
+      writeHead(status){this.status=status;},end(value){this.body=value;}};
+    await serve(request,reply);
+    return {status:reply.status,headers,body:JSON.parse(reply.body)};
+  }
+  for (const authorization of ["", "Device " + token, "Bearer " + "B".repeat(40)]) {
+    assert.equal((await requestServer(authorization)).status,401);
+  }
+  for (const body of [{user_id:"other"}, {guest_device_key:"other"}, {rd_token:"other"}, {rd_client_id:"other"}]) {
+    assert.equal((await requestServer("Bearer " + token,body)).status,400);
+  }
+  assert.equal((await requestServer("Bearer " + token,{}, "https://untrusted.invalid")).status,403);
+  assert.equal(calls.length,0);
+  const accepted = await requestServer("Bearer " + token,{action:"status"});
+  assert.equal(accepted.status,200);
+  assert.equal(accepted.headers["Cache-Control"],"private,no-store");
+  assert.deepEqual(calls,["account-store"]);
+  verifiedStoreId = "another-account";
+  assert.equal((await requestServer("Bearer " + token,{action:"status"})).status,401);
+  assert.deepEqual(calls,["account-store"], "Mismatched account must never reach a handler");
   const guests = source("deploy/media-god-rd-api/guestDebrid.mjs");
   assert.doesNotMatch(guests, /asServiceRole|process\.env\..*TOKEN/);
 });
@@ -170,32 +207,171 @@ test("authenticated Real-Debrid cache-check route returns valid structures", asy
   assert.deepEqual(data.bestProviderByHash, {});
 });
 
-test("client redirects all main RD actions and cached-source checks to verified backend", () => {
-  const client = source("src/api/base44Client.js");
-  const helper = source("src/api/independentRealDebrid.js");
-  assert.match(client, /INDEPENDENT_RD_FUNCTIONS\.has\(String\(name \|\| ''\)\)/);
-  assert.match(client, /readAccountSessionToken\(\)/);
-  assert.match(client, /invokeIndependentRealDebrid\(name, payload, \{ token: sessionToken \}\)/);
+function privateFacadeHarness(fetch, publicLookup = async () => { throw new Error("Unexpected public lookup"); }) {
+  let token = "synthetic-session-A";
+  const localStorage = {getItem:()=>token,setItem:(_key,value)=>{token=value;},removeItem:()=>{token="";}};
+  const code = source("src/api/base44Client.js")
+    .replace(/^import\s+[\s\S]*?from\s+["'][^"']+["'];/gm, "")
+    .replace(/^export\s+/gm, "");
+  return vm.runInNewContext(code + "\nbase44;", {
+    window:{localStorage}, fetch, AbortController, setTimeout, clearTimeout,
+    invokeIndependentAddonSources: publicLookup,
+  });
+}
+
+test("client redirects all main RD actions and cached-source checks to verified backend", async () => {
+  const seen = [];
+  const client = privateFacadeHarness(async (url, options) => {
+    seen.push({url,options});
+    return Response.json({valid:true});
+  });
   for (const name of ["realDebrid", "realDebridAuth", "findRdLibrary", "multiDebrid"]) {
-    assert.match(helper, new RegExp('"' + name + '"'));
+    const action = name === "multiDebrid" ? "check_cache" : "status";
+    const result = await client.functions.invoke(name,{action,guest_device_key:"obsolete-guest"});
+    assert.equal(result.data.valid,true);
+    const {url,options} = seen.at(-1);
+    assert.equal(url,"https://media-god-rd-independent-api-production.up.railway.app/functions/"+name);
+    assert.equal(options.headers.Authorization,"Bearer synthetic-session-A");
+    assert.equal(options.credentials,"omit");
+    assert.equal(JSON.parse(options.body).action,action);
+    assert.doesNotMatch(options.body,/obsolete-guest/);
   }
-  assert.match(helper, /getAccessToken/);
-  assert.match(helper, /credentials: "omit"/);
-  assert.match(helper, /"Authorization": deviceToken \? `Device/);
-  assert.match(helper, /`Bearer \$\{session\}`/);
-  assert.doesNotMatch(helper, /localStorage\.setItem|process\.env/);
-  const server = source("deploy/media-god-rd-api/server.mjs");
-  assert.match(server, /"\/functions\/multiDebrid": multiDebrid/);
+  client.auth.setToken("");
+  await assert.rejects(client.functions.invoke("realDebrid",{action:"status"}),error=>error.status===401);
+  assert.equal(seen.length,4);
+});
+
+test("late private responses cannot enter a different signed-in account", async () => {
+  let release;
+  const pending = new Promise(resolve=>{release=resolve;});
+  const client = privateFacadeHarness(async()=>pending);
+  const request = client.functions.invoke("realDebrid",{action:"status"});
+  client.auth.setToken("synthetic-session-B");
+  release(Response.json({valid:true}));
+  await assert.rejects(request,error=>error.code==="SESSION_CHANGED");
+  assert.equal(client.auth.getAccessToken(),"synthetic-session-B");
 });
 
 test("Railway Dockerfile packages every local Real-Debrid server import", () => {
   const server = source("deploy/media-god-rd-api/server.mjs");
   const dockerfile = source("deploy/media-god-rd-api/Dockerfile");
-  const localModules = [...server.matchAll(/from ["']\.\/([^"']+)["']/g)]
-    .map(match => match[1]);
-  assert.ok(localModules.includes("accountVerificationCache.mjs"));
-  for (const filename of localModules) {
-    assert.ok(dockerfile.includes(filename),
-      "Railway Dockerfile must copy " + filename);
+  const visited = new Set();
+  const inspect = code => {
+    const localModules = [...code.matchAll(/from ["']\.\/([^"']+)["']/g)]
+      .map(match => match[1]);
+    for (const filename of localModules) {
+      if (visited.has(filename)) continue;
+      visited.add(filename);
+      assert.ok(dockerfile.includes(filename),
+        "Railway Dockerfile must copy " + filename);
+      inspect(source("deploy/media-god-rd-api/" + filename));
+    }
+  };
+  inspect(server);
+  assert.ok(visited.has("deviceClient.mjs"), "Verified account client must be packaged");
+  assert.ok(visited.has("verifiedUserClient.mjs"), "Verified request helper must be packaged");
+});
+
+
+test("authenticated addon actions never degrade into anonymous discovery", async () => {
+  for (const status of [401, 403, 429, 503]) {
+    let privateCalls = 0, publicCalls = 0;
+    const client = privateFacadeHarness(async (url, options) => {
+      privateCalls++;
+      assert.equal(url, "https://media-god-rd-independent-api-production.up.railway.app/functions/fetchAddonStreams");
+      assert.equal(options.headers.Authorization, "Bearer synthetic-session-A");
+      assert.equal(JSON.parse(options.body).action, "health");
+      return Response.json({error:"Unavailable"}, {status});
+    }, async () => { publicCalls++; return {data:{streams:[]}}; });
+    await assert.rejects(client.functions.invoke("fetchAddonStreams",{action:"health"}), error=>error.status===status);
+    client.auth.setToken("");
+    await assert.rejects(client.functions.invoke("fetchAddonStreams",{action:"health"}), error=>error.status===401);
+    assert.equal(privateCalls,1);
+    assert.equal(publicCalls,0);
+    await client.functions.invoke("fetchAddonStreams",{media_type:"movie",imdb_id:"tt0000001"});
+    assert.equal(publicCalls,1);
   }
+});
+
+test("device approval is bound to the verified account, expires and is consumed", async () => {
+  const original = globalThis.fetch;
+  const users = new Map([["account-a",{id:"account-a"}],["account-b",{id:"account-b"}]]);
+  const calls = [];
+  const code = "synthetic-provider-device-code";
+  function scopedRequest(id, action, body={}) {
+    const user = users.get(id);
+    const req = new Request("https://local.test/functions/realDebridAuth",{
+      method:"POST",body:JSON.stringify({action,...body}),
+    });
+    const client={auth:{
+      me:async()=>users.get(id),
+      updateMe:async patch=>{
+        const next={...users.get(id),...patch,id};
+        users.set(id,next);return next;
+      },
+    }};
+    Object.defineProperties(req,{
+      __mediaGodVerifiedClient:{value:client},
+      __mediaGodVerifiedUser:{value:user},
+      __mediaGodVerifiedUserId:{value:id},
+    });
+    return req;
+  }
+  try {
+    globalThis.fetch=async url=>{
+      calls.push(String(url));
+      if(String(url).includes("/device/code")) return Response.json({device_code:code,user_code:"TESTCODE",expires_in:600});
+      if(String(url).includes("/device/credentials")) return Response.json({client_id:"test-client",client_secret:"test-secret"});
+      if(String(url).endsWith("/token")) return Response.json({access_token:"test-access",refresh_token:"test-refresh",expires_in:600});
+      return Response.json({premium:1,username:"sample"});
+    };
+    const start=await realDebridAuth(scopedRequest("account-a","start_device"));
+    assert.equal(start.status,200);
+    assert.equal((await start.json()).device_code,code);
+    assert.equal(users.get("account-a").rd_pending_device_hash,createHash("sha256").update(code).digest("hex"));
+    assert.doesNotMatch(JSON.stringify(users.get("account-a")),/synthetic-provider-device-code/);
+    const before=calls.length;
+    const denied=await realDebridAuth(scopedRequest("account-b","poll_device",{device_code:code}));
+    assert.equal(denied.status,403);
+    assert.equal(calls.length,before);
+    const expiry=users.get("account-a").rd_pending_device_expires_at;
+    users.get("account-a").rd_pending_device_expires_at=Date.now()-1;
+    assert.equal((await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}))).status,403);
+    assert.equal(calls.length,before);
+    users.get("account-a").rd_pending_device_expires_at=expiry;
+    const approved=await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}));
+    assert.equal(approved.status,200);
+    assert.equal((await approved.json()).connected,true);
+    assert.equal(users.get("account-a").rd_pending_device_hash,"");
+    assert.equal(users.get("account-a").rd_token,"test-access");
+    assert.equal((await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}))).status,403);
+    assert.equal(users.get("account-b").rd_token,undefined);
+  } finally {globalThis.fetch=original;}
+});
+
+test("failed verified-account device-code write never falls back to privileged credentials", async () => {
+  const original = globalThis.fetch;
+  const user = {id:"account-a"};
+  let writes = 0, privilegedWrites = 0;
+  const client = {
+    auth: {me:async()=>user,updateMe:async()=>{writes++;throw Error("Account storage unavailable");}},
+    asServiceRole: {entities:{User:{update:async()=>{privilegedWrites++;return user;}}}},
+  };
+  const req = new Request("https://local.test/functions/realDebridAuth",{
+    method:"POST",body:JSON.stringify({action:"start_device"}),
+  });
+  Object.defineProperties(req,{
+    __mediaGodVerifiedClient:{value:client},
+    __mediaGodVerifiedUser:{value:user},
+    __mediaGodVerifiedUserId:{value:user.id},
+  });
+  try {
+    globalThis.fetch = async () => Response.json({device_code:"test-code",user_code:"TESTCODE",expires_in:600});
+    const result = await realDebridAuth(req);
+    assert.equal(result.status,500);
+    assert.equal(writes,1);
+    assert.equal(privilegedWrites,0);
+    const body = await result.json();
+    assert.equal(body.device_code,undefined);
+  } finally {globalThis.fetch=original;}
 });

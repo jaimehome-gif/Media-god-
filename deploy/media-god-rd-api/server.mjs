@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { deviceClient } from "./deviceClient.mjs";
 import realDebrid from "./realDebrid.mjs";
 import realDebridAuth from "./realDebridAuth.mjs";
@@ -50,25 +50,42 @@ function limited(key) {
   if (rate.size>5000) for(const [k,v] of rate) if(v.until<=now)rate.delete(k);
   return next.count>LIMIT;
 }
+// Share only concurrent identity checks for the same bearer. Never reuse
+// a completed authorization decision or cache a denial across requests.
+const verificationPending = new Map();
+const MAX_PENDING_VERIFICATIONS = 500;
+async function verifiedIdentityId(token) {
+  const key = createHash("sha256").update(token).digest("hex");
+  const existing = verificationPending.get(key);
+  if (existing) return existing;
+  if (verificationPending.size >= MAX_PENDING_VERIFICATIONS) {
+    throw Error("Identity verification busy");
+  }
+  const task = (async () => {
+    const response = await fetch(VERIFY_URL, {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token },
+      signal: AbortSignal.timeout(5000),
+      cache: "no-store"
+    });
+    if (response.status === 401 || response.status === 403) return null;
+    if (!response.ok) throw Error("Identity service unavailable");
+    const user = await response.json();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(user?.id || "")) ? user.id : null;
+  })();
+  verificationPending.set(key, task);
+  try { return await task; }
+  finally { if (verificationPending.get(key) === task) verificationPending.delete(key); }
+}
 async function verifyIdentity(header) {
   const match=/^Bearer ([A-Za-z0-9_-]{30,200})$/.exec(String(header||""));
   if (!match) return null;
   try {
-    const response=await fetch(VERIFY_URL,{
-      method:"GET",
-      headers:{Authorization:"Bearer "+match[1]},
-      signal:AbortSignal.timeout(5000),
-      cache:"no-store"
-    });
-    if (response.status===401 || response.status===403) return null;
-    if (!response.ok) throw Error("Identity service unavailable");
-    const user=await response.json();
-    if (!/^[0-9a-f-]{36}$/i.test(String(user?.id||""))) return null;
-    // The independently verified account receives one stable encrypted
-    // Real-Debrid credential store across all of its devices. Its private
-    // capability never goes to the client and is not logged.
+    const id = await verifiedIdentityId(match[1]);
+    if (!id) return null;
+    // Each request gets its own client, tied only to the verified account.
     const capability=createHmac("sha256",ACCOUNT_KEY)
-      .update("mg-account-rd-v1:"+user.id).digest("hex");
+      .update("mg-account-rd-v1:"+id).digest("hex");
     return await deviceClient("Device "+capability);
   }catch {
     throw Error("Account verification temporarily unavailable");
@@ -108,7 +125,7 @@ async function serve(req,res) {
     body=JSON.parse(Buffer.concat(parts).toString("utf8")||"{}");
     if (!body||typeof body!=="object"||Array.isArray(body)) throw Error("Invalid JSON");
   }catch{return reply(res,400,{error:"Invalid JSON"},origin);}
-  if (["rd_token","rd_refresh_token","rd_client_secret","user_id","guest_device_key","authorization","access_token"].some(k=>k in body)) {
+  if (["rd_token","rd_refresh_token","rd_client_secret","rd_client_id","user_id","guest_device_key","authorization","access_token"].some(k=>k in body)) {
     return reply(res,400,{error:"Credentials cannot be supplied in requests"},origin);
   }
   const action=/^[a-z_]{1,40}$/i.test(String(body.action||""))?body.action:"unknown";
@@ -118,6 +135,9 @@ async function serve(req,res) {
     });
     const result=await exclusive(verified.user.id,async () => {
       const currentUser = await verified.client.auth.me();
+      if (!currentUser || currentUser.id !== verified.user.id) {
+        return Response.json({error:"Account verification mismatch"},{status:401});
+      }
       Object.defineProperties(request,{
         __mediaGodVerifiedClient:{value:verified.client},
         __mediaGodVerifiedUserId:{value:verified.user.id},

@@ -75,24 +75,18 @@ test("source lookup is isolated to the verified account and never exposed by the
   const privateServer = read("deploy/media-god-rd-api/server.mjs");
   const publicServer = read("deploy/media-god-api/server.mjs");
   const publicHandler = read("deploy/media-god-api/fetchAddonStreams.mjs");
-  const client = read("src/api/base44Client.js");
+  // The independent identity API replaces Base44's verification cache.
+  // Behavioural account isolation and revocation are separately exercised in
+  // independent-real-debrid and independent-identity-verification-coalescing.
   assert.match(privateServer, /"\/functions\/fetchAddonStreams": fetchAddonStreams/);
-  assert.match(privateServer, /createAccountVerificationCache\(/);
-  assert.match(privateServer, /const verifiedClient = createAccountVerificationCache/);
-  assert.match(privateServer, /if \(!verified\) \{/);
-  assert.match(privateServer, /return respond\(res, 401, \{error: "Sign in to Media God to use Real-Debrid\."\}/);
-  const recovery = read("src/api/addonSourceRecovery.js");
-  assert.match(client, /searchAddonSourcesWithPublicFallback\(payload/);
-  assert.match(client, /readToken: readAccountSessionToken/);
-  assert.match(client, /invokeAuthenticatedDebrid\('fetchAddonStreams', request, options\)/);
-  assert.match(client, /const invokeAuthenticatedDebrid = async/);
-  assert.match(client, /invokeIndependentRealDebrid\(name, payload, \{ token: sessionToken \}\)/);
-  assert.match(client, /confirmedMediaGodAccount\(\)/);
-  assert.match(client, /searchPublic: invokeIndependentAddonSources/);
-  assert.match(recovery, /if \(!sessionToken\) return recoverPublic\(\)/);
-  assert.match(recovery, /personal\.data\.streams\.length > 0/);
+  assert.match(privateServer, /verified=await verifyIdentity\(req\.headers\.authorization\)/);
+  assert.match(privateServer, /if \(!verified\) return reply\(res,401/);
+  assert.match(privateServer, /currentUser\.id !== verified\.user\.id/);
+  assert.match(privateServer, /__mediaGodVerifiedClient:\{value:verified\.client\}/);
+  assert.match(privateServer, /__mediaGodVerifiedUserId:\{value:verified\.user\.id\}/);
   assert.match(publicHandler, /auth: \{ me: async \(\) => null \}/);
-  assert.doesNotMatch(publicServer, /"\/functions\/fetchAddonStreams":.*verifiedClient/);
+  assert.match(publicHandler, /Addon: \{ list: async \(\) => \[\] \}/);
+  assert.doesNotMatch(publicServer, /__mediaGodVerifiedClient|__mediaGodVerifiedUserId|verifiedClient/);
 });
 
 test("both backend discovery paths honour upstream 429 instead of immediately retrying it", () => {

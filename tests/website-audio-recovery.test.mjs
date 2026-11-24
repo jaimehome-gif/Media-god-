@@ -16,12 +16,11 @@ test("normal one-click Play remains OnlyFlix and its iframe is not replaced",()=
   assert.match(only,/sandbox="allow-scripts allow-same-origin allow-presentation"/);
 });
 
-test("website-only OnlyFlix audio recovery offers an accessible topbar action",()=>{
-  assert.match(only,/!isFireTv && activeEpisodePlayer !== "vyla" && typeof onOpenSources === "function"/);
-  assert.match(only,/data-mg-embedded-top-web-sound-recovery="true"/);
-  assert.match(only,/aria-label="Fix website sound with Media God"/);
-  assert.match(only,/onClick=\{onOpenSources\}/);
-  assert.match(only,/data-mg-embed-web-sound-recovery="true"/);
+test("embedded player offers accessible Sources control for first-party audio recovery",()=>{
+  // The source-reviewed embed keeps one accessible Sources action, not a
+  // second duplicate control. Verify that it invokes the actual player route.
+  assert.match(only, /data-mg-embedded-open-sources="true"\s+onClick=\{onOpenSources\}\s+aria-label="Sources inside video player"/);
+  assert.match(core, /openSourcesDrawer: true/);
   assert.match(core,/onOpenSources=\{\(\) => \{/);
   assert.match(core,/skipAddonLookup: false/);
   assert.match(core,/skipRdLookup: false/);
