@@ -292,3 +292,59 @@ test("authenticated addon actions never degrade into anonymous discovery", async
     assert.equal(publicCalls,1);
   }
 });
+
+test("device approval is bound to the verified account, expires and is consumed", async () => {
+  const original = globalThis.fetch;
+  const users = new Map([["account-a",{id:"account-a"}],["account-b",{id:"account-b"}]]);
+  const calls = [];
+  const code = "synthetic-provider-device-code";
+  function scopedRequest(id, action, body={}) {
+    const user = users.get(id);
+    const req = new Request("https://local.test/functions/realDebridAuth",{
+      method:"POST",body:JSON.stringify({action,...body}),
+    });
+    const client={auth:{
+      me:async()=>users.get(id),
+      updateMe:async patch=>{
+        const next={...users.get(id),...patch,id};
+        users.set(id,next);return next;
+      },
+    }};
+    Object.defineProperties(req,{
+      __mediaGodVerifiedClient:{value:client},
+      __mediaGodVerifiedUser:{value:user},
+      __mediaGodVerifiedUserId:{value:id},
+    });
+    return req;
+  }
+  try {
+    globalThis.fetch=async url=>{
+      calls.push(String(url));
+      if(String(url).includes("/device/code")) return Response.json({device_code:code,user_code:"TESTCODE",expires_in:600});
+      if(String(url).includes("/device/credentials")) return Response.json({client_id:"test-client",client_secret:"test-secret"});
+      if(String(url).endsWith("/token")) return Response.json({access_token:"test-access",refresh_token:"test-refresh",expires_in:600});
+      return Response.json({premium:1,username:"sample"});
+    };
+    const start=await realDebridAuth(scopedRequest("account-a","start_device"));
+    assert.equal(start.status,200);
+    assert.equal((await start.json()).device_code,code);
+    assert.equal(users.get("account-a").rd_pending_device_hash,createHash("sha256").update(code).digest("hex"));
+    assert.doesNotMatch(JSON.stringify(users.get("account-a")),/synthetic-provider-device-code/);
+    const before=calls.length;
+    const denied=await realDebridAuth(scopedRequest("account-b","poll_device",{device_code:code}));
+    assert.equal(denied.status,403);
+    assert.equal(calls.length,before);
+    const expiry=users.get("account-a").rd_pending_device_expires_at;
+    users.get("account-a").rd_pending_device_expires_at=Date.now()-1;
+    assert.equal((await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}))).status,403);
+    assert.equal(calls.length,before);
+    users.get("account-a").rd_pending_device_expires_at=expiry;
+    const approved=await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}));
+    assert.equal(approved.status,200);
+    assert.equal((await approved.json()).connected,true);
+    assert.equal(users.get("account-a").rd_pending_device_hash,"");
+    assert.equal(users.get("account-a").rd_token,"test-access");
+    assert.equal((await realDebridAuth(scopedRequest("account-a","poll_device",{device_code:code}))).status,403);
+    assert.equal(users.get("account-b").rd_token,undefined);
+  } finally {globalThis.fetch=original;}
+});
