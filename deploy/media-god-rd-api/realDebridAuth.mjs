@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createClientFromRequest } from "./verifiedUserClient.mjs";
 import {
   loadGuestDebridCredential,
@@ -71,6 +72,7 @@ const saveTokenSet = async ({
   guestDeviceHash,
   credentials,
   tokenData,
+  clearPendingDevice = false,
 }) => {
   if (!tokenData?.access_token) {
     throw new Error(
@@ -84,6 +86,7 @@ const saveTokenSet = async ({
     guestRecord,
     guestDeviceHash,
     patch: {
+      ...(clearPendingDevice ? { rd_pending_device_hash: "", rd_pending_device_expires_at: 0 } : {}),
       rd_token: clean(
         tokenData.access_token
       ),
@@ -531,6 +534,16 @@ export default async function (
         );
       }
 
+      // Bind the provider's secret device code to this verified account.
+      // Store only its digest in the encrypted account record.
+      const expiresIn = Math.min(3600, Math.max(60, Number(data.expires_in) || 1800));
+      await updateCredentialOwner({
+        base44, user, guestRecord, guestDeviceHash,
+        patch: {
+          rd_pending_device_hash: createHash("sha256").update(clean(data.device_code)).digest("hex"),
+          rd_pending_device_expires_at: Date.now() + expiresIn * 1000,
+        },
+      });
       return Response.json({
         device_code:
           clean(
@@ -592,6 +605,14 @@ export default async function (
             status: 400,
           }
         );
+      }
+
+      const owner = user || guestRecord;
+      const expectedHash = owner?.rd_pending_device_hash;
+      const expiry = Number(owner?.rd_pending_device_expires_at);
+      if (!expectedHash || !Number.isFinite(expiry) || expiry <= Date.now() ||
+          expectedHash !== createHash("sha256").update(deviceCode).digest("hex")) {
+        return Response.json({error: "Start a new Real-Debrid device code on this account."}, {status: 403});
       }
 
       const url =
@@ -679,6 +700,7 @@ export default async function (
         guestDeviceHash,
         credentials,
         tokenData,
+        clearPendingDevice: true,
       });
 
       const freshUser =
@@ -825,6 +847,8 @@ export default async function (
         guestRecord,
         guestDeviceHash,
         patch: {
+          rd_pending_device_hash: "",
+          rd_pending_device_expires_at: 0,
           rd_token: "",
 
           rd_refresh_token:
