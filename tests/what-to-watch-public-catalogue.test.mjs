@@ -76,7 +76,7 @@ function runDiscovery(fetchImpl, timeoutImmediately = false) {
     setTimeout: (callback, delay) => setTimeout(callback, timeoutImmediately ? 0 : delay),
     clearTimeout,
   };
-  return vm.runInNewContext("(" + source.slice(start, end).trim() + ")('tv', 'GB', signal)", context);
+  return vm.runInNewContext("(" + source.slice(start, end).trim() + ")('tv', 'GB', signal, '2026-11-24')", context);
 }
 
 test("malformed public guide results are errors rather than a cacheable empty list", async () => {
@@ -89,4 +89,49 @@ test("a stalled public guide request exits with a retryable timeout", async () =
   await assert.rejects(runDiscovery(async (_url, { signal }) => new Promise((_resolve, reject) => {
     signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
   }), true), /timed out/);
+});
+
+test("public guide requests use the selected local date as part of the server cache key", async () => {
+  let request;
+  await runDiscovery(async (_url, options) => {
+    request = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ results: [] }) };
+  });
+  assert.equal(request.date, "2026-11-24");
+  assert.equal(request.region, "GB");
+});
+
+const serverSource = readFileSync(new URL("../deploy/media-god-api/server.mjs", import.meta.url), "utf8");
+
+function runServerGuide(action, providerResponse) {
+  const start = serverSource.indexOf("const json = (data, status");
+  const end = serverSource.indexOf("async function publicDiscovery(req)", start);
+  assert.ok(start >= 0 && end > start);
+  const context = {
+    Response, Request, URL, Date,
+    fetch: async () => ({ ok: true, json: async () => providerResponse }),
+    AbortSignal,
+    request: new Request("https://example.invalid/functions/publicDiscovery", {
+      method: "POST",
+      body: JSON.stringify({ action, region: "GB", date: "2026-11-24" }),
+    }),
+  };
+  return vm.runInNewContext(serverSource.slice(start) + "\npublicDiscovery(request)", context);
+}
+
+test("malformed TV provider responses are not successful empty schedules", async () => {
+  const result = await runServerGuide("tv", { error: "unexpected envelope" });
+  assert.equal(result.status, 502);
+  assert.match((await result.json()).error, /temporarily unavailable/);
+});
+
+test("malformed sports provider responses are not successful empty schedules", async () => {
+  const result = await runServerGuide("sports", { error: "unexpected envelope" });
+  assert.equal(result.status, 502);
+});
+
+test("an explicitly empty sports schedule is still a valid response", async () => {
+  const result = await runServerGuide("sports", { events: null });
+  assert.equal(result.status, 200);
+  assert.deepEqual((await result.json()).results, []);
 });
