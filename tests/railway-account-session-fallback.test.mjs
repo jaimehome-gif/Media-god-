@@ -103,3 +103,15 @@ test("failed account verification must not flood the backend on subsequent reque
   }
   assert.equal(requests.length, 1, "authentication failures must not be retried for every candidate");
 });
+
+
+test("a rejected session does not suppress a different newly signed-in session", async () => {
+  const {client, requests} = createHarness({status:401});
+  await assert.rejects(client.functions.invoke("realDebridAuth", {action:"status"}), isStatus(401));
+  await assert.rejects(client.functions.invoke("realDebridAuth", {action:"status"}), isStatus(401));
+  assert.equal(requests.length, 1);
+  client.auth.setToken("new-account-token");
+  await assert.rejects(client.functions.invoke("realDebridAuth", {action:"status"}), isStatus(401));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].headers.Authorization, "Bearer new-account-token");
+});
