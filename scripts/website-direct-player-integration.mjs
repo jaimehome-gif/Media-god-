@@ -80,7 +80,7 @@ try {
       },{name,v,a});
       assert.equal(gate.allowed,true,name+" compatibility gate");
       try {
-        await page.waitForSelector('video[data-mg-playback-surface="true"]',{timeout:20000});
+        await page.waitForSelector('video[data-mg-playback-surface="active"]',{timeout:20000});
       } catch (error) {
         console.error("Mount diagnostics",await page.evaluate(()=>({
           readyState:document.readyState,
@@ -90,7 +90,7 @@ try {
         throw error;
       }
       const result = await page.evaluate(async ()=>{
-        const video = document.querySelector('video[data-mg-playback-surface="true"]');
+        const video = document.querySelector('video[data-mg-playback-surface="active"]');
         const context = new AudioContext();
         await context.resume();
         const source = context.createMediaElementSource(video);
