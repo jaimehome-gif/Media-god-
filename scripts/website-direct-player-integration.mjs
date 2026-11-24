@@ -56,15 +56,19 @@ try {
   await vite.listen();
   browser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
-  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true]];
-  for (const [name,v,a,host,full] of cases) {
+  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true]];
+  for (const [name,v,a,host,full,mobile] of cases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await browser.newPage();
+    if (mobile) {
+      await page.setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36");
+      await page.setViewport({width:393,height:873,deviceScaleFactor:2,isMobile:true,hasTouch:true});
+    }
     const renderErrors = [];
     page.on("pageerror",error=>{ renderErrors.push(error.message); console.error("Fixture page:",error.message); });
     page.on("console",message=>{
       if (["error","warning"].includes(message.type())) console.error("Fixture browser:",message.text().slice(0,1200));
-      if (/Maximum update depth exceeded|Too many re-renders/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
+      if (/Maximum update depth exceeded|Too many re-renders|Encountered two children with the same key/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
     });
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
     await page.setRequestInterception(true);
@@ -117,7 +121,7 @@ try {
             error:video.error?.message || ""};
         } finally {await context.close();}
       });
-      console.log(host,full?"Sources VideoPlayer":"LiveVideo",name,JSON.stringify(result));
+      console.log(host,mobile?"mobile Chrome emulation": "desktop",full?"Sources VideoPlayer":"LiveVideo",name,JSON.stringify(result));
       assert.ok(result.time>0 && result.decodedFrames>0 && result.width>0 && result.height>0,name+" actual component picture");
       assert.ok(result.audioRms>0.001 && !result.muted,name+" actual component audio");
       assert.deepEqual(renderErrors, [], name+" no browser exceptions or render loops");
