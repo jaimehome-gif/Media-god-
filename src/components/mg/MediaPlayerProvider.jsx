@@ -17,6 +17,7 @@ import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
 import { buildVidCoreEmbedUrl } from "@/components/mg/vidCoreEmbed";
 import { buildTwoEmbedEmbedUrl, buildCineSrcEmbedUrl, buildMultiEmbedEmbedUrl } from "@/components/mg/extraEmbedProviders"; import { buildOnlyFlixEmbedUrl } from "@/components/mg/onlyFlixEmbed";
 import { stopExclusivePlayback } from "@/components/mg/exclusivePlayback";
+import { isWebsiteSourcesRuntime, filterPublishedWebSources, browserPlaybackCapabilities } from "./webSourcesCompatibility.js";
 import { detectLanguagePreference, getPlaybackDeviceProfile, scoreSourceCompatibility, sourcePlaybackCompatibilityTier } from "@/components/mg/mediaCompatibility";
 import { devicePlaybackReliabilityAdjustment, exactPlaybackSourceLabel } from "@/components/mg/playbackReliability";
 import { readPlaybackPreferences } from "@/components/mg/playbackPreferences";
@@ -2924,6 +2925,18 @@ export function PlayerProvider({
                 "live"
           );
 
+        // Only an explicit Sources action on the public website can enable this.
+        // Keep the native app, Live TV and ordinary Play publication unchanged.
+        const browserSourcesOnly = !isLive && request?.webSourcesRequest === true &&
+          isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname);
+        const publishSource = browserSourcesOnly
+          ? (next) => setSource(current => {
+              const value = typeof next === "function" ? next(current) : next;
+              if (value === current) return current;
+              return filterPublishedWebSources(value, browserPlaybackCapabilities());
+            })
+          : setSource;
+
         const originalSources =
           stripVodTrailerSources(
             suppliedSources,
@@ -3060,7 +3073,7 @@ export function PlayerProvider({
          * in the background and replaces this loading row as soon as either
          * Real-Debrid or an addon returns something playable.
          */
-        setSource({
+        publishSource({
           ...request,
           playRequestId: playId,
           id: request?.id,
@@ -3133,7 +3146,7 @@ export function PlayerProvider({
             return;
           }
 
-          setSource((current) => {
+          publishSource((current) => {
             if (
               !current ||
               current.playRequestId !== playId ||
@@ -3393,7 +3406,7 @@ export function PlayerProvider({
           !isLive &&
           identityAlternateTitles.length > 0
         ) {
-          setSource((current) => {
+          publishSource((current) => {
             if (
               !current ||
               current.playRequestId !== playId ||
@@ -3587,7 +3600,7 @@ export function PlayerProvider({
           }
 
           /* No qualifying or preparable episode source yet; await full search. */
-          setSource((current) => {
+          publishSource((current) => {
             if (
               !current ||
               current.playRequestId !== playId ||
@@ -3743,7 +3756,7 @@ export function PlayerProvider({
            * never promoted into active playback here; final autoplay selection
            * happens after cache annotation + strict RD media/audio qualification.
            */
-          setSource((current) => {
+          publishSource((current) => {
             if (
               !current ||
               current.playRequestId !== playId ||
@@ -4262,7 +4275,7 @@ export function PlayerProvider({
         const activeUrl = getSourceUrl(primary);
         if (!isCurrentPlay()) return false;
 
-        setSource({
+        publishSource({
           ...request,
 
           playRequestId:
@@ -4680,6 +4693,8 @@ export function PlayerProvider({
             preferRd: true,
             resumeFromHistory: true,
             verifiedPlaybackPolicy: "strict",
+            ...(isWebsiteSourcesRuntime(getPlaybackDeviceProfile(), globalThis.location?.hostname)
+              ? { webSourcesRequest: true } : {}),
           });
         }}
       />
