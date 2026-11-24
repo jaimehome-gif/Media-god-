@@ -125,7 +125,7 @@ async function serve(req,res) {
     body=JSON.parse(Buffer.concat(parts).toString("utf8")||"{}");
     if (!body||typeof body!=="object"||Array.isArray(body)) throw Error("Invalid JSON");
   }catch{return reply(res,400,{error:"Invalid JSON"},origin);}
-  if (["rd_token","rd_refresh_token","rd_client_secret","user_id","guest_device_key","authorization","access_token"].some(k=>k in body)) {
+  if (["rd_token","rd_refresh_token","rd_client_secret","rd_client_id","user_id","guest_device_key","authorization","access_token"].some(k=>k in body)) {
     return reply(res,400,{error:"Credentials cannot be supplied in requests"},origin);
   }
   const action=/^[a-z_]{1,40}$/i.test(String(body.action||""))?body.action:"unknown";
@@ -135,6 +135,9 @@ async function serve(req,res) {
     });
     const result=await exclusive(verified.user.id,async () => {
       const currentUser = await verified.client.auth.me();
+      if (!currentUser || currentUser.id !== verified.user.id) {
+        return Response.json({error:"Account verification mismatch"},{status:401});
+      }
       Object.defineProperties(request,{
         __mediaGodVerifiedClient:{value:verified.client},
         __mediaGodVerifiedUserId:{value:verified.user.id},
