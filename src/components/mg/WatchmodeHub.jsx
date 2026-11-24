@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Loader2, RefreshCw, Radio, Tv, Film, AlertCircle, ExternalLink } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { INDEPENDENT_METADATA_API_URL } from "@/api/independentMetadata.js";
 import { readPublicSection, savePublicSection, orderUpcomingReleases } from "./publicSectionCache.js";
 
-const API = "https://media-god-metadata-api-production.up.railway.app/functions/publicDiscovery";
+const API = new URL("./publicDiscovery", INDEPENDENT_METADATA_API_URL).href;
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value||"")) ? value : "";
 const tabs = [
