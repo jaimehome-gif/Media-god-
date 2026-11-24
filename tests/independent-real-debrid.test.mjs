@@ -203,22 +203,48 @@ test("authenticated Real-Debrid cache-check route returns valid structures", asy
   assert.deepEqual(data.bestProviderByHash, {});
 });
 
-test("client redirects all main RD actions and cached-source checks to verified backend", () => {
-  const client = source("src/api/base44Client.js");
-  const helper = source("src/api/independentRealDebrid.js");
-  assert.match(client, /INDEPENDENT_RD_FUNCTIONS\.has\(String\(name \|\| ''\)\)/);
-  assert.match(client, /readAccountSessionToken\(\)/);
-  assert.match(client, /invokeIndependentRealDebrid\(name, payload, \{ token: sessionToken \}\)/);
+function privateFacadeHarness(fetch) {
+  let token = "synthetic-session-A";
+  const localStorage = {getItem:()=>token,setItem:(_key,value)=>{token=value;},removeItem:()=>{token="";}};
+  const code = source("src/api/base44Client.js")
+    .replace(/^import\s+[\s\S]*?from\s+["'][^"']+["'];/gm, "")
+    .replace(/^export\s+/gm, "");
+  return vm.runInNewContext(code + "\nbase44;", {
+    window:{localStorage}, fetch, AbortController, setTimeout, clearTimeout,
+  });
+}
+
+test("client redirects all main RD actions and cached-source checks to verified backend", async () => {
+  const seen = [];
+  const client = privateFacadeHarness(async (url, options) => {
+    seen.push({url,options});
+    return Response.json({valid:true});
+  });
   for (const name of ["realDebrid", "realDebridAuth", "findRdLibrary", "multiDebrid"]) {
-    assert.match(helper, new RegExp('"' + name + '"'));
+    const action = name === "multiDebrid" ? "check_cache" : "status";
+    const result = await client.functions.invoke(name,{action,guest_device_key:"obsolete-guest"});
+    assert.equal(result.data.valid,true);
+    const {url,options} = seen.at(-1);
+    assert.equal(url,"https://media-god-rd-independent-api-production.up.railway.app/functions/"+name);
+    assert.equal(options.headers.Authorization,"Bearer synthetic-session-A");
+    assert.equal(options.credentials,"omit");
+    assert.equal(JSON.parse(options.body).action,action);
+    assert.doesNotMatch(options.body,/obsolete-guest/);
   }
-  assert.match(helper, /getAccessToken/);
-  assert.match(helper, /credentials: "omit"/);
-  assert.match(helper, /"Authorization": deviceToken \? `Device/);
-  assert.match(helper, /`Bearer \$\{session\}`/);
-  assert.doesNotMatch(helper, /localStorage\.setItem|process\.env/);
-  const server = source("deploy/media-god-rd-api/server.mjs");
-  assert.match(server, /"\/functions\/multiDebrid": multiDebrid/);
+  client.auth.setToken("");
+  await assert.rejects(client.functions.invoke("realDebrid",{action:"status"}),error=>error.status===401);
+  assert.equal(seen.length,4);
+});
+
+test("late private responses cannot enter a different signed-in account", async () => {
+  let release;
+  const pending = new Promise(resolve=>{release=resolve;});
+  const client = privateFacadeHarness(async()=>pending);
+  const request = client.functions.invoke("realDebrid",{action:"status"});
+  client.auth.setToken("synthetic-session-B");
+  release(Response.json({valid:true}));
+  await assert.rejects(request,error=>error.code==="SESSION_CHANGED");
+  assert.equal(client.auth.getAccessToken(),"synthetic-session-B");
 });
 
 test("Railway Dockerfile packages every local Real-Debrid server import", () => {
