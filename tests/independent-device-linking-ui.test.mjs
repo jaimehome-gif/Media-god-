@@ -31,3 +31,16 @@ for (const [file, marker] of [
     });
   }
 }
+
+test("anonymous Addons visits do not generate legacy keys or call the private account API", () => {
+  const source = readFileSync(new URL("../src/components/mg/RealDebridDeviceConnect.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /withGuestDebridPayload|guest_device_key/);
+  const start = source.indexOf("if (!base44.auth.getAccessToken())", source.indexOf("const loadStatus"));
+  const end = source.indexOf("setChecking(true)", start);
+  assert.ok(start >= 0 && end > start);
+  const check = vm.runInNewContext("(async function(quiet){" + source.slice(start,end) + "return 'network';})", {
+    base44:{auth:{getAccessToken:()=>""}},
+    setStatus:()=>{},setError:()=>{},
+  });
+  return check(true).then(result=>assert.equal(result,null));
+});
