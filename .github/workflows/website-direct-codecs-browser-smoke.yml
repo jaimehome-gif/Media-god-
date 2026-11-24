@@ -1,0 +1,27 @@
+name: Website direct media browser smoke
+on:
+  pull_request:
+    branches: [fix/sources-opens-mediagod-20261124]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-codecs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify direct-media policy
+        run: node --test tests/website-direct-codecs.test.mjs
+      - name: Install synthetic media fixture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg openssl
+          google-chrome --version
+      - name: Verify actual browser decoded frames and non-silent audio
+        run: node scripts/website-direct-codecs-browser-smoke.mjs
