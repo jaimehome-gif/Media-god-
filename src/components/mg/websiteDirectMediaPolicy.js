@@ -93,3 +93,16 @@ export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = 
     .some(headers => headers && Object.keys(headers).length)) return false;
   return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }
+
+// Check the resolved transport separately from discovery and codec metadata.
+export function canOpenWebsiteMovi(url, original, rendition) {
+  if (original?.drm || rendition?.drm) return false;
+  if ([original, rendition].some(item => [item?.headers, item?.requestHeaders]
+    .some(headers => Object.keys(headers || {}).length))) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -75,10 +75,10 @@ test("website chooser does not inherit original codecs for an unverified renditi
   assert.equal(isWebsiteDirectSourceChoice({item:originalItem,originalItem,url,...caps}),true);
 });
 
-test("all in-player website menus use the screened entries and native paths retain original choices",()=>{
+test("Sources chooser retains resolver inputs and other website menus retain codec screening",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   const controls=readFileSync(new URL("../src/components/mg/MediaPlayerControls.jsx",import.meta.url),"utf8");
-  assert.match(player,/const presentedSourceEntries = publicWebsiteVod[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
+  assert.match(player,/const presentedSourceEntries = filterDirectChoices[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
   assert.match(player,/entries=\{presentedSourceEntries\}/);
   assert.match(player,/presentedSelectorEntries\.map\(/);
   assert.equal((player.match(/sourceChoiceAllowed=\{publicWebsiteVod \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
@@ -109,11 +109,11 @@ test("both public hostnames use the same direct media engine regardless of launc
 });
 
 
-test("public direct playback menu is screened regardless of launch route without changing the active stream guard",()=>{
+test("public Sources screens the resolved transport independently of chooser rows",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
-  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!publicWebsiteVod\) return true;/);
+  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!filterDirectChoices\) return true;/);
   assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
-  assert.match(player,/const presentedSourceEntries = publicWebsiteVod/);
+  assert.match(player,/const presentedSourceEntries = filterDirectChoices/);
 });
 
 
@@ -154,5 +154,16 @@ test("synthetic website menu remains restricted through normal, rate-limit and r
     assert.deepEqual(visible(""),[0]);
     assert.deepEqual(visible("HTTP 429"),[]);
     assert.deepEqual(visible(""),[0]);
+  }
+});
+
+test("Movi accepts a secure resolved file without codec labels and honours transport constraints", () => {
+  assert.equal(canOpenWebsiteMovi(url, { type: "torrent" }, {}), true);
+  for (const value of ["", "magnet:?xt=demo", "https://user:password@media.example.test/video"]) {
+    assert.equal(canOpenWebsiteMovi(value, {}, {}), false);
+  }
+  for (const field of [{ drm: {} }, { requestHeaders: { Authorization: "fixture" } }]) {
+    assert.equal(canOpenWebsiteMovi(url, {}, field), false);
+    assert.equal(canOpenWebsiteMovi(url, field, {}), false);
   }
 });
