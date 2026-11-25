@@ -1,11 +1,15 @@
 import React, { useState } from "react";
 import { isAndroidMobileRuntime, isFireTvRuntime } from "@/components/mg/runtimePlatform";
 
-export default function PersonalMoviSource() {
-  const [open, setOpen] = useState(false);
+export function canOpenPersonalMovi() {
   const host = globalThis.location?.hostname || "";
-  if (!/^(?:www\.)?underworldhub\.co\.uk$|^media-god-independent-web-production\.up\.railway\.app$/i.test(host) ||
-      globalThis.MediaGodNative || isAndroidMobileRuntime() || isFireTvRuntime()) return null;
+  return /^(?:www\.)?underworldhub\.co\.uk$|^media-god-independent-web-production\.up\.railway\.app$/i.test(host) &&
+    !globalThis.MediaGodNative && !(isAndroidMobileRuntime() || isFireTvRuntime());
+}
+
+export default function PersonalMoviSource({ defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!canOpenPersonalMovi()) return null;
   return (
     <section className="mt-5 rounded-2xl border border-white/10 bg-mg-card p-4 sm:p-5">
       <h2 className="font-bold text-white">Personal media · Movi Player</h2>
