@@ -9116,6 +9116,14 @@ export default function VideoPlayer({
       return;
     }
     if (scan.proven && !scan.decoderFailed) return;
+    // A resolved file can be ready while the browser waits for a user gesture.
+    // Give the viewer time to press Play without consuming the startup timeout.
+    if (moviSource && !rdError && !scan.decoderFailed && player?.paused === true &&
+        player.videoWidth > 0 && player.audioTracks?.length > 0) {
+      scan.started = Date.now();
+      setWebsiteScanMessage("Tap Play to start this source.");
+      return;
+    }
     const preparing = !rdError && !resolvedSourceUrl && rdTorrentId && (rdPolling || rdPreparation);
     const noPeers = preparing && rdPreparation?.seeders != null && Number(rdPreparation.seeders) === 0 &&
       !rdPreparation.lastPollError && Number(rdPreparation.speed_bps || 0) === 0 &&
