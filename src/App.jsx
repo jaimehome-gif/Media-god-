@@ -22,6 +22,7 @@ import PlayerRemote from '@/pages/PlayerRemote';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { PlayerProvider } from '@/components/mg/PlayerProvider.jsx';
 
+const PersonalSourcesPage = lazy(() => import("@/pages/PersonalSourcesPage"));
 const BrowserDecoderTest = lazy(() => import("@/pages/BrowserDecoderTest"));
 const UpdatesHistory = lazy(() => import("@/components/mg/UpdatesView"));
 
@@ -115,6 +116,7 @@ const AuthenticatedApp = () => {
         }
       >
         <Route path="/" element={<Home />} />
+        <Route path="/personal-sources" element={<Suspense fallback={<p className="p-6">Loading personal Sources…</p>}><PersonalSourcesPage /></Suspense>} />
         <Route path="/browser-decoder-test" element={<Suspense fallback={<p className="p-6">Loading decoder test…</p>}><BrowserDecoderTest /></Suspense>} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
