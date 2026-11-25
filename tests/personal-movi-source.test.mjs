@@ -33,3 +33,14 @@ test("Personal Sources is reachable from main website navigation", () => {
   assert.ok(app.includes('path="/personal-sources"'));
   assert.ok(page.includes("<PersonalMoviSource defaultOpen />"));
 });
+
+
+test("empty website source chooser distinguishes unverified files and offers local personal playback",()=>{
+  const drawer=read("src/components/mg/InPlayerSourceDrawer.jsx");
+  assert.match(drawer,/personalFilesAvailable = canOpenPersonalMovi\(\)/);
+  assert.match(drawer,/No verified browser-compatible source ready/);
+  assert.match(drawer,/!discovering && personalFilesAvailable/);
+  assert.match(drawer,/href="\/personal-sources" target="_blank" rel="noopener noreferrer"/);
+  assert.match(drawer,/No alternative sources found/);
+  assert.match(drawer,/onSelect\?\.\(index, item\)/);
+});
