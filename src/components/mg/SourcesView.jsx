@@ -27,6 +27,7 @@ import {
 import { PUBLIC_PLAYLIST_PRESETS, hasPlaylistUrl } from "@/components/mg/publicPlaylistPresets";
 import { base44 } from "@/api/base44Client";
 import { usePlayer } from "@/components/mg/PlayerProvider";
+import PersonalMoviSource from "@/components/mg/PersonalMoviSource";
 import {
   addCustomLiveSource,
   addMediaServer,
@@ -1001,6 +1002,8 @@ export default function SourcesView() {
           Refresh Live TV
         </button>
       </div>
+
+      <PersonalMoviSource />
 
       {(message || error) && (
         <div
