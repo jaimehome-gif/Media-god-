@@ -11303,10 +11303,10 @@ export default function VideoPlayer({
                 }
                 showCastButton={false}
                 key={
-                  active.src
+                  websiteSourcesPlayback ? resolvedSourceUrl : active.src
                 }
                 src={
-                  active.src
+                  websiteSourcesPlayback ? resolvedSourceUrl : active.src
                 }
                 sourceLabel={
                   active?.format ||
@@ -11354,7 +11354,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  websiteSourcesPlayback ? `website-controls:${active.src}` : active.src
+                  websiteSourcesPlayback ? `website-controls:${resolvedSourceUrl}` : active.src
                 }
                 videoRef={
                   liveVideoRef
