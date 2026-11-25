@@ -191,11 +191,25 @@ test("client redirects all main RD actions and cached-source checks to verified 
 test("Railway Dockerfile packages every local Real-Debrid server import", () => {
   const server = source("deploy/media-god-rd-api/server.mjs");
   const dockerfile = source("deploy/media-god-rd-api/Dockerfile");
-  const localModules = [...server.matchAll(/from ["']\.\/([^"']+)["']/g)]
-    .map(match => match[1]);
-  assert.ok(localModules.includes("accountVerificationCache.mjs"));
-  for (const filename of localModules) {
-    assert.ok(dockerfile.includes(filename),
-      "Railway Dockerfile must copy " + filename);
+  // The independent identity service replaced the retired Base44 verifier.
+  // Check the actual local dependency graph, not a historical module name.
+  const modules = new Set(["server.mjs"]);
+  const pending = ["server.mjs"];
+  const copyTokens = dockerfile.split("\n")
+    .filter(line => /^COPY\s/.test(line))
+    .flatMap(line => line.trim().split(/\s+/).slice(1,-1));
+  while (pending.length) {
+    const filename = pending.pop();
+    assert.ok(copyTokens.includes(filename), "Railway Dockerfile must copy " + filename);
+    const body = filename === "server.mjs" ? server : source("deploy/media-god-rd-api/" + filename);
+    for (const match of body.matchAll(/(?:from\s*|import\s*(?:\(\s*)?)["']\.\/([^"']+)["']/g)) {
+      const dependency = match[1];
+      if (!modules.has(dependency)) {
+        modules.add(dependency);
+        pending.push(dependency);
+      }
+    }
   }
+  assert.ok(modules.has("deviceClient.mjs"), "Independent account client must be packaged");
+  assert.match(server, /IDENTITY_VERIFY_URL/);
 });
