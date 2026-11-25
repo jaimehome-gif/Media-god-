@@ -21,8 +21,11 @@ try {
       const player = document.createElement("movi-player");
       player.setAttribute("controls", "");
       player.setAttribute("sw", "true");
+      player.setAttribute("engine", "wasm");
+      player.setAttribute("playsinline", "");
+      player.addEventListener("nativefallback", () => { player.pause?.(); status.textContent = "Unexpected native fallback — test failed."; });
       player.setAttribute("theme", "dark");
-      player.addEventListener("playing", () => { status.textContent = label + " — playing; confirm tone and moving picture."; });
+      player.addEventListener("play", () => { status.textContent = label + " — playing; confirm tone and moving picture."; });
       player.addEventListener("error", () => { status.textContent = label + " — decoder error; no fallback to the old player."; });
       stage.appendChild(player);
       // Only fixed synthetic clips, fetched without any account credentials.
