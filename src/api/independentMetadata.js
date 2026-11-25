@@ -264,6 +264,7 @@ const PUBLIC_FEATURE_FIELDS = {
     "duration", "duration_seconds", "durationSeconds",
   ],
   getFireTvApkLink: [],
+  publicDiscovery: ["action", "region", "date"],
 };
 export async function invokeIndependentPublicFeature(name, payload = {}, {
   fetchImpl = globalThis.fetch,
