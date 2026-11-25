@@ -84,3 +84,12 @@ test("all in-player website menus use the screened entries and native paths reta
   assert.equal((player.match(/sourceChoiceAllowed=\{websiteSourcesPlayback \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
   assert.match(controls,/!sourceChoiceAllowed \|\| sourceChoiceAllowed\(index, item\)/);
 });
+
+
+test("website WebM accepts only the phone-verified VP9 and Opus combination",()=>{
+  const webm="https://media.example.test/owned-sample.webm";
+  assert.equal(check(item("vp9","opus"),webm).allowed,true);
+  assert.equal(check(item("vp8","opus"),webm).allowed,false);
+  assert.equal(check(item("vp9","vorbis"),webm).allowed,false);
+  assert.equal(check(item("vp9","aac"),webm).allowed,false);
+});
