@@ -2306,13 +2306,15 @@ test("Ready count is exactly the source chooser entry count", () => {
 
   assert.match(
     playerSource,
-    /const selectableSourceCount\s*=\s*selectableSourceEntries\.length/
+    /const selectableSourceCount\s*=\s*presentedSourceEntries\.length/
   );
   assert.doesNotMatch(
     playerSource,
-    /const selectableSourceCount\s*=\s*selectableSourceEntries\.filter/
+    /const selectableSourceCount\s*=\s*presentedSourceEntries\.filter/
   );
-  assert.match(playerSource, /visibleSourceSelectorEntries\.map/);
+  assert.match(playerSource, /presentedSelectorEntries\.map/);
+  assert.match(playerSource, /const presentedSourceEntries = websiteSourcesPlayback[\s\S]*?: selectableSourceEntries;/);
+  assert.match(playerSource, /const presentedSelectorEntries = websiteSourcesPlayback \? presentedSourceEntries : visibleSourceSelectorEntries;/);
 });
 
 test("a six-row fast-start snapshot cannot replace 117 cached sources", () => {
@@ -2493,7 +2495,7 @@ test("source selector stays visible with a single ready source and expands as mo
   );
 
   assert.match(playerSource, /selectableSourceCount > 0[\s\S]{0,220}?All sources \/ quality/);
-  assert.match(playerSource, /visibleSourceSelectorEntries\.map/);
+  assert.match(playerSource, /presentedSelectorEntries\.map/);
   assert.match(controlsSource, /selectableSourceEntries\.length > 0/);
   assert.match(controlsSource, /visibleSourceChoices\.map/);
 
