@@ -55,3 +55,45 @@ test("successful browser social login returns directly to device-code approval w
   assert.match(cb,/mg:social-return-path/);
   assert.match(cb,/target = "\/device-login"/);
 });
+
+
+test("approval racing a poll remains pending and the device token is consumed only once", async () => {
+  const oauth=read("deploy/media-god-identity-api/socialOAuth.mjs");
+  const start=oauth.indexOf('if(path==="/auth/device/status"');
+  const end=oauth.indexOf('if(path==="/auth/device/verify"',start);
+  assert.ok(start>=0 && end>start,"device status handler exists");
+  // Execute the actual status handler with an isolated database double.
+  // The OAuth provider dependencies are installed in the identity container,
+  // not by the root regression suite.
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const status=new AsyncFunction("req","res","path","body","origin","respond","pool","sha","issueSession",oauth.slice(start,end));
+  let row={approved:false},first=true,issued=0;
+  const pool={query:async(sql,params)=>{
+    if(!sql.startsWith("SELECT * FROM identity_accounts")) assert.equal(params[0],"hashed-token");
+    if(sql.startsWith("DELETE FROM identity_device_logins")){
+      if(first){first=false;row.approved=true;return {rows:[]};}
+      if(!row?.approved)return {rows:[]};
+      row=null;
+      return {rows:[{approved_user:"owner"}]};
+    }
+    if(sql.startsWith("SELECT provider FROM identity_device_logins")){
+      assert.match(sql,/expires_at>NOW\(\)/);
+      // SQL predicates in the actual handler determine whether the just
+      // approved record is visible to this poll.
+      return {rows:row && (!row.approved || !sql.includes("approved_user IS NULL")) ? [{provider:"google"}] : []};
+    }
+    if(sql.startsWith("SELECT * FROM identity_accounts")){
+      assert.match(sql,/verified_at IS NOT NULL/);
+      return {rows:[{id:"owner"}]};
+    }
+    throw new Error("Unexpected database query");
+  }};
+  const poll=()=>status({method:"POST"},{},"/auth/device/status",{device_token:"a".repeat(43)},"https://underworldhub.co.uk",
+    (_res,code,data)=>({code,data}),pool,
+    value=>value==="a".repeat(43)?"hashed-token":value,
+    async user=>{assert.equal(user.id,"owner");issued++;return {access_token:"test-session"};});
+  assert.deepEqual(await poll(),{code:200,data:{status:"pending"}});
+  assert.deepEqual(await poll(),{code:200,data:{status:"approved",access_token:"test-session"}});
+  assert.deepEqual(await poll(),{code:410,data:{error:"Device sign-in expired or already completed"}});
+  assert.equal(issued,1);
+});
