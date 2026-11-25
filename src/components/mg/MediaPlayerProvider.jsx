@@ -1,3 +1,4 @@
+import { isPublicWebsiteVod } from "./websiteDirectMediaPolicy";
 import React, {
   createContext,
   useCallback,
@@ -2989,11 +2990,23 @@ export function PlayerProvider({
          * Explicit RD-library/manual requests remain the deliberate exception.
          * Live TV is outside this VOD qualification path.
          */
+        // Rows discovered by the website Sources panel can go straight to the
+        // player. Its scanner verifies each resolved rendition with the decoder.
+        const websitePanelSources = request?.openSourcesDrawer && !request?.manualSourceSelection &&
+          isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(), source: request, isLive })
+          ? filterSourcesForRequestedIdentity(excludeServerIssuedIpBoundVod(suppliedCompleteSources), {
+              title: request?.rdTitle || request?.title, year: request?.rdYear ?? request?.year,
+              alternateYears: request?.alternateYears, alternateTitles: request?.alternateTitles, mediaType,
+            }).filter(item =>
+              (isDirectSource(item) || isMagnetSource(item)) &&
+              (mediaType !== "tv" || episodeSourceMatchesRequest(item, { season, episode })))
+          : [];
         const qualificationMode =
           !isLive &&
           hasRd &&
           !request?.noRd &&
-          request?.verifiedPlaybackPolicy !== "manual";
+          request?.verifiedPlaybackPolicy !== "manual" &&
+          websitePanelSources.length === 0;
 
         // Default Play must not submit an uncached torrent merely because
         // discovery failed to find a ready episode: doing so repeatedly can
@@ -3004,7 +3017,7 @@ export function PlayerProvider({
 
         const initialOrderedSources =
           orderSources({
-            sources: dedupeSources(originalSources),
+            sources: dedupeSources(websitePanelSources.length ? websitePanelSources : originalSources),
             hasDebrid,
             preferRd: Boolean(request?.preferRd),
           });
@@ -3028,6 +3041,8 @@ export function PlayerProvider({
                 item?.launchQualified === true
               )
           );
+
+        const websitePanelHandoff = websitePanelSources.length > 0 && initialPlayableSources.length > 0;
 
         const initialSources =
           initialPlayableSources.length > 0
@@ -3081,7 +3096,7 @@ export function PlayerProvider({
           rdSeason: request?.rdSeason ?? season,
           rdEpisode: request?.rdEpisode ?? episode,
           sources: initialSources,
-          completeSources:
+          completeSources: websitePanelHandoff ? websitePanelSources :
             suppliedCompleteSources.length > 0
               ? suppliedCompleteSources
               : initialOrderedSources,
@@ -3096,7 +3111,7 @@ export function PlayerProvider({
           hasRd,
           hasDebrid,
           sourceDiagnostics: {
-            phase: preparedEpisodeHandoff
+            phase: websitePanelHandoff ? "verifying" : preparedEpisodeHandoff
               ? "prepared-handoff"
               : "searching",
             tmdbId,
@@ -3114,6 +3129,7 @@ export function PlayerProvider({
          * selected torrent/direct stream immediately instead of repeating the
          * whole discovery pass during the handoff.
          */
+        if (websitePanelHandoff) return true;
         if (preparedEpisodeHandoff) {
           return true;
         }
@@ -4084,7 +4100,7 @@ export function PlayerProvider({
         );
 
         orderedSources = restoreQualifiedLaunchRows(
-          publishedSourceSnapshot,
+          [...publishedSourceSnapshot, ...qualifiedLaunchSources],
           orderedSources
         );
 
