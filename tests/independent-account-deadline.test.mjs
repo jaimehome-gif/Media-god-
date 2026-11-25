@@ -68,3 +68,35 @@ test("incomplete password and social login responses cannot erase the existing s
     assert.equal(base44.auth.getAccessToken(),"replacement-test-session");
   });
 });
+
+
+test("a late login result cannot sign a user back in after logout",async()=>{
+  await isolated(async()=>{
+    let finish;
+    globalThis.fetch=async(url)=>{
+      assert.equal(url,IDENTITY_API+"/auth/login");
+      return new Promise(resolve=>{finish=resolve;});
+    };
+    const pending=base44.auth.loginViaEmailPassword("user@example.test","test");
+    const rejected=assert.rejects(pending,e=>e.code==="SESSION_SUPERSEDED");
+    await base44.auth.logout();
+    finish(ok({access_token:"late-test-session"}));
+    await rejected;
+    assert.equal(base44.auth.getAccessToken(),"");
+  });
+});
+
+test("a slower earlier password login cannot replace a newer successful login",async()=>{
+  await isolated(async()=>{
+    const completions=[];
+    globalThis.fetch=async()=>new Promise(resolve=>completions.push(resolve));
+    const first=base44.auth.loginViaEmailPassword("first@example.test","test");
+    const rejected=assert.rejects(first,e=>e.code==="SESSION_SUPERSEDED");
+    const second=base44.auth.loginViaEmailPassword("second@example.test","test");
+    completions[1](ok({access_token:"second-test-session"}));
+    await second;
+    completions[0](ok({access_token:"first-test-session"}));
+    await rejected;
+    assert.equal(base44.auth.getAccessToken(),"second-test-session");
+  });
+});
