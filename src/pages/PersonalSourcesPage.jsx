@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import PersonalMoviSource from "@/components/mg/PersonalMoviSource";
+import PersonalServerMovi from "@/components/mg/PersonalServerMovi";
 
 export default function PersonalSourcesPage() {
   return (
@@ -9,6 +10,7 @@ export default function PersonalSourcesPage() {
         <Link to="/" className="text-sm font-semibold text-mg-green">← Back to Media God</Link>
         <h1 className="mt-4 text-2xl font-bold">Personal Sources</h1>
         <PersonalMoviSource defaultOpen />
+        <PersonalServerMovi />
       </div>
     </main>
   );
