@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import WebsiteSourcesMovi from "@/components/mg/WebsiteSourcesMovi.jsx";
+import { PlayerProvider, usePlayer } from "@/components/mg/PlayerProvider.jsx";
 
 const clips = [
   ["aac.mp4", "MP4 / AAC"],
@@ -8,7 +9,43 @@ const clips = [
   ["dts.mkv", "MKV / DTS"],
 ];
 
+function HandoffTest() {
+  const { play } = usePlayer();
+  const [notice, setNotice] = useState("");
+  const launch = async (file) => {
+    const ordered = [...clips].sort(([a],[b]) => a === file ? -1 : b === file ? 1 : 0);
+    const sources = ordered.map(([name,label]) => {
+      const url = new URL("/decoder-lab/samples/" + name, location.origin).href;
+      return { id: name, type:"file", src:url, url, label:"Generated Phone Preview " + label,
+        mediaInfo:{video_tracks:[{codec:"h264",height:180}],audio_tracks:[{codec:name.split(".")[0],language:"English"}]} };
+    });
+    setNotice("Opening the Media God player…");
+    try {
+      await play({ id:"generated-phone-preview", title:"Generated Phone Preview",
+        mediaType:"movie", type:"movie", openSourcesDrawer:true, manualSourceSelection:true,
+        skipAddonLookup:true, skipRdLookup:true, noRd:true, allowNonPlaybackFallback:false,
+        verifiedPlaybackPolicy:"manual", sources:[sources[0]], completeSources:sources });
+      setNotice("Check the picture, tone and Sources chooser.");
+    } catch {
+      setNotice("Player handoff failed. Please report this message.");
+    }
+  };
+  return <section className="space-y-3 rounded-xl border border-white/20 p-4">
+    <h2 className="text-lg font-bold">Stage 2 — Media God player handoff</h2>
+    <p className="text-sm text-white/70">Open a generated clip through the real player provider and full player. Use its Sources chooser and back controls. No external media or accounts.</p>
+    <div className="flex flex-wrap gap-2">
+      {clips.map(([file,label]) => <button key={file} type="button" onClick={() => launch(file)}
+        className="rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold">Play {label}</button>)}
+    </div>
+    <p role="status" className="text-sm">{notice}</p>
+  </section>;
+}
+
 export default function BrowserDecoderTest() {
+  return <PlayerProvider><PreviewClips /></PlayerProvider>;
+}
+
+function PreviewClips() {
   const [selected, setSelected] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState("Choose a generated test clip.");
@@ -31,6 +68,7 @@ export default function BrowserDecoderTest() {
     <main className="min-h-screen bg-mg-background px-4 py-6 text-white">
       <div className="mx-auto max-w-4xl space-y-4">
         <h1 className="text-2xl font-bold">Media God decoder phone preview</h1>
+        <HandoffTest />
         <p className="text-sm text-white/70">Test the repaired website decoder component with generated picture and tone. No sign-in, external streams or account information is required.</p>
         <div className="flex flex-wrap gap-2">
           {clips.map(([file,label]) => <button key={file} type="button"
