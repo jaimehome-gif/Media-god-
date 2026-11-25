@@ -10,13 +10,38 @@ export function personalHeaders(server) {
   return server.apiKey ? {[server.type === "plex" ? "X-Plex-Token" : "X-Emby-Token"]:server.apiKey} : {};
 }
 export async function personalFetch(server, url, options = {}) {
-  if (new URL(url).origin !== new URL(server.baseUrl).origin) throw Error("Unexpected server origin");
-  return fetch(url, {...options, headers:{...personalHeaders(server), ...options.headers}, credentials:"omit", redirect:"error", referrerPolicy:"no-referrer", cache:"no-store"});
+  const base = personalEndpoint(server, "/");
+  const target = new URL(url);
+  if (target.origin !== base.origin || target.username || target.password || !target.pathname.startsWith(base.pathname)) throw Error("Unexpected server origin or path");
+  return fetch(target, {...options, headers:{...personalHeaders(server), ...options.headers}, credentials:"omit", redirect:"error", referrerPolicy:"no-referrer", cache:"no-store"});
+}
+// Bound headers AND body reads, even in a browser that ignores abort.
+export async function personalDeadline(work, signal, timeoutMs = 15000) {
+  const controller = new AbortController();
+  let timer, onAbort;
+  const deadline = new Promise((_, reject) => {
+    const fail = message => { reject(Error(message)); controller.abort(); };
+    onAbort = () => fail("Personal media request cancelled");
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, {once:true});
+    timer = setTimeout(() => fail("Personal media server timed out. Check your connection and retry."),timeoutMs);
+  });
+  try {
+    return await Promise.race([deadline, Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw Error("Personal media request cancelled");
+      return work(controller.signal);
+    })]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
 }
 async function json(server, url, signal) {
-  const response = await personalFetch(server,url,{headers:{Accept:"application/json"},signal});
-  if (!response.ok) throw Error("Personal library request failed ("+response.status+")");
-  return response.json();
+  return personalDeadline(async activeSignal => {
+    const response = await personalFetch(server,url,{headers:{Accept:"application/json"},signal:activeSignal});
+    if (!response.ok) throw Error("Personal library request failed ("+response.status+")");
+    return response.json();
+  },signal);
 }
 export async function searchPersonalLibrary(server, query, signal) {
   const plex = server.type === "plex";
@@ -43,13 +68,33 @@ export async function personalFileEndpoint(server, item, signal) {
 }
 export async function readPersonalRange(server,url,offset,length,signal) {
   if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > 8*1024*1024 || !Number.isSafeInteger(offset+length)) throw Error("Invalid byte range");
-  const response = await personalFetch(server,url,{headers:{Range:"bytes="+offset+"-"+(offset+length-1)},signal});
+  return personalDeadline(async activeSignal => {
+  const response = await personalFetch(server,url,{headers:{Range:"bytes="+offset+"-"+(offset+length-1)},signal:activeSignal});
   const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("Content-Range") || "");
   if (response.status !== 206 || !match || Number(match[1]) !== offset || Number(match[2]) >= offset+length || !Number.isSafeInteger(Number(match[3])) || Number(match[2]) >= Number(match[3]) || Number(match[2]) < offset) {
     await response.body?.cancel(); throw Error("Server must support and expose HTTP byte ranges (CORS)");
   }
   const expected=Number(match[2])-offset+1;
-  const data=await response.arrayBuffer();
-  if (data.byteLength !== expected) throw Error("Invalid media range response");
-  return {data,size:Number(match[3])};
+  const reader = response.body?.getReader();
+  if (!reader) throw Error("Personal media response is unreadable");
+  const output = new Uint8Array(expected);
+  let received = 0;
+  try {
+    for (;;) {
+      const {done,value} = await reader.read();
+      if (activeSignal.aborted) throw Error("Personal media request cancelled");
+      if (done) break;
+      if (received + value.byteLength > expected) throw Error("Invalid media range response");
+      output.set(value,received);
+      received += value.byteLength;
+    }
+    if (received !== expected) throw Error("Invalid media range response");
+    return {data:output.buffer,size:Number(match[3])};
+  } catch (error) {
+    void reader.cancel().catch(()=>{});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  },signal);
 }
