@@ -93,7 +93,7 @@ export async function invokeIndependentMetadata(payload = {}, {
     request.release_alerts = input.release_alerts.slice(0,24).flatMap(item => {
       if (!item || typeof item !== "object") return [];
       const id = item.tmdb_id ?? item.id;
-      if (!/^[1-9]\\d{0,8}$/.test(String(id))) return [];
+      if (!/^[1-9][0-9]{0,8}$/.test(String(id))) return [];
       return [{tmdb_id: id, media_type: item.media_type === "tv" ? "tv" : "movie"}];
     });
   }
