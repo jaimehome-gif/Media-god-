@@ -1,4 +1,4 @@
-import { isPublicWebsiteVod } from "./websiteDirectMediaPolicy";
+import { isPublicWebsiteVod, websiteTorrentCandidate, canOpenWebsiteMovi } from "./websiteDirectMediaPolicy";
 import React, {
   createContext,
   useCallback,
@@ -3042,6 +3042,30 @@ export function PlayerProvider({
               )
           );
 
+        // A panel of unresolved magnets can omit a completed file already in
+        // the viewer's account. Give the existing title/track inspection first
+        // chance before submitting a new torrent, with a bounded startup wait.
+        if (hasRd && !request?.noRd && !request?.skipRdLookup && websitePanelSources.length &&
+            initialPlayableSources.length && initialPlayableSources.every(item =>
+              isMagnetSource(item) && !item.rdTorrentId && !sourceIsConfirmedCachedForPlayback(item))) {
+          let timeout;
+          const lookup = await Promise.race([
+            findRdLibrarySource({
+              title: request?.rdTitle || request?.title, year: request?.rdYear ?? request?.year,
+              alternateYears: request?.rdAlternateYears || request?.alternateYears,
+              alternateTitles: request?.rdAlternateTitles || request?.alternateTitles, season, episode,
+            }),
+            new Promise(resolve => { timeout = setTimeout(() => resolve(null), 5000); }),
+          ]).finally(() => clearTimeout(timeout));
+          if (!isCurrentPlay()) return false;
+          const cached = lookup?.source;
+          if (cached?.launchQualified && websiteTorrentCandidate(cached) &&
+              canOpenWebsiteMovi(cached.src, cached) &&
+              (mediaType !== "tv" || episodeSourceMatchesRequest(cached, { season, episode }))) {
+            initialPlayableSources.unshift(cached);
+            websitePanelSources.unshift(cached);
+          }
+        }
         const websitePanelHandoff = websitePanelSources.length > 0 && initialPlayableSources.length > 0;
 
         const initialSources =

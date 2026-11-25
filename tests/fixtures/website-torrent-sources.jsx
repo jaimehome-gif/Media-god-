@@ -12,7 +12,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     infoHash: hash, src: magnet, url: magnet, magnet,
   };
   if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
-  if (mode !== "unknown") item.debridCached = true;
+  if (!["unknown","account-match"].includes(mode)) item.debridCached = true;
   if (mode.startsWith("cooldown") || mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
   const ready = {
     status: "ready", torrent_id: "owned-fixture-id", filename: "Owned Test Clip 2025.mkv",
@@ -59,6 +59,9 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     }
     if (name === "realDebrid") {
       window.fixtureDebridActions.push(params.action);
+      if (mode === "account-match" && params.action === "find_cached") return {data:{
+        ...ready, media_info:{video_tracks:[{codec:"h264",height:180}],audio_tracks:[{codec:"aac",language:"English"}]},
+      }};
       if (mode.startsWith("cooldown")) return invoke(name, params);
       if (["ranked","seedless"].includes(mode) && params.action === "torrent_info") {
         window.fixtureDebridActions.push(params.torrent_id);
