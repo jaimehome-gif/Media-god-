@@ -12,6 +12,16 @@ export const isWebsiteSourcesPlayback = context =>
   isPublicWebsiteVod(context) &&
   Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
 
+// A transient upstream limit must not reopen a legacy/unfiltered error menu.
+// A TV layout heuristic alone is not evidence of an installed native app.
+export function isWebsiteRateLimitHold({ hostname, profile, source, isLive, error } = {}) {
+  return !isLive && source?.mediaType !== "live" &&
+    /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
+    profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
+    !profile?.nativeFireTv && !profile?.mobileApp && !profile?.nativePlatform &&
+    /(?:rate[\s-]*limit|too many requests|\b429\b)/i.test(String(error || ""));
+}
+
 const codec = track => String(track?.codec || track?.codec_name || "").trim().toLowerCase();
 const h264 = v => /^(?:h[._ -]?264|avc|avc1(?:\..*)?)$/.test(v);
 const aac = a => /^(?:aac|aac[ -]?lc|mp4a\.40\.2)$/.test(a);
