@@ -183,6 +183,7 @@ export default function MediaPlayerControls({
   activeIdx = 0,
   failedSources,
   onSelectSource,
+  sourceChoiceAllowed,
   onNoSound,
 }) {
   const [playing, setPlaying] = useState(false);
@@ -295,7 +296,7 @@ export default function MediaPlayerControls({
    * but visibility is no longer controlled by readiness/cache checks.
    */
   const selectableSourceEntries = sortedSourceEntries.filter(
-    ({ item }) => sourceIsUserSelectable(item)
+    ({ item, index }) => sourceIsUserSelectable(item) && (!sourceChoiceAllowed || sourceChoiceAllowed(index, item))
   );
 
   const [sourceChoicePinned, setSourceChoicePinned] = useState(false);
@@ -342,14 +343,14 @@ export default function MediaPlayerControls({
     selectableSourceEntries.length > sourceChoiceEntriesRef.current.length;
 
   const visibleSourceChoices =
-    sourceChoicePinned &&
+    !sourceChoiceAllowed && sourceChoicePinned &&
     !sourceChoiceSnapshotIsStale &&
     sourceChoiceEntriesRef.current.length > 0
       ? sourceChoiceEntriesRef.current
       : selectableSourceEntries;
 
   const requestedSourceChoiceValue =
-    sourceChoicePinned && !sourceChoiceSnapshotIsStale
+    !sourceChoiceAllowed && sourceChoicePinned && !sourceChoiceSnapshotIsStale
       ? sourceChoiceValueRef.current
       : activeIdx;
 
@@ -1814,7 +1815,7 @@ export default function MediaPlayerControls({
               </p>
             </div>
 
-            {availableSortOptions.length > 1 ? (
+            {!sourceChoiceAllowed && availableSortOptions.length > 1 ? (
               <select
                 value={sourceSortMode}
                 onChange={(event) => {
@@ -2155,6 +2156,7 @@ export default function MediaPlayerControls({
                       (entry) => String(entry.index) === String(value)
                     );
                     releaseSourceChoices();
+                    if (sourceChoiceAllowed && (!selectedEntry || !sourceChoiceAllowed(selectedEntry.index, selectedEntry.item))) return;
                     onSelectSource?.(value, selectedEntry?.item || null);
                     setOpenMenu("");
                     menuOpenRef.current = false;
@@ -2176,7 +2178,7 @@ export default function MediaPlayerControls({
                 >
                   {visibleSourceChoiceValue === "" ? (
                     <option value="" disabled>
-                      Preparing uncached sources…
+                      {sourceChoiceAllowed ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
                   {visibleSourceChoices.map(({ item, index }) => (

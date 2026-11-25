@@ -1,17 +1,33 @@
 // Web-only direct-media screening. It does not discover or resolve streams,
 // alter DRM/access controls, or make claims about rights to a media URL.
-export const isWebsiteSourcesPlayback = ({ hostname, profile, source, active, isLive }) =>
+// The public browser engine must not depend on a particular launch button.
+// Installed native apps, including those using the public hostname, are excluded.
+export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
   !isLive && source?.mediaType !== "live" &&
   /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
   profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
-  !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv &&
-  Boolean(source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc);
+  !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv;
+
+export const isWebsiteSourcesPlayback = context =>
+  isPublicWebsiteVod(context) &&
+  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
+
+// A transient upstream limit must not reopen a legacy/unfiltered error menu.
+// A TV layout heuristic alone is not evidence of an installed native app.
+export function isWebsiteRateLimitHold({ hostname, profile, source, isLive, error } = {}) {
+  return !isLive && source?.mediaType !== "live" &&
+    /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
+    profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
+    !profile?.nativeFireTv && !profile?.mobileApp && !profile?.nativePlatform &&
+    /(?:rate[\s-]*limit|too many requests|\b429\b)/i.test(String(error || ""));
+}
 
 const codec = track => String(track?.codec || track?.codec_name || "").trim().toLowerCase();
 const h264 = v => /^(?:h[._ -]?264|avc|avc1(?:\..*)?)$/.test(v);
 const aac = a => /^(?:aac|aac[ -]?lc|mp4a\.40\.2)$/.test(a);
-const vp = v => /^(?:vp8|vp9|vp08(?:\..*)?|vp09(?:\..*)?)$/.test(v);
-const webAudio = a => a === "opus" || a === "vorbis";
+// Restrict website playback to the tested WebM video/audio combination.
+const vp = v => /^(?:vp9|vp09(?:\..*)?)$/.test(v);
+const webAudio = a => a === "opus";
 const canPlay = (probe, mime) => {
   try { return ["probably", "maybe"].includes(probe?.(mime)); }
   catch { return false; }
@@ -53,7 +69,7 @@ export function checkWebsiteDirectMedia({ url, item, originalItem, canPlayType, 
   } else if (webm) {
     allowed = videos.every(v => vp(codec(v))) && audios.every(a => webAudio(codec(a))) &&
       videos.every(v => audios.every(a => canPlay(canPlayType,
-        'video/webm; codecs="' + (codec(v).startsWith("vp08") ? "vp8" : codec(v).startsWith("vp09") ? "vp9" : codec(v)) + ', ' + codec(a) + '"')));
+        'video/webm; codecs="' + (codec(v).startsWith("vp09") ? "vp9" : codec(v)) + ', ' + codec(a) + '"')));
   }
   return allowed ? { allowed: true, reason: "" } : {
     allowed: false, reason: "This browser cannot verify support for the file's audio, video and container."
@@ -64,4 +80,16 @@ export function getBrowserMediaCapabilities() {
   const video = typeof document === "undefined" ? null : document.createElement("video");
   return { canPlayType: mime => video?.canPlayType?.(mime) || "",
     mseSupports: mime => typeof MediaSource !== "undefined" && MediaSource.isTypeSupported?.(mime) === true };
+}
+
+// A chooser row must be an already inspected direct media rendition. Keep the
+// original array indices so filtering never changes the identity of a choice.
+export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = false, ...capabilities } = {}) {
+  if (failed || !item || !originalItem) return false;
+  const type = String(item.type || "").toLowerCase();
+  if (["provider", "external", "youtube", "status", "live"].includes(type) || item.live || item.diagnostic) return false;
+  // HTML media elements cannot apply arbitrary per-file request headers.
+  if ([item.headers, item.requestHeaders, originalItem.headers, originalItem.requestHeaders]
+    .some(headers => headers && Object.keys(headers).length)) return false;
+  return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }

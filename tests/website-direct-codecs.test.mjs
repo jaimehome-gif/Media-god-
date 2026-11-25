@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -60,4 +60,99 @@ test("original protected source remains excluded even when resolved rendition la
   assert.equal(checkWebsiteDirectMedia({url,item:item(),originalItem:item(),...caps}).allowed,true);
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   assert.match(player,/item: rdOverride \|\| active, originalItem: active/);
+});
+
+
+test("website chooser excludes unknown, failed and non-direct media without renumbering entries",()=>{
+  const entries=[{index:2,item:{...item(),src:url}},{index:4,item:{...item("h264","dts"),src:url}},{index:7,item:{src:url}},{index:9,item:{...item(),src:url,headers:{Authorization:"synthetic"}}},{index:12,item:{...item(),src:url}},{index:14,item:{...item(),src:url,type:"external"}}];
+  const result=entries.filter(({index,item})=>isWebsiteDirectSourceChoice({item,originalItem:item,url:item.src,failed:index===12,...caps}));
+  assert.deepEqual(result.map(entry=>entry.index),[2]);
+});
+
+test("website chooser does not inherit original codecs for an unverified rendition",()=>{
+  const originalItem={...item(),src:url};
+  assert.equal(isWebsiteDirectSourceChoice({item:{src:url},originalItem,url,...caps}),false);
+  assert.equal(isWebsiteDirectSourceChoice({item:originalItem,originalItem,url,...caps}),true);
+});
+
+test("all in-player website menus use the screened entries and native paths retain original choices",()=>{
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  const controls=readFileSync(new URL("../src/components/mg/MediaPlayerControls.jsx",import.meta.url),"utf8");
+  assert.match(player,/const presentedSourceEntries = publicWebsiteVod[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
+  assert.match(player,/entries=\{presentedSourceEntries\}/);
+  assert.match(player,/presentedSelectorEntries\.map\(/);
+  assert.equal((player.match(/sourceChoiceAllowed=\{publicWebsiteVod \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
+  assert.match(controls,/!sourceChoiceAllowed \|\| sourceChoiceAllowed\(index, item\)/);
+});
+
+
+test("website WebM accepts only the phone-verified VP9 and Opus combination",()=>{
+  const webm="https://media.example.test/owned-sample.webm";
+  assert.equal(check(item("vp9","opus"),webm).allowed,true);
+  assert.equal(check(item("vp8","opus"),webm).allowed,false);
+  assert.equal(check(item("vp9","vorbis"),webm).allowed,false);
+  assert.equal(check(item("vp9","aac"),webm).allowed,false);
+});
+
+
+test("both public hostnames use the same direct media engine regardless of launch flags",()=>{
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    assert.equal(isPublicWebsiteVod({...context,hostname,source:{}}),true);
+    assert.equal(isWebsiteSourcesPlayback({...context,hostname,source:{}}),false);
+    for(const flag of ["nativePlayerAvailable","nativeAndroidMobile","nativeFireTv","mobileApp","fireTv"])
+      assert.equal(isPublicWebsiteVod({...context,hostname,profile:{...profile,[flag]:true}}),false);
+  }
+  assert.equal(isPublicWebsiteVod({...context,isLive:true}),false);
+  assert.equal(isPublicWebsiteVod({...context,hostname:"example.test"}),false);
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod/);
+});
+
+
+test("public direct playback menu is screened regardless of launch route without changing the active stream guard",()=>{
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!publicWebsiteVod\) return true;/);
+  assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
+  assert.match(player,/const presentedSourceEntries = publicWebsiteVod/);
+});
+
+
+test("rate-limit notice never exposes the unrestricted website menu even if layout is misclassified",()=>{
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    const input={...context,hostname,error:"Real-Debrid is temporarily rate-limiting requests."};
+    assert.equal(isWebsiteRateLimitHold(input),true);
+    assert.equal(isWebsiteRateLimitHold({...input,profile:{...profile,fireTv:true}}),true);
+    assert.equal(isWebsiteRateLimitHold({...input,error:"HTTP 429"}),true);
+    for(const flag of ["nativePlayerAvailable","nativeAndroidMobile","nativeFireTv","mobileApp","nativePlatform"])
+      assert.equal(isWebsiteRateLimitHold({...input,profile:{...profile,[flag]:true}}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,isLive:true}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,error:"Other media error"}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,hostname:"example.test"}),false);
+  }
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const publicWebsiteVod = [^\n]+ \|\| websiteRateLimitHold\)/);
+  assert.match(player,/if \(websiteRateLimitHold\) return false;/);
+  assert.equal((player.match(/isRdSource && !websiteRateLimitHold && \(/g)||[]).length,2);
+  assert.match(player,/source choices are paused/);
+});
+
+
+test("synthetic website menu remains restricted through normal, rate-limit and recovered states",()=>{
+  const choices=[
+    {index:0,item:{...item(),src:url}},
+    {index:1,item:{...item("hevc","aac"),src:url}},
+    {index:2,item:{src:url}},
+    {index:3,item:{...item("h264","dts"),src:url}}
+  ];
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    const visible=error=>{
+      const input={...context,hostname,error};
+      const hold=isWebsiteRateLimitHold(input);
+      const restricted=isPublicWebsiteVod(input)||hold;
+      return choices.filter(({item})=>!restricted||(!hold&&isWebsiteDirectSourceChoice({item,originalItem:item,url:item.src,...caps}))).map(entry=>entry.index);
+    };
+    assert.deepEqual(visible(""),[0]);
+    assert.deepEqual(visible("HTTP 429"),[]);
+    assert.deepEqual(visible(""),[0]);
+  }
 });

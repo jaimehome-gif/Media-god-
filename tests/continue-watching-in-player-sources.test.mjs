@@ -73,7 +73,8 @@ test("the VideoPlayer always has its own usable Sources button for VOD", () => {
   assert.match(player, /!isLive\s*&&\s*\(\s*<button/);
   assert.match(player, /onClick=\{\(\) => setInPlayerSourcesOpen\(true\)\}/);
   assert.match(player, /<InPlayerSourceDrawer/);
-  assert.match(player, /entries=\{selectableSourceEntries\}/);
+  assert.match(player, /entries=\{presentedSourceEntries\}/);
+  assert.match(player, /const presentedSourceEntries = publicWebsiteVod[\s\S]*?: selectableSourceEntries;/);
   assert.match(player, /selectSource\(index, item\)/);
   assert.match(player, /sourceLabel=\{sourceCacheStateLabel\}/);
 });

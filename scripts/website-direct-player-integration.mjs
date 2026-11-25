@@ -85,10 +85,10 @@ try {
       await page.goto(base);
       // Puppeteer's page.evaluate grants a user gesture. The strict case must
       // mount without activation, using CDP explicitly with userGesture:false.
-      const input = {name,v,a,full};
-      const mount = async ({name,v,a,full})=>{
+      const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && !rejected && host === "underworldhub.co.uk"};
+      const mount = async ({name,v,a,full,mixedChoices})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices});
       };
       let gate;
       if (strict) {
@@ -123,9 +123,25 @@ try {
         throw error;
       }
       if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
+      if (input.mixedChoices) {
+        await page.click('[data-mg-open-in-player-sources="true"]');
+        await page.waitForSelector('[data-mg-source-drawer-list="true"]');
+        const labels = await page.evaluate(() => Array.from(document.querySelectorAll('[data-mg-source-choice]'), row => row.textContent));
+        assert.equal(labels.length,1,"only the inspected compatible fixture is offered");
+        assert.match(labels[0],/Owned synthetic browser sample/);
+        assert.ok(labels.every(label=>!/Unknown audio fixture|Unsupported audio fixture/.test(label)));
+        console.log(host,"mixed source list: only compatible direct choice presented");
+      }
       if (strict) {
-        const unlock = await page.waitForSelector('[data-mg-audio-unlock="true"] button',{timeout:15000});
-        await unlock.click();
+        // Activate the real sound button with a trusted keyboard gesture.
+        // In a mobile emulation viewport an overlay can have no clickable
+        // pointer coordinates in this minimal fixture. Do not call play()
+        // directly or inject a synthetic click: the product handler must run.
+        const unlockSelector = '[data-mg-audio-unlock="true"] button';
+        await page.waitForSelector(unlockSelector,{timeout:15000});
+        await page.focus(unlockSelector);
+        assert.equal(await page.evaluate(selector=>document.activeElement?.matches(selector),unlockSelector),true,"sound action is keyboard focusable");
+        await page.keyboard.press("Enter");
         await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
         console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }

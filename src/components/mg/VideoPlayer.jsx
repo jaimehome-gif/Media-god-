@@ -1,5 +1,6 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities } from "./websiteDirectMediaPolicy.js";
+import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
+import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -8976,15 +8977,18 @@ export default function VideoPlayer({
   const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
   // Public website Sources alone use the existing HTML5/HLS playback engine.
   // The exact resolved rendition must have verified audio and video metadata.
-  const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback({
+  const websitePlaybackContext = {
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
-  });
+  };
+  const websiteRateLimitHold = !nativeFireTvPlayer && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError });
+  const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
+  const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
-  const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
+  const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
     typeof BroadcastChannel === "function" && typeof globalThis.crypto?.randomUUID === "function" &&
@@ -10510,8 +10514,28 @@ export default function VideoPlayer({
    * provider-labelled rows only from the counter made the UI report "6 ready"
    * while the chooser had a much larger cached/selectable set.
    */
-  const selectableSourceCount = selectableSourceEntries.length;
+  const websiteSourceChoiceAllowed = (index, item) => {
+    if (!publicWebsiteVod) return true;
+    if (websiteRateLimitHold) return false;
+    const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
+    return isWebsiteDirectSourceChoice({
+      item: rendition, originalItem: item, url: getSourceUrl(rendition),
+      failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
+    });
+  };
+  const presentedSourceEntries = publicWebsiteVod
+    ? selectableSourceEntries.filter(({ index, item }) => websiteSourceChoiceAllowed(index, item))
+    : selectableSourceEntries;
+  const presentedSelectorEntries = publicWebsiteVod ? presentedSourceEntries : visibleSourceSelectorEntries;
+  const presentedSelectorValue = publicWebsiteVod
+    ? (presentedSourceEntries.some(entry => entry.index === activeIdx) ? activeIdx : "")
+    : visibleSourceSelectorValue;
+  const selectableSourceCount = presentedSourceEntries.length;
   const showSourceChooser = () => {
+    if (publicWebsiteVod) {
+      setInPlayerSourcesOpen(true);
+      return;
+    }
     sourceChooserRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     sourceChooserRef.current?.focus({ preventScroll: true });
     try {
@@ -10523,7 +10547,7 @@ export default function VideoPlayer({
   const noPlayableVodSources =
     !isLive &&
     Boolean(source?.sourceDiagnostics?.diagnosticLabel) &&
-    selectableSourceCount === 0 &&
+    selectableSourceEntries.length === 0 &&
     !rdOverride;
 
   const failedSourceCount =
@@ -10873,16 +10897,20 @@ export default function VideoPlayer({
           </div>
         </div>
 
+        {publicWebsiteVod && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
+          <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
+
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
             title={source?.title}
-            entries={selectableSourceEntries}
+            entries={presentedSourceEntries}
             activeIdx={activeIdx}
             failedSources={failedSources}
             sourceLabel={sourceCacheStateLabel}
             discovering={["searching", "fast-start", "verifying", "preparing"].includes(String(source?.sourceDiagnostics?.phase || ""))}
             onClose={() => setInPlayerSourcesOpen(false)}
             onSelect={(index, item) => {
+              if (!websiteSourceChoiceAllowed(index, item)) return;
               selectSource(index, item);
               setInPlayerSourcesOpen(false);
             }}
@@ -10891,6 +10919,8 @@ export default function VideoPlayer({
 
         <div
           data-mg-player-stage="true"
+          data-mg-website-rate-limit-hold={websiteRateLimitHold ? "true" : undefined}
+          data-mg-website-engine={publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
           data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
@@ -10991,7 +11021,7 @@ export default function VideoPlayer({
                 </button>
               )}
 
-              {vidSrcEmbedUrl && (
+              {!publicWebsiteVod && vidSrcEmbedUrl && (
                 <button
                   type="button"
                   data-mg-vidsrc-open="true"
@@ -11002,7 +11032,7 @@ export default function VideoPlayer({
                 </button>
               )}
 
-              {isRdSource && (
+              {isRdSource && !websiteRateLimitHold && (
                 <button
                   type="button"
                   onClick={retryResolution}
@@ -11244,6 +11274,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
+                sourceChoiceAllowed={publicWebsiteVod ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11384,6 +11415,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
+                sourceChoiceAllowed={publicWebsiteVod ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11629,7 +11661,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {availableSortOptions.length > 1 && (
+          {!publicWebsiteVod && availableSortOptions.length > 1 && (
             <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
                 {playbackMediaType === "tv"
@@ -11691,16 +11723,19 @@ export default function VideoPlayer({
             </label>
           )}
 
+          {publicWebsiteVod && selectableSourceCount === 0 && (
+            <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : "No verified browser-compatible sources are ready."}</p>
+          )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                All sources / quality
+                {publicWebsiteVod ? "Browser-compatible sources" : "All sources / quality"}
               </span>
 
               <div className="relative">
                 <select
                   ref={sourceChooserRef}
-                  value={visibleSourceSelectorValue}
+                  value={presentedSelectorValue}
                   onPointerDown={pinSourceSelector}
                   onKeyDown={(event) => {
                     if (selectorOpenKey(event)) pinSourceSelector();
@@ -11708,21 +11743,22 @@ export default function VideoPlayer({
                   onBlur={releaseSourceSelector}
                   onChange={(event) => {
                     const value = event.target.value;
-                    const selectedEntry = visibleSourceSelectorEntries.find(
+                    const selectedEntry = presentedSelectorEntries.find(
                       (entry) => String(entry.index) === String(value)
                     );
                     releaseSourceSelector();
+                    if (publicWebsiteVod && (!selectedEntry || !websiteSourceChoiceAllowed(selectedEntry.index, selectedEntry.item))) return;
                     selectSource(value, selectedEntry?.item || null);
                   }}
                   className="min-h-11 w-full appearance-none rounded-lg border border-white/10 bg-mg-card py-2.5 pl-3 pr-9 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
                   aria-label="Choose from all playback sources"
                 >
-                  {visibleSourceSelectorValue === "" ? (
+                  {presentedSelectorValue === "" ? (
                     <option value="" disabled>
-                      Preparing uncached sources…
+                      {publicWebsiteVod ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
-                  {visibleSourceSelectorEntries.map(
+                  {presentedSelectorEntries.map(
                     ({ item, index }) => {
                       const failed =
                         failedSources.has(
@@ -11757,7 +11793,7 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {vidSrcEmbedUrl && (
+          {!publicWebsiteVod && vidSrcEmbedUrl && (
             <button
               type="button"
               data-mg-vidsrc-open="true"
@@ -11769,7 +11805,7 @@ export default function VideoPlayer({
             </button>
           )}
 
-          {rdOverride &&
+          {!publicWebsiteVod && rdOverride &&
             visibleRdFileSelectorFiles.length > 1 && (
               <label className="min-w-[12rem] flex-1 basis-[18rem]">
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
@@ -11890,7 +11926,7 @@ export default function VideoPlayer({
                   </button>
                 )}
 
-              {isRdSource && (
+              {isRdSource && !websiteRateLimitHold && (
                 <button
                   type="button"
                   onClick={
