@@ -94,6 +94,33 @@ export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = 
   return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }
 
+// Catalogue torrents without a recognised video format stay out of the website
+// queue. A matching release label admits a candidate for an actual decoder test.
+export function websiteTorrentCandidate(item) {
+  if (!item || item.diagnostic || item.type === "status") return true;
+  const isTorrent = item.infoHash || item.info_hash || item.rdTorrentId || item.magnet ||
+    item.debridProvider || item.viaRealDebrid || /^(rd|rd_torrent|torrent|magnet)$/.test(item.type) ||
+    /^magnet:/i.test(item.src || item.url || "") ||
+    /torrentio|mediafusion|comet|aiostreams/i.test(item.addon || "");
+  if (!isTorrent) return true;
+  if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached") return false;
+  const info = item.mediaInfo || item.media_info;
+  const videos = info?.video_tracks || info?.videoTracks;
+  const audios = info?.audio_tracks || info?.audioTracks;
+  const compatibleAudio = value => /^(?:aac(?:[ -]?lc)?|mp4a(?:\.40\.2)?|ac-?3|e-?ac-?3|dts|opus)$/i.test(value);
+  if (Array.isArray(audios) && !audios.some(track => compatibleAudio(codec(track)))) return false;
+  if (Array.isArray(videos)) return videos.some(track =>
+    (h264(codec(track)) || vp(codec(track))) && !(Number(track.height) > 1080));
+  const hints = [item.label, item.name, item.title, item.filename, item.description, item.quality,
+    item.audioCodec, item.audio_codec, item.hdr, item.videoCodec, item.video_codec, item.codec, item.behaviorHints?.filename, item.behaviorHints?.bingeGroup]
+    .filter(Boolean).join(" ").replace(/_/g, " ");
+  if (/\b(?:hevc|[hx][ .-]?265|av1|av01|2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|10[ .-]?bit|hi10p)\b/i.test(hints) ||
+      Number(item.height || item.resolution) > 1080) return false;
+  if (/\b(?:truehd|mlp|flac|pcm)\b/i.test(hints) &&
+      !/\b(?:aac|opus|ac-?3|e-?ac-?3|dts|ddp?)\b/i.test(hints)) return false;
+  return /\b(?:[hx][ .-]?264|avc1?|vp0?9)\b/i.test(hints);
+}
+
 // Check the resolved transport separately from discovery and codec metadata.
 export function canOpenWebsiteMovi(url, original, rendition) {
   if (original?.drm || rendition?.drm) return false;

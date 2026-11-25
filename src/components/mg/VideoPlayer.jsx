@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -939,7 +939,7 @@ export default function VideoPlayer({
    * Reconcile both on every render so a late six-row fast-start snapshot can
    * never hide the rest of the confirmed cached sources from either selector.
    */
-  const sources = mergeCompleteSourcePool(
+  const mergedSources = mergeCompleteSourcePool(
     publishedSources,
     source?.completeSources,
     {
@@ -947,6 +947,14 @@ export default function VideoPlayer({
         source?.qualifiedLaunchOnly === true,
     }
   );
+
+  const filterWebsiteTorrents = (source?.openSourcesDrawer || source?.manualSourceSelection) &&
+    !String(source?.id || "").startsWith("debrid-source:") &&
+    isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
+      source, isLive: source?.type === "live" });
+  const sources = filterWebsiteTorrents ? mergedSources.filter(websiteTorrentCandidate) : mergedSources;
+  const noWebsiteMatches = filterWebsiteTorrents && mergedSources.some(item => !websiteTorrentCandidate(item)) &&
+    !sources.some(item => !item.diagnostic && item.type !== "status");
 
   const [activeIdx, setActiveIdx] =
     useState(0);
@@ -2596,6 +2604,12 @@ export default function VideoPlayer({
     return candidates[0]?.index ?? -1;
   };
 
+  const websiteScanState = useRef(null);
+  const websiteAttemptKey = (item, index) => {
+    const hash = sourceTorrentHash(item);
+    return hash ? hash + ":" + String(item.fileIdx ?? item.file_idx ?? "") : stablePlaybackSourceKey(item, index);
+  };
+
   const switchToSource = (
     nextIndex,
     {
@@ -2627,6 +2641,14 @@ export default function VideoPlayer({
       )
     ) {
       return false;
+    }
+
+    // Every automatic handoff shares the browser scan's attempted-file set.
+    // Different providers can publish the same torrent under different row IDs.
+    const scan = autoCheckWebsiteSources && websiteScanState.current;
+    if (scan && !manualSelection) {
+      if (scan.tried.has(websiteAttemptKey(sources[nextIndex], nextIndex))) return false;
+      scan.tried.add(websiteAttemptKey(active, activeIdx));
     }
 
     if (manualSelection) {
@@ -9004,11 +9026,12 @@ export default function VideoPlayer({
         ...getBrowserMediaCapabilities() })
     : null;
   const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
-    canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride);
+    canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride) &&
+    (!filterWebsiteTorrents || !rdOverride?.mediaInfo || rdOverride.audioRescue?.used || rdOverride.videoRescue?.used ||
+      websiteTorrentCandidate({ ...active, mediaInfo: rdOverride.mediaInfo }));
   // Source discovery may publish more rows while a decoder is opening. Read
   // the latest ranked pool without restarting the active candidate's timeout.
   const websiteScanRef = useRef(null);
-  const websiteScanState = useRef(null);
   const [websiteScanMessage, setWebsiteScanMessage] = useState("");
   const scanSourceKey = activeResolutionKey;
   const scanRequestKey = JSON.stringify([source?.playRequestId, source?.tmdbId, source?.title,
@@ -9019,6 +9042,10 @@ export default function VideoPlayer({
     if (!scan || !autoCheckWebsiteSources || manualSourceLockActive() || websiteRateLimitHold ||
         /sign in|log in|unauthori[sz]ed|forbidden|\b(401|403)\b/i.test(rdError || "")) {
       setWebsiteScanMessage("");
+      return;
+    }
+    if (noWebsiteMatches) {
+      setWebsiteScanMessage("No compatible website source found. Look for H.264 or VP9 at 1080p or lower.");
       return;
     }
     if (scan.key !== scanSourceKey || scan.url !== resolvedSourceUrl) {
@@ -9057,12 +9084,12 @@ export default function VideoPlayer({
       handleRdPlaybackError();
       return;
     }
-    if (scanSourceKey) scan.tried.add(scanSourceKey);
+    if (scanSourceKey) scan.tried.add(websiteAttemptKey(active, activeIdx));
     const next = selectableSourceEntries.find(({item,index}) =>
       index !== activeIdx && !failedSourcesRef.current.has(index) &&
       (!sourceNeedsCaching(item) || canResolveWebsiteTorrent(item)) &&
       (playbackMediaType !== "tv" || (episodeAutoplayCanTrustSource(item) && !hasUnusableEpisodeAudio(item))) &&
-      !scan.tried.has(stablePlaybackSourceKey(item,index)) &&
+      !scan.tried.has(websiteAttemptKey(item,index)) &&
       !["youtube","provider","external","status"].includes(String(item.type || "").toLowerCase()));
     if (next && switchToSource(next.index, { preservePosition: true })) {
       setWebsiteScanMessage("Trying the next source…");

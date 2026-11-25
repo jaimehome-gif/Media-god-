@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -184,4 +184,16 @@ test("explicitly saved personal torrent is pending, never treated as a verified 
   assert.match(player,/if \(websiteRateLimitHold\) return false;\s*if \(websitePersonalPendingChoice\(index, item\)\) return true;/);
   assert.match(player,/websiteDirectMediaCheck\?\.allowed === false/);
   assert.match(player,/awaiting compatibility check/);
+});
+
+test("website catalogue torrents need compatible video evidence before resolution", () => {
+  const candidate = label => websiteTorrentCandidate({type:"rd",label});
+  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1", "x264 Hi10P", "x264 TrueHD"])
+    assert.equal(candidate(label),false,label);
+  for (const label of ["release.1080p.x264.AAC", "720p H.264 DD+", "1080p VP9 Opus"])
+    assert.equal(candidate(label),true,label);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("hevc","aac")}),false);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"unknown",...item("h264","dts")}),true);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("h264","truehd")}),false);
+  assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });
