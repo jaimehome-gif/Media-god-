@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -92,4 +92,18 @@ test("website WebM accepts only the phone-verified VP9 and Opus combination",()=
   assert.equal(check(item("vp8","opus"),webm).allowed,false);
   assert.equal(check(item("vp9","vorbis"),webm).allowed,false);
   assert.equal(check(item("vp9","aac"),webm).allowed,false);
+});
+
+
+test("both public hostnames use the same direct media engine regardless of launch flags",()=>{
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    assert.equal(isPublicWebsiteVod({...context,hostname,source:{}}),true);
+    assert.equal(isWebsiteSourcesPlayback({...context,hostname,source:{}}),false);
+    for(const flag of ["nativePlayerAvailable","nativeAndroidMobile","nativeFireTv","mobileApp","fireTv"])
+      assert.equal(isPublicWebsiteVod({...context,hostname,profile:{...profile,[flag]:true}}),false);
+  }
+  assert.equal(isPublicWebsiteVod({...context,isLive:true}),false);
+  assert.equal(isPublicWebsiteVod({...context,hostname:"example.test"}),false);
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod/);
 });
