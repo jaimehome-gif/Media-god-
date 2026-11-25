@@ -77,8 +77,26 @@ export async function invokeIndependentMetadata(payload = {}, {
   timeoutMs = REQUEST_TIMEOUT_MS,
 } = {}) {
   if (!fetchImpl) throw new Error("Catalogue network unavailable");
-  const request = payload && typeof payload === "object" && !Array.isArray(payload)
+  const input = payload && typeof payload === "object" && !Array.isArray(payload)
     ? payload : {};
+  // The standalone catalogue only consumes these public search parameters.
+  // Filter before network, coalescing and cache storage.
+  const fields = ["media_type","provider_ids","provider_id","country","genre",
+    "year","language","movie_id","season_number","region","timezone","date",
+    "category","query","community_reviews","tmdb_id","person_id","provider_catalog",
+    "providers_only","multi_search","include_global_releases","provider_pages","page"];
+  const scalar = value => typeof value === "string" || typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value));
+  const request = Object.fromEntries(fields.filter(key => scalar(input[key]))
+    .map(key => [key, input[key]]));
+  if (Array.isArray(input.provider_ids)) {
+    request.provider_ids = input.provider_ids.filter(value => scalar(value) && typeof value !== "boolean");
+  }
+  if (Array.isArray(input.release_alerts)) {
+    request.release_alerts = input.release_alerts.slice(0,24).filter(value => value && typeof value === "object")
+      .map(value => Object.fromEntries(["tmdb_id","id","media_type"]
+        .filter(key => scalar(value[key])).map(key => [key,value[key]])));
+  }
   try {
     // The home grid can request the same catalogue segment from several
     // components at once. On TV-box WebViews, share just the pending network
