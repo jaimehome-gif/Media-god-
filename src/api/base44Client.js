@@ -58,8 +58,17 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
     throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
   }
   const controller = new AbortController();
-  const timer = setTimeout(()=>controller.abort(),timeoutMs);
-  try {
+  let timer, timeoutError;
+  const assertActive = () => { if (timeoutError) throw timeoutError; };
+  const deadline = new Promise((_,reject)=>{
+    timer=setTimeout(()=>{
+      timeoutError=new Error("Media God request timed out. Please retry.");
+      timeoutError.code="NETWORK_TIMEOUT";
+      reject(timeoutError);
+      controller.abort();
+    },timeoutMs);
+  });
+  const operation=async()=>{
     const response = await fetch(endpoint+path,{
       method,
       headers:{
@@ -69,7 +78,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       ...(body!==undefined?{body:JSON.stringify(body)}:{}),
       credentials:"omit",cache:"no-store",signal:controller.signal
     });
+    assertActive();
     const data = await response.json().catch(()=>({}));
+    assertActive();
     if (playbackRequest && response.status === 429) {
       const delay = response.headers?.get?.("Retry-After") || data?.retry_after;
       const seconds = Number(delay) > 0 ? Number(delay) : (Date.parse(delay) - Date.now()) / 1000;
@@ -83,6 +94,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
     }
     if (!response.ok) throw asError(response,data);
     return data;
+  };
+  try {
+    return await Promise.race([operation(),deadline]);
   } catch(error) {
     if (error?.name==="AbortError") {
       const e = new Error("Media God request timed out. Please retry.");
@@ -94,6 +108,14 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
     clearTimeout(timer);
   }
 };
+function acceptSession(result) {
+  if (typeof result?.access_token !== "string" || !result.access_token.trim()) {
+    const error=new Error("Sign-in service returned no session. Please retry.");
+    error.code="INVALID_SESSION_RESPONSE";
+    throw error;
+  }
+  saveIndependentSessionToken(result.access_token);
+}
 const auth = {
   // Legacy-account linking and recovery need the independent session helpers.
   // Keep the verified Railway session separate from Base44 provider tokens.
@@ -114,8 +136,8 @@ const auth = {
     const result=await call(IDENTITY_API,"/auth/device/status",{
       method:"POST",body:{device_token:deviceToken},token:"",timeoutMs:12000
     });
-    if(result.status==="approved" && result.access_token){
-      saveIndependentSessionToken(result.access_token);
+    if(result.status==="approved"){
+      acceptSession(result);
     }
     return result;
   },
@@ -161,12 +183,12 @@ const auth = {
     const result=await call(IDENTITY_API,"/auth/oauth/exchange",{
       method:"POST",body:{ticket},token:"",timeoutMs:12000
     });
-    saveIndependentSessionToken(result.access_token);
+    acceptSession(result);
     return result;
   },
   async loginViaEmailPassword(email,password) {
     const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
-    saveIndependentSessionToken(result.access_token);
+    acceptSession(result);
     return result;
   },
   async register({email,password,name}={}) {
