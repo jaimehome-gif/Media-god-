@@ -10514,23 +10514,23 @@ export default function VideoPlayer({
    * while the chooser had a much larger cached/selectable set.
    */
   const websiteSourceChoiceAllowed = (index, item) => {
-    if (!websiteSourcesPlayback) return true;
+    if (!publicWebsiteVod) return true;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
       failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
     });
   };
-  const presentedSourceEntries = websiteSourcesPlayback
+  const presentedSourceEntries = publicWebsiteVod
     ? selectableSourceEntries.filter(({ index, item }) => websiteSourceChoiceAllowed(index, item))
     : selectableSourceEntries;
-  const presentedSelectorEntries = websiteSourcesPlayback ? presentedSourceEntries : visibleSourceSelectorEntries;
-  const presentedSelectorValue = websiteSourcesPlayback
+  const presentedSelectorEntries = publicWebsiteVod ? presentedSourceEntries : visibleSourceSelectorEntries;
+  const presentedSelectorValue = publicWebsiteVod
     ? (presentedSourceEntries.some(entry => entry.index === activeIdx) ? activeIdx : "")
     : visibleSourceSelectorValue;
   const selectableSourceCount = presentedSourceEntries.length;
   const showSourceChooser = () => {
-    if (websiteSourcesPlayback) {
+    if (publicWebsiteVod) {
       setInPlayerSourcesOpen(true);
       return;
     }
@@ -11271,7 +11271,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
-                sourceChoiceAllowed={websiteSourcesPlayback ? websiteSourceChoiceAllowed : undefined}
+                sourceChoiceAllowed={publicWebsiteVod ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11412,7 +11412,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
-                sourceChoiceAllowed={websiteSourcesPlayback ? websiteSourceChoiceAllowed : undefined}
+                sourceChoiceAllowed={publicWebsiteVod ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11658,7 +11658,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {!websiteSourcesPlayback && availableSortOptions.length > 1 && (
+          {!publicWebsiteVod && availableSortOptions.length > 1 && (
             <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
                 {playbackMediaType === "tv"
@@ -11720,13 +11720,13 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {websiteSourcesPlayback && selectableSourceCount === 0 && (
+          {publicWebsiteVod && selectableSourceCount === 0 && (
             <p role="status" className="text-xs text-white/70">No verified browser-compatible sources are ready.</p>
           )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                {websiteSourcesPlayback ? "Browser-compatible sources" : "All sources / quality"}
+                {publicWebsiteVod ? "Browser-compatible sources" : "All sources / quality"}
               </span>
 
               <div className="relative">
@@ -11744,7 +11744,7 @@ export default function VideoPlayer({
                       (entry) => String(entry.index) === String(value)
                     );
                     releaseSourceSelector();
-                    if (websiteSourcesPlayback && (!selectedEntry || !websiteSourceChoiceAllowed(selectedEntry.index, selectedEntry.item))) return;
+                    if (publicWebsiteVod && (!selectedEntry || !websiteSourceChoiceAllowed(selectedEntry.index, selectedEntry.item))) return;
                     selectSource(value, selectedEntry?.item || null);
                   }}
                   className="min-h-11 w-full appearance-none rounded-lg border border-white/10 bg-mg-card py-2.5 pl-3 pr-9 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
@@ -11752,7 +11752,7 @@ export default function VideoPlayer({
                 >
                   {presentedSelectorValue === "" ? (
                     <option value="" disabled>
-                      {websiteSourcesPlayback ? "Choose a verified browser source" : "Preparing uncached sources…"}
+                      {publicWebsiteVod ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
                   {presentedSelectorEntries.map(
@@ -11790,7 +11790,7 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {!websiteSourcesPlayback && vidSrcEmbedUrl && (
+          {!publicWebsiteVod && vidSrcEmbedUrl && (
             <button
               type="button"
               data-mg-vidsrc-open="true"
@@ -11802,7 +11802,7 @@ export default function VideoPlayer({
             </button>
           )}
 
-          {!websiteSourcesPlayback && rdOverride &&
+          {!publicWebsiteVod && rdOverride &&
             visibleRdFileSelectorFiles.length > 1 && (
               <label className="min-w-[12rem] flex-1 basis-[18rem]">
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
