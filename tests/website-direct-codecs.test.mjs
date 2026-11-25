@@ -135,3 +135,24 @@ test("rate-limit notice never exposes the unrestricted website menu even if layo
   assert.equal((player.match(/isRdSource && !websiteRateLimitHold && \(/g)||[]).length,2);
   assert.match(player,/source choices are paused/);
 });
+
+
+test("synthetic website menu remains restricted through normal, rate-limit and recovered states",()=>{
+  const choices=[
+    {index:0,item:{...item(),src:url}},
+    {index:1,item:{...item("hevc","aac"),src:url}},
+    {index:2,item:{src:url}},
+    {index:3,item:{...item("h264","dts"),src:url}}
+  ];
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    const visible=error=>{
+      const input={...context,hostname,error};
+      const hold=isWebsiteRateLimitHold(input);
+      const restricted=isPublicWebsiteVod(input)||hold;
+      return choices.filter(({item})=>!restricted||(!hold&&isWebsiteDirectSourceChoice({item,originalItem:item,url:item.src,...caps}))).map(entry=>entry.index);
+    };
+    assert.deepEqual(visible(""),[0]);
+    assert.deepEqual(visible("HTTP 429"),[]);
+    assert.deepEqual(visible(""),[0]);
+  }
+});
