@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { createServer as createHttpsServer } from "node:https";
 import puppeteer from "puppeteer-core";
 
 // No provider requests, account credentials, or production data. The real
 // LiveVideo component receives only locally generated, self-owned media.
 const dir = await mkdtemp(join(tmpdir(), "mg-player-integration-"));
-let browser, strictBrowser, vite;
+let browser, strictBrowser, vite, mediaServer;
 const run = (exe, args) => {
   const result = spawnSync(exe, args, { stdio: "inherit" });
   if (result.error) throw result.error;
@@ -30,6 +31,40 @@ try {
     const mime = name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".webm") ? "video/webm" :
       name.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : name.endsWith(".ts") ? "video/mp2t" : "";
     if (mime) files.set("/__mg_fixture/"+name,[mime,await readFile(join(dir,name))]);
+  }
+  // Separate HTTPS media origin, limited to generated fixture files.
+  const delivery = [];
+  mediaServer = createHttpsServer({key:await readFile(join(dir,"key.pem")),cert:await readFile(join(dir,"cert.pem"))},(req,res)=>{
+    const file=files.get(req.url);
+    if (!file) {res.writeHead(404).end();return;}
+    const origin=req.headers.origin || "";
+    if (origin && /^https:\/\/(?:www\.)?underworldhub\.co\.uk:\d+$/.test(origin)) {
+      res.setHeader("Access-Control-Allow-Origin",origin);
+      res.setHeader("Vary","Origin");
+      res.setHeader("Access-Control-Allow-Methods","GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers","Range");
+      res.setHeader("Access-Control-Expose-Headers","Content-Range, Accept-Ranges, Content-Length");
+    }
+    if(req.method==="OPTIONS"){res.writeHead(204).end();return;}
+    if(!["GET","HEAD"].includes(req.method)){res.writeHead(405).end();return;}
+    const [mime,body]=file;
+    const range=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range || "");
+    const start=range?Number(range[1]):0;
+    const end=range?Math.min(range[2]?Number(range[2]):body.length-1,body.length-1):body.length-1;
+    if(start>end || start>=body.length){res.writeHead(416,{"Content-Range":"bytes */"+body.length}).end();return;}
+    const headers={"Content-Type":mime,"Accept-Ranges":"bytes","Content-Length":end-start+1,"Cache-Control":"no-store"};
+    if(range)headers["Content-Range"]="bytes "+start+"-"+end+"/"+body.length;
+    delivery.push({path:req.url,method:req.method,status:range?206:200,origin});
+    res.writeHead(range?206:200,headers).end(req.method==="HEAD"?undefined:body.subarray(start,end+1));
+  });
+  await new Promise((resolve,reject)=>{mediaServer.once("error",reject);mediaServer.listen(0,"127.0.0.1",resolve);});
+  const mediaOrigin="https://127.0.0.1:"+mediaServer.address().port;
+  const actualTracks=new Map();
+  for (const name of ["sample.mp4","sample.webm","sample.m3u8"]) {
+    const probe=spawnSync("ffprobe",["-v","error","-show_streams","-of","json",join(dir,name)],{encoding:"utf8"});
+    assert.equal(probe.status,0,"ffprobe "+name);
+    const streams=JSON.parse(probe.stdout).streams;
+    actualTracks.set(name,{v:streams.find(x=>x.codec_type==="video")?.codec_name,a:streams.find(x=>x.codec_type==="audio")?.codec_name});
   }
   vite = await createServer({
     configFile:false, root:fileURLToPath(new URL("../",import.meta.url)),
@@ -58,8 +93,10 @@ try {
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
   strictBrowser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=document-user-activation-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
-  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],["sample.mp4","h264","dts","www.underworldhub.co.uk",true,false,false,true],["sample.mp4","h264","","www.underworldhub.co.uk",true,false,false,true]];
-  for (const [name,v,a,host,full,mobile,strict,rejected] of cases) {
+  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],["sample.mp4","h264","dts","www.underworldhub.co.uk",true,false,false,true],["sample.mp4","h264","","www.underworldhub.co.uk",true,false,false,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false,false,true],["sample.m3u8","h264","aac","www.underworldhub.co.uk",true,true,false,false,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false,false,true,true]];
+  for (const [name,v,a,host,full,mobile,strict,rejected,remote,urlOnly] of cases) {
+    const deliveryStart=delivery.length;
+    if (!rejected) assert.deepEqual(actualTracks.get(name),{v,a},"actual ffprobe codecs for "+name);
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -75,7 +112,7 @@ try {
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
     await page.setRequestInterception(true);
     page.on("request",request=>{
-      if (request.url().startsWith(base.slice(0,base.indexOf("/__mg_fixture/"))+"/") || request.url().startsWith("blob:") || request.url().startsWith("data:")) {
+      if (request.url().startsWith(base.slice(0,base.indexOf("/__mg_fixture/"))+"/") || (remote && files.has(new URL(request.url()).pathname) && new URL(request.url()).origin===mediaOrigin) || request.url().startsWith("blob:") || request.url().startsWith("data:")) {
         void request.continue();
       } else {
         void request.abort();
@@ -85,10 +122,14 @@ try {
       await page.goto(base);
       // Puppeteer's page.evaluate grants a user gesture. The strict case must
       // mount without activation, using CDP explicitly with userGesture:false.
-      const input = {name,v,a,full};
-      const mount = async ({name,v,a,full})=>{
+      const input = {name,v,a,full,urlOnly,mediaBase:remote?mediaOrigin+"/__mg_fixture/":base};
+      if (remote) {
+        const check=await page.evaluate(async url=>{const response=await fetch(url,{headers:{Range:"bytes=0-63"}});return {status:response.status,range:response.headers.get("Content-Range"),size:(await response.arrayBuffer()).byteLength};},mediaOrigin+"/__mg_fixture/sample.mp4");
+        assert.equal(check.status,206);assert.equal(check.size,64);assert.match(check.range,/^bytes 0-63\//);
+      }
+      const mount = async ({name,v,a,full,mediaBase,urlOnly})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,mediaBase).href,videoCodec:v,audioCodec:a,urlOnly});
       };
       let gate;
       if (strict) {
@@ -124,13 +165,25 @@ try {
       }
       if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
       if (strict) {
-        const unlock = await page.waitForSelector('[data-mg-audio-unlock="true"] button',{timeout:15000});
-        await unlock.click();
+        const unlockSelector = '[data-mg-audio-unlock="true"] button';
+        await page.waitForSelector(unlockSelector,{visible:true,timeout:15000});
+        // A trusted keyboard activation works even when React replaces the
+        // overlay between locating and clicking an element on mobile.
+        await page.focus(unlockSelector);
+        await page.keyboard.press("Enter");
         await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
         console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }
-      const result = await page.evaluate(async ()=>{
+      const result = await page.evaluate(async ({remoteMp4})=>{
         const video = document.querySelector('video[data-mg-playback-surface="active"]');
+        // Without crossorigin on the real MP4 element, Web Audio must return
+        // silence even if media audio is decoded. Use Chromium decoded-byte
+        // counters in that case; HLS uses its own CORS-enabled MSE pipeline.
+        if(remoteMp4){
+          const deadline=performance.now()+15000;
+          while(performance.now()<deadline && !(video.currentTime>0.5 && video.webkitAudioDecodedByteCount>0) && !video.error)await new Promise(r=>setTimeout(r,200));
+          return {time:video.currentTime,decodedFrames:video.getVideoPlaybackQuality().totalVideoFrames,width:video.videoWidth,height:video.videoHeight,audioDecodedBytes:video.webkitAudioDecodedByteCount,muted:video.muted,error:video.error?.message || ""};
+        }
         const context = new AudioContext();
         await context.resume();
         const source = context.createMediaElementSource(video);
@@ -151,10 +204,16 @@ try {
             width:video.videoWidth,height:video.videoHeight,audioRms:rms,muted:video.muted,
             error:video.error?.message || ""};
         } finally {await context.close();}
-      });
-      console.log(host,mobile?"mobile Chrome emulation": "desktop",full?"Sources VideoPlayer":"LiveVideo",name,JSON.stringify(result));
+      },{remoteMp4:remote && name==="sample.mp4"});
+      if(remote){
+        const requests=delivery.slice(deliveryStart);
+        assert.ok(requests.some(x=>x.path.endsWith("/"+name) && x.method==="GET"),"actual separate-server media request");
+        if(name.endsWith(".m3u8"))assert.ok(requests.some(x=>x.path.endsWith(".ts")),"actual HLS segments delivered");
+        console.log("separate media origin",name,JSON.stringify(requests));
+      }
+      console.log(host,mobile?"mobile Chrome emulation": "desktop",full?"Sources VideoPlayer":"LiveVideo",urlOnly?"URL-only record":"standard record",name,JSON.stringify(result));
       assert.ok(result.time>0 && result.decodedFrames>0 && result.width>0 && result.height>0,name+" actual component picture");
-      assert.ok(result.audioRms>0.001 && !result.muted,name+" actual component audio");
+      assert.ok((remote && name==="sample.mp4" ? result.audioDecodedBytes>0 : result.audioRms>0.001) && !result.muted,name+" actual component audio");
       assert.deepEqual(renderErrors, [], name+" no browser exceptions or render loops");
     } finally {await page.close();}
   }
@@ -163,5 +222,6 @@ try {
   if (strictBrowser) await strictBrowser.close();
   if (browser) await browser.close();
   if (vite) await vite.close();
+  if (mediaServer) await new Promise(resolve=>mediaServer.close(resolve));
   await rm(dir,{recursive:true,force:true});
 }

@@ -10666,6 +10666,10 @@ export default function VideoPlayer({
   const playerUiStatus =
     displayedError && !busy
       ? "Source issue"
+      : websiteSourcesPlayback && !busy && awaitingCacheChoice
+        ? "Not ready"
+      : websiteSourcesPlayback && !busy && websiteDirectMediaCheck?.allowed === false
+        ? "Incompatible"
       : noPlayableVodSources && !busy
         ? "No sources"
       : activeIsUnverifiedHostedEpisode && !busy
@@ -10891,7 +10895,7 @@ export default function VideoPlayer({
 
         <div
           data-mg-player-stage="true"
-          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
+          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : awaitingCacheChoice ? "not-ready" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
           }
@@ -10962,7 +10966,7 @@ export default function VideoPlayer({
             </div>
           ) : awaitingCacheChoice ? (
             <div className="flex flex-col items-center gap-3 p-6 text-center">
-              <p>This source needs caching before it can play.</p>
+              <p role={websiteSourcesPlayback ? "status" : undefined} className={websiteSourcesPlayback ? "max-w-md text-sm text-white/85" : undefined}>{websiteSourcesPlayback ? "No playable file has been delivered to the browser. This is a media availability issue, not an audio decoder error." : "This source needs caching before it can play."}</p>
               <button type="button" onClick={showSourceChooser}
                 className="rounded-lg bg-mg-green px-4 py-3 font-bold text-black">Choose another source</button>
               <button type="button" onClick={() => setRequestedCacheJob(cacheJobKey)}
@@ -11299,10 +11303,10 @@ export default function VideoPlayer({
                 }
                 showCastButton={false}
                 key={
-                  active.src
+                  websiteSourcesPlayback ? resolvedSourceUrl : active.src
                 }
                 src={
-                  active.src
+                  websiteSourcesPlayback ? resolvedSourceUrl : active.src
                 }
                 sourceLabel={
                   active?.format ||
@@ -11350,7 +11354,7 @@ export default function VideoPlayer({
 
               <PlayerControls
                 key={
-                  websiteSourcesPlayback ? `website-controls:${active.src}` : active.src
+                  websiteSourcesPlayback ? `website-controls:${resolvedSourceUrl}` : active.src
                 }
                 videoRef={
                   liveVideoRef

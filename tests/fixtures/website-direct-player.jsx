@@ -26,11 +26,11 @@ export function unmountSample() {
 }
 
 // Exercise the real Sources player handoff, not just the decoder component.
-export async function mountSourcesSample({ url, videoCodec, audioCodec }) {
+export async function mountSourcesSample({ url, videoCodec, audioCodec, urlOnly = false }) {
   const { default: VideoPlayer } = await import("../../src/components/mg/VideoPlayer.jsx");
   const { getPlaybackDeviceProfile } = await import("../../src/components/mg/mediaCompatibility.js");
   const { isWebsiteSourcesPlayback } = await import("../../src/components/mg/websiteDirectMediaPolicy.js");
-  const item = {type:"file",src:url,url,label:"Owned synthetic browser sample",subtitles:EMPTY_SUBTITLES,
+  const item = {type:"file",...(urlOnly ? {} : {src:url}),url,label:"Owned synthetic browser sample",subtitles:EMPTY_SUBTITLES,
     mediaInfo:{video_tracks:[{codec:videoCodec}],audio_tracks:[{codec:audioCodec}]}};
   const source = {title:"Owned synthetic browser sample",mediaType:"movie",type:"movie",
     manualSourceSelection:true,skipAddonLookup:true,skipRdLookup:true,noRd:true,
