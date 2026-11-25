@@ -22,6 +22,7 @@ import { browserCannotDecodeResolvedRdAudio } from "@/components/mg/browserRdAud
  * manual choice because native can play it.
  */
 export function useProactiveCodecGuard({
+  softwareDecoder,
   active,
   activeIdx,
   activeUrl,
@@ -49,6 +50,7 @@ export function useProactiveCodecGuard({
 
   useEffect(() => {
     if (
+      softwareDecoder ||
       isLive ||
       isYoutube ||
       isProvider ||
@@ -166,6 +168,7 @@ export function useProactiveCodecGuard({
       "This source uses a video or audio codec your device cannot decode in the web player. Choose another source or use a native player."
     );
   }, [
+    softwareDecoder,
     active,
     activeIdx,
     activeUrl,

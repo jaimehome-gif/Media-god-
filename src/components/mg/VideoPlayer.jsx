@@ -1,6 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
+import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -8975,8 +8976,6 @@ export default function VideoPlayer({
 
   const [browserFallbackSource, setBrowserFallbackSource] = useState("");
   const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
-  // Public website Sources alone use the existing HTML5/HLS playback engine.
-  // The exact resolved rendition must have verified audio and video metadata.
   const websitePlaybackContext = {
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
@@ -8988,6 +8987,10 @@ export default function VideoPlayer({
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
+  const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
+    canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride);
+  // The chooser contains resolver inputs as well as directly playable files.
+  const filterDirectChoices = publicWebsiteVod && (!websiteSourcesPlayback || websiteRateLimitHold);
   const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
@@ -9021,7 +9024,7 @@ export default function VideoPlayer({
     /^https?:\/\//i.test(nativePlaybackUrl) &&
     nativeFallbackUrl === nativePlaybackUrl;
 
-  useProactiveCodecGuard({ active, activeIdx, activeUrl, rdOverride, isDirectFile, isLive, isYoutube, isProvider, useNativePlayback, nativeFireTvPlayer, rdResolving, rdPolling, rdTorrentId, rdPreparation, manualSourceLockActive, markSourceFailed, findNextPlayableSource, switchToSource, setForceNativePlayback, setNativeFallbackUrl, setRdError, sourceDisplayLabel });
+  useProactiveCodecGuard({ softwareDecoder: moviSource, active, activeIdx, activeUrl, rdOverride, isDirectFile, isLive, isYoutube, isProvider, useNativePlayback, nativeFireTvPlayer, rdResolving, rdPolling, rdTorrentId, rdPreparation, manualSourceLockActive, markSourceFailed, findNextPlayableSource, switchToSource, setForceNativePlayback, setNativeFallbackUrl, setRdError, sourceDisplayLabel });
 
   /*
    * VOD STARTUP WATCHDOG
@@ -9061,6 +9064,7 @@ export default function VideoPlayer({
 
     const timer = window.setTimeout(() => {
       const video = stageRef.current?.querySelector("video");
+      if (stageRef.current?.querySelector("movi-player")?.currentTime > 0.25) return;
       const realProgress =
         video instanceof HTMLVideoElement &&
         !video.ended &&
@@ -10519,7 +10523,7 @@ export default function VideoPlayer({
     failed: failedSources.has(index),
   });
   const websiteSourceChoiceAllowed = (index, item) => {
-    if (!publicWebsiteVod) return true;
+    if (!filterDirectChoices) return true;
     if (websiteRateLimitHold) return false;
     if (websitePersonalPendingChoice(index, item)) return true;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
@@ -10528,11 +10532,11 @@ export default function VideoPlayer({
       failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
     });
   };
-  const presentedSourceEntries = publicWebsiteVod
+  const presentedSourceEntries = filterDirectChoices
     ? selectableSourceEntries.filter(({ index, item }) => websiteSourceChoiceAllowed(index, item))
     : selectableSourceEntries;
-  const presentedSelectorEntries = publicWebsiteVod ? presentedSourceEntries : visibleSourceSelectorEntries;
-  const presentedSelectorValue = publicWebsiteVod
+  const presentedSelectorEntries = filterDirectChoices ? presentedSourceEntries : visibleSourceSelectorEntries;
+  const presentedSelectorValue = filterDirectChoices
     ? (presentedSourceEntries.some(entry => entry.index === activeIdx) ? activeIdx : "")
     : visibleSourceSelectorValue;
   const selectableSourceCount = presentedSourceEntries.length;
@@ -10902,7 +10906,7 @@ export default function VideoPlayer({
           </div>
         </div>
 
-        {publicWebsiteVod && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
+        {publicWebsiteVod && !moviSource && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
           <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
         {inPlayerSourcesOpen && (
@@ -10927,8 +10931,8 @@ export default function VideoPlayer({
         <div
           data-mg-player-stage="true"
           data-mg-website-rate-limit-hold={websiteRateLimitHold ? "true" : undefined}
-          data-mg-website-engine={publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
-          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
+          data-mg-website-engine={moviSource ? "movi" : publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
+          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : moviSource ? "decoding" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
           }
@@ -11170,6 +11174,10 @@ export default function VideoPlayer({
                 Media God is handing this stream to the Android native video engine.
               </p>
             </div>
+          ) : moviSource ? (
+            <WebsiteSourcesMovi key={resolvedSourceUrl} url={resolvedSourceUrl}
+              onMetadata={handleLoadedMetadata} onProgress={handleTimeUpdate}
+              onFailure={rdOverride ? handleRdPlaybackError : handleDirectPlaybackError} />
           ) : websiteDirectMediaCheck?.allowed === false ? (
             <div role="alert" data-mg-website-codec-rejected="true"
               className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
@@ -11668,7 +11676,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {!publicWebsiteVod && availableSortOptions.length > 1 && (
+          {!filterDirectChoices && availableSortOptions.length > 1 && (
             <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
                 {playbackMediaType === "tv"
@@ -11730,13 +11738,13 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {publicWebsiteVod && selectableSourceCount === 0 && (
+          {filterDirectChoices && selectableSourceCount === 0 && (
             <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : "No verified browser-compatible sources are ready."}</p>
           )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                {publicWebsiteVod ? (presentedSourceEntries.some(({index,item}) => websitePersonalPendingChoice(index,item)) ? "Saved file / compatibility status" : "Browser-compatible sources") : "All sources / quality"}
+                {filterDirectChoices ? (presentedSourceEntries.some(({index,item}) => websitePersonalPendingChoice(index,item)) ? "Saved file / compatibility status" : "Browser-compatible sources") : "All sources / quality"}
               </span>
 
               <div className="relative">
@@ -11762,7 +11770,7 @@ export default function VideoPlayer({
                 >
                   {presentedSelectorValue === "" ? (
                     <option value="" disabled>
-                      {publicWebsiteVod ? "Choose a verified browser source" : "Preparing uncached sources…"}
+                      {filterDirectChoices ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
                   {presentedSelectorEntries.map(

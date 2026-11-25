@@ -94,6 +94,19 @@ export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = 
   return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }
 
+// Check the resolved transport separately from discovery and codec metadata.
+export function canOpenWebsiteMovi(url, original, rendition) {
+  if (original?.drm || rendition?.drm) return false;
+  if ([original, rendition].some(item => [item?.headers, item?.requestHeaders]
+    .some(headers => Object.keys(headers || {}).length))) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 // Saved personal torrents are explicit user selections, not catalogue results.
 // They may be shown as pending before an existing account resolver returns a
 // file. This is a chooser state only: checkWebsiteDirectMedia still gates decoding.
