@@ -1,11 +1,16 @@
 // Web-only direct-media screening. It does not discover or resolve streams,
 // alter DRM/access controls, or make claims about rights to a media URL.
-export const isWebsiteSourcesPlayback = ({ hostname, profile, source, active, isLive }) =>
+// The public browser engine must not depend on a particular launch button.
+// Installed native apps, including those using the public hostname, are excluded.
+export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
   !isLive && source?.mediaType !== "live" &&
   /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
   profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
-  !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv &&
-  Boolean(source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc);
+  !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv;
+
+export const isWebsiteSourcesPlayback = context =>
+  isPublicWebsiteVod(context) &&
+  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
 
 const codec = track => String(track?.codec || track?.codec_name || "").trim().toLowerCase();
 const h264 = v => /^(?:h[._ -]?264|avc|avc1(?:\..*)?)$/.test(v);
