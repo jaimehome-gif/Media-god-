@@ -1,6 +1,6 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
+import { isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -8977,15 +8977,17 @@ export default function VideoPlayer({
   const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
   // Public website Sources alone use the existing HTML5/HLS playback engine.
   // The exact resolved rendition must have verified audio and video metadata.
-  const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback({
+  const websitePlaybackContext = {
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
-  });
+  };
+  const publicWebsiteVod = !nativeFireTvPlayer && isPublicWebsiteVod(websitePlaybackContext);
+  const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
-  const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !isLive && !active?.drm && !rdOverride?.drm &&
+  const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
     typeof BroadcastChannel === "function" && typeof globalThis.crypto?.randomUUID === "function" &&
@@ -10893,11 +10895,7 @@ export default function VideoPlayer({
           </div>
         </div>
 
-        {!nativeFireTvPlayer && !isLive &&
-          /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
-          (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
-          !getPlaybackDeviceProfile()?.nativeAndroidMobile && !getPlaybackDeviceProfile()?.nativeFireTv &&
-          !getPlaybackDeviceProfile()?.mobileApp && !getPlaybackDeviceProfile()?.fireTv &&
+        {publicWebsiteVod && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
           <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
         {inPlayerSourcesOpen && (
@@ -10919,6 +10917,7 @@ export default function VideoPlayer({
 
         <div
           data-mg-player-stage="true"
+          data-mg-website-engine={publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
           data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
