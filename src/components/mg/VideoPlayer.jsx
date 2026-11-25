@@ -103,6 +103,7 @@ import {
   recordSuccessfulPlaybackSource,
   recordTrustedCachedSource,
 } from "@/components/mg/trustedCachedSources";
+import { magnetFromInput } from "@/components/mg/magnetStreamHelpers";
 import { sourceHasAuthoritativeCachedSignal } from "@/components/mg/sourceCacheVisibility";
 import { sourceMatchesRequestedIdentity } from "@/components/mg/sourceIdentity";
 import { sourceIsAioStreamsCandidate } from "@/components/mg/sourceProviderIdentity";
@@ -3314,7 +3315,16 @@ export default function VideoPlayer({
   );
   const [requestedCacheJob, setRequestedCacheJob] = useState("");
   const cacheJobKey = JSON.stringify([source?.playRequestId, rdMediaContextKey, activeResolutionKey]);
+  // Website Sources checks uncertain magnets through the existing account resolver.
+  // Explicit cache misses stay available for the viewer to prepare on demand.
+  const websiteTorrentLaunch = sourcesPlayback && isPublicWebsiteVod({
+    hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(), source, isLive,
+  });
+  const canResolveWebsiteTorrent = item => websiteTorrentLaunch && source?.hasRd !== false &&
+    Boolean(sourceTorrentHash(item)) && item?.cacheRequired !== true &&
+    item?.debridCacheCheckState !== "uncached" && !(item?.debridCacheChecked && item?.debridCached === false);
   const awaitingCacheChoice = sourcesPlayback && activeNeedsCaching &&
+    !(websiteTorrentLaunch && manualSourceLockActive()) && !canResolveWebsiteTorrent(active) &&
     !sourceHasAuthoritativeCachedSignal(active) && requestedCacheJob !== cacheJobKey;
 
   const startupHandoffAvailable = canAutoHandoffStartup({
@@ -4709,7 +4719,8 @@ export default function VideoPlayer({
               active?.magnet ||
               active?.magnetLink ||
               richMagnet ||
-              "";
+              active?.rdTorrentId ||
+              magnetFromInput(activeTorrentHash);
 
             if (
               !magnet
@@ -4876,7 +4887,9 @@ export default function VideoPlayer({
                   torrentId: existingData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
                 });
                 setRdFiles(existingData.files || []);
-                setRdTorrentId(existingRdTorrentId);
+                // Keep the library ID on the resolved file for file switching.
+                // A pending ID keeps the stage in the preparation screen.
+                setRdTorrentId(null);
                 setRdResolving(false);
                 setRdPreparation(null);
                 return;
@@ -9023,17 +9036,31 @@ export default function VideoPlayer({
       return;
     }
     if (scan.proven && !scan.decoderFailed) return;
+    if (!rdError && !resolvedSourceUrl && rdTorrentId && (rdPolling || rdPreparation)) {
+      setWebsiteScanMessage("Real-Debrid is preparing the selected torrent…");
+      return;
+    }
     const elapsed = Date.now() - scan.started;
     const waitingForDiscovery = !sourceIsUserSelectable(active);
+    // A signed-in resolution request has its own timeout. Switching at the
+    // short decoder deadline discards the resulting URL and queues another request.
+    const lookupDeadline = isRdSource && rdResolving ? 125000 : 25000;
     const failed = scan.decoderFailed || !!rdError || awaitingCacheChoice ||
-      (resolvedSourceUrl && !moviSource) || waitingForDiscovery || elapsed >= (resolvedSourceUrl ? 12000 : 25000);
+      (resolvedSourceUrl && !moviSource) || waitingForDiscovery || elapsed >= (resolvedSourceUrl ? 12000 : lookupDeadline);
     if (!failed) {
-      setWebsiteScanMessage("Checking source for picture and sound…");
+      setWebsiteScanMessage(isRdSource && !resolvedSourceUrl
+        ? "Checking this torrent with Real-Debrid…"
+        : "Checking source for picture and sound…");
+      return;
+    }
+    if (rdOverride?.fallbackSrc && rdOverride.fallbackSrc !== resolvedSourceUrl && !rdOverride.fallbackTried) {
+      handleRdPlaybackError();
       return;
     }
     if (scanSourceKey) scan.tried.add(scanSourceKey);
     const next = selectableSourceEntries.find(({item,index}) =>
-      index !== activeIdx && !failedSourcesRef.current.has(index) && !sourceNeedsCaching(item) &&
+      index !== activeIdx && !failedSourcesRef.current.has(index) &&
+      (!sourceNeedsCaching(item) || canResolveWebsiteTorrent(item)) &&
       (playbackMediaType !== "tv" || (episodeAutoplayCanTrustSource(item) && !hasUnusableEpisodeAudio(item))) &&
       !scan.tried.has(stablePlaybackSourceKey(item,index)) &&
       !["youtube","provider","external","status"].includes(String(item.type || "").toLowerCase()));
