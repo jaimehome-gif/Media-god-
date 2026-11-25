@@ -10893,7 +10893,12 @@ export default function VideoPlayer({
           </div>
         </div>
 
-        {websiteSourcesPlayback && <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
+        {!nativeFireTvPlayer && !isLive &&
+          /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
+          (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
+          !getPlaybackDeviceProfile()?.nativeAndroidMobile && !getPlaybackDeviceProfile()?.nativeFireTv &&
+          !getPlaybackDeviceProfile()?.mobileApp && !getPlaybackDeviceProfile()?.fireTv &&
+          <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
