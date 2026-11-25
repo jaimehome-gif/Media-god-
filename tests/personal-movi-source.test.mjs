@@ -23,3 +23,13 @@ test("Personal Movi receives only a user-selected File, not URLs or provider res
   assert.ok(script.includes('player.setAttribute("sw", "true")'));
   assert.ok(!/fetch\(|XMLHttpRequest|postMessage|URLSearchParams|localStorage|magnet:|RealDebrid/i.test(script));
 });
+
+test("Personal Sources is reachable from main website navigation", () => {
+  const nav = read("src/components/mg/Navbar.jsx");
+  const app = read("src/App.jsx");
+  const page = read("src/pages/PersonalSourcesPage.jsx");
+  assert.ok(nav.includes('to="/personal-sources"'));
+  assert.ok(nav.includes("canOpenPersonalMovi() &&"));
+  assert.ok(app.includes('path="/personal-sources"'));
+  assert.ok(page.includes("<PersonalMoviSource defaultOpen />"));
+});
