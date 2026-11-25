@@ -78,10 +78,10 @@ test("website chooser does not inherit original codecs for an unverified renditi
 test("all in-player website menus use the screened entries and native paths retain original choices",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   const controls=readFileSync(new URL("../src/components/mg/MediaPlayerControls.jsx",import.meta.url),"utf8");
-  assert.match(player,/const presentedSourceEntries = websiteSourcesPlayback[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
+  assert.match(player,/const presentedSourceEntries = publicWebsiteVod[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
   assert.match(player,/entries=\{presentedSourceEntries\}/);
   assert.match(player,/presentedSelectorEntries\.map\(/);
-  assert.equal((player.match(/sourceChoiceAllowed=\{websiteSourcesPlayback \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
+  assert.equal((player.match(/sourceChoiceAllowed=\{publicWebsiteVod \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
   assert.match(controls,/!sourceChoiceAllowed \|\| sourceChoiceAllowed\(index, item\)/);
 });
 
@@ -106,4 +106,12 @@ test("both public hostnames use the same direct media engine regardless of launc
   assert.equal(isPublicWebsiteVod({...context,hostname:"example.test"}),false);
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   assert.match(player,/const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod/);
+});
+
+
+test("public direct playback menu is screened regardless of launch route without changing the active stream guard",()=>{
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!publicWebsiteVod\) return true;/);
+  assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
+  assert.match(player,/const presentedSourceEntries = publicWebsiteVod/);
 });
