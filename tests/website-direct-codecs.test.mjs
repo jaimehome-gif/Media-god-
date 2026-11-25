@@ -188,12 +188,15 @@ test("explicitly saved personal torrent is pending, never treated as a verified 
 
 test("website catalogue torrents need compatible video evidence before resolution", () => {
   const candidate = label => websiteTorrentCandidate({type:"rd",label});
-  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1", "x264 Hi10P", "x264 TrueHD"])
+  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
     assert.equal(candidate(label),false,label);
-  for (const label of ["release.1080p.x264.AAC", "720p H.264 DD+", "1080p VP9 Opus"])
+  for (const label of ["release.1080p.x264.AAC", "720p H.264 DD+", "1080p VP9 Opus", "1080p x265 AAC", "AV1 Opus", "XviD MP3", "VP8 Vorbis", "H264 FLAC"])
     assert.equal(candidate(label),true,label);
-  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("hevc","aac")}),false);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("hevc","aac")}),true);
   assert.equal(websiteTorrentCandidate({type:"rd",label:"unknown",...item("h264","dts")}),true);
   assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("h264","truehd")}),false);
+  for (const track of [{height:2160}, {bit_depth:10}, {color_transfer:"smpte2084"}, {pix_fmt:"yuv420p10le"}])
+    assert.equal(websiteTorrentCandidate({type:"rd",mediaInfo:{video_tracks:[{codec:"hevc",...track}],audio_tracks:[{codec:"aac"}]}}),false);
+  assert.equal(candidate("1080p MPEG-4 container"),false);
   assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });

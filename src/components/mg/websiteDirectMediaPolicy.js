@@ -94,6 +94,19 @@ export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = 
   return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }
 
+const catalogueVideoCodec = /\b(?:[hx][ .-]?26[45]|avc1?|hevc|hev1|hvc1|vp0?[89]|av0?1|xvid|divx|mpeg[ .-]?4(?:[ .-]?part[ .-]?2)?)\b/i;
+const catalogueAudioCodec = /^(?:aac(?:[ -]?lc)?|mp4a(?:\.40\.2)?|ac-?3|e-?ac-?3|dts|opus|vorbis|mp3|flac)$/i;
+const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
+export const websiteTorrentFilterDescription = "Website torrent filter: SDR releases up to 1080p with a recognised video codec.";
+export const noWebsiteTorrentMatch = "No compatible website source found. Look for an SDR release up to 1080p with a listed video codec.";
+
+function standardRangeTrack(track) {
+  const transfer = String(track?.color_transfer || track?.colour_transfer || "").toLowerCase();
+  return !(Number(track?.height) > 1080 || Number(track?.bits_per_raw_sample || track?.bit_depth) > 8 ||
+    /smpte2084|arib-std-b67/.test(transfer) || /(?:10|12)(?:le|be)$/.test(track?.pix_fmt || "") ||
+    highRangeRelease.test(track?.profile || ""));
+}
+
 // Catalogue torrents without a recognised video format stay out of the website
 // queue. A matching release label admits a candidate for an actual decoder test.
 export function websiteTorrentCandidate(item) {
@@ -107,18 +120,19 @@ export function websiteTorrentCandidate(item) {
   const info = item.mediaInfo || item.media_info;
   const videos = info?.video_tracks || info?.videoTracks;
   const audios = info?.audio_tracks || info?.audioTracks;
-  const compatibleAudio = value => /^(?:aac(?:[ -]?lc)?|mp4a(?:\.40\.2)?|ac-?3|e-?ac-?3|dts|opus)$/i.test(value);
-  if (Array.isArray(audios) && !audios.some(track => compatibleAudio(codec(track)))) return false;
-  if (Array.isArray(videos)) return videos.some(track =>
-    (h264(codec(track)) || vp(codec(track))) && !(Number(track.height) > 1080));
   const hints = [item.label, item.name, item.title, item.filename, item.description, item.quality,
-    item.audioCodec, item.audio_codec, item.hdr, item.videoCodec, item.video_codec, item.codec, item.behaviorHints?.filename, item.behaviorHints?.bingeGroup]
+    item.audioCodec, item.audio_codec, item.hdr, item.videoCodec, item.video_codec, item.codec,
+    item.behaviorHints?.filename, item.behaviorHints?.bingeGroup]
     .filter(Boolean).join(" ").replace(/_/g, " ");
-  if (/\b(?:hevc|[hx][ .-]?265|av1|av01|2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|10[ .-]?bit|hi10p)\b/i.test(hints) ||
-      Number(item.height || item.resolution) > 1080) return false;
-  if (/\b(?:truehd|mlp|flac|pcm)\b/i.test(hints) &&
-      !/\b(?:aac|opus|ac-?3|e-?ac-?3|dts|ddp?)\b/i.test(hints)) return false;
-  return /\b(?:[hx][ .-]?264|avc1?|vp0?9)\b/i.test(hints);
+  if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
+  if (Array.isArray(audios) && !audios.some(track => catalogueAudioCodec.test(codec(track)))) return false;
+  if (Array.isArray(videos)) return videos.some(track => catalogueVideoCodec.test(codec(track)) && standardRangeTrack(track));
+  if (/\b(?:truehd|mlp|pcm)\b/i.test(hints) &&
+      !/\b(?:aac|opus|ac-?3|e-?ac-?3|dts|ddp?|vorbis|mp3|flac)\b/i.test(hints)) return false;
+  // MPEG-4 by itself is also a container name. Only explicit Part 2 or a
+  // codec field identifies the video codec in an uninspected release.
+  return catalogueVideoCodec.test(hints.replace(/\bmpeg[ .-]?4\b(?![ .-]?part[ .-]?2)/ig, "")) ||
+    catalogueVideoCodec.test(String(item.videoCodec || item.video_codec || ""));
 }
 
 // Check the resolved transport separately from discovery and codec metadata.

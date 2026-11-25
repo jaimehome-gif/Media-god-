@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { noWebsiteTorrentMatch, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -9045,7 +9045,7 @@ export default function VideoPlayer({
       return;
     }
     if (noWebsiteMatches) {
-      setWebsiteScanMessage("No compatible website source found. Look for H.264 or VP9 at 1080p or lower.");
+      setWebsiteScanMessage(noWebsiteTorrentMatch);
       return;
     }
     if (scan.key !== scanSourceKey || scan.url !== resolvedSourceUrl) {
