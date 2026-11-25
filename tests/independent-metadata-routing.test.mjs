@@ -61,13 +61,28 @@ test("public metadata cache survives a temporary endpoint outage without deletin
     "Never touch Continue Watching, login or user profile data");
 });
 
-test("no silent return to Base44 credits for public catalogue requests", () => {
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /if \(name === 'getTmdbMovies'\) \{\s*return invokeIndependentMetadata\(payload\)/);
-  assert.match(client, /return rawInvoke\(/);
-  assert.match(client, /deviceToken: railwayDeviceToken\(\)/);
-  const metadata = read("src/api/independentMetadata.js");
-  assert.doesNotMatch(metadata, /base44\.functions\.invoke|rd_token|asServiceRole/);
+test("no silent return to Base44 credits for public catalogue requests", async () => {
+  const {base44}=await import("../src/api/base44Client.js");
+  const previous=globalThis.fetch;
+  const requests=[];
+  try {
+    globalThis.fetch=async (url,init)=>{
+      requests.push({url:String(url),init});
+      assert.equal(String(url),INDEPENDENT_METADATA_API_URL);
+      return {ok:true,json:async()=>({movies:[]})};
+    };
+    const result=await base44.functions.invoke("getTmdbMovies",{category:"popular"});
+    assert.deepEqual(result.data,{movies:[]});
+    assert.equal(requests.length,1);
+    assert.equal(requests[0].init.credentials,"omit");
+    assert.doesNotMatch(JSON.stringify(requests[0].init.headers),/authorization/i);
+    globalThis.fetch=async url=>{assert.equal(String(url),INDEPENDENT_METADATA_API_URL);throw Error("offline");};
+    await assert.rejects(base44.functions.invoke("getTmdbMovies",{category:"unavailable-test"}),/Catalogue temporarily unavailable/);
+  } finally {globalThis.fetch=previous;}
+  const client=read("src/api/base44Client.js");
+  assert.doesNotMatch(client,/from\s+["']@base44\/sdk|rawInvoke\(/);
+  const metadata=read("src/api/independentMetadata.js");
+  assert.doesNotMatch(metadata,/base44\.functions\.invoke|rd_token|asServiceRole/);
 });
 
 test("standalone metadata port keeps original response and server-held secret", () => {
@@ -97,8 +112,23 @@ test("independent IMDb resolvers pass only public movie/episode identity", async
   assert.doesNotMatch(init.body, /never-send|rd_token|token/);
   assert.equal(init.credentials, "omit");
   const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'resolveImdb' \|\| name === 'resolveTvImdb'/);
-  assert.match(client, /return invokeIndependentImdbResolver\(name, payload\)/);
+  assert.match(client, /functionName==="resolveImdb"\|\|functionName==="resolveTvImdb"/);
+  assert.match(client, /return invokeIndependentImdbResolver\(functionName,payload\)/);
+  const {base44}=await import("../src/api/base44Client.js");
+  const previous=globalThis.fetch;
+  try {
+    const seen=[];
+    globalThis.fetch=async (url,init)=>{
+      seen.push(String(url));
+      assert.equal(init.credentials,"omit");
+      assert.doesNotMatch(init.body,/NEVER_FORWARD/);
+      return {ok:true,json:async()=>({imdb_id:"tt1234567"})};
+    };
+    for(const name of ["resolveImdb","resolveTvImdb"]) {
+      assert.equal((await base44.functions.invoke(name,{tmdb_id:123,rd_token:"NEVER_FORWARD"})).data.imdb_id,"tt1234567");
+    }
+    assert.deepEqual(seen.map(url=>new URL(url).pathname),["/functions/resolveImdb","/functions/resolveTvImdb"]);
+  } finally {globalThis.fetch=previous;}
 });
 
 test("independent backend ports IMDb logic without Base44 integration runtime", () => {
@@ -170,12 +200,24 @@ test("news and skip metadata bypass Base44 and strip all account credentials", a
   assert.equal(seen[2].options.body, "{}");
 });
 
-test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", () => {
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'getEntertainmentNews'/);
-  assert.match(client, /name === 'getSkipSegments'/);
-  assert.match(client, /name === 'getFireTvApkLink'/);
-  assert.match(client, /return invokeIndependentPublicFeature\(name, payload\)/);
+test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", async () => {
+  const {base44}=await import("../src/api/base44Client.js");
+  const previous=globalThis.fetch;
+  const seen=[];
+  try {
+    globalThis.fetch=async(url,init)=>{
+      seen.push(String(url));
+      assert.equal(init.credentials,"omit");
+      assert.doesNotMatch(init.body,/NEVER_FORWARD/);
+      return {ok:true,json:async()=>({ok:true})};
+    };
+    const names=["getEntertainmentNews","getSkipSegments","getFireTvApkLink"];
+    for(const name of names) assert.deepEqual((await base44.functions.invoke(name,{rd_token:"NEVER_FORWARD"})).data,{ok:true});
+    assert.deepEqual(seen.map(url=>new URL(url).pathname),names.map(name=>"/functions/"+name));
+    assert.ok(seen.every(url=>new URL(url).origin===new URL(INDEPENDENT_METADATA_API_URL).origin));
+    globalThis.fetch=async()=>{throw Error("offline");};
+    await assert.rejects(base44.functions.invoke("getEntertainmentNews",{}),/offline/);
+  } finally {globalThis.fetch=previous;}
   const server = read("deploy/media-god-api/server.mjs");
   const docker = read("deploy/media-god-api/Dockerfile");
   for (const name of ["getEntertainmentNews", "getSkipSegments", "getFireTvApkLink"]) {
@@ -185,4 +227,16 @@ test("the three independently hosted public handlers are wired and never fall ba
   // GitHub's temporary signed APK URLs must not be served from the
   // 5-minute request cache, even when news and skip metadata are cached.
   assert.match(server, /route !== "\/functions\/getFireTvApkLink"/);
+});
+
+
+test("catalogue does not forward or persist nested or top-level account credentials", async()=>{
+  const local=storage();
+  let sent;
+  await invokeIndependentMetadata({media_type:"movie",category:"popular",page:2,access_token:"SECRET",rd_token:"SECRET",
+    provider_ids:[8,{token:"SECRET"}],release_alerts:[{id:123,media_type:"tv",token:"SECRET"}]},
+    {storage:local,fetchImpl:async(_url,init)=>{sent=init;return {ok:true,json:async()=>({movies:[]})};}});
+  assert.deepEqual(JSON.parse(sent.body),{category:"popular",media_type:"movie",page:2,provider_ids:[8],release_alerts:[{tmdb_id:123,media_type:"tv"}]});
+  assert.doesNotMatch(JSON.stringify(sent),/SECRET|access_token|rd_token/);
+  assert.doesNotMatch(local.keys().map(k=>local.getItem(k)).join(""),/SECRET|access_token|rd_token/);
 });
