@@ -1,6 +1,6 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
+import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -8981,7 +8981,8 @@ export default function VideoPlayer({
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
   };
-  const publicWebsiteVod = !nativeFireTvPlayer && isPublicWebsiteVod(websitePlaybackContext);
+  const websiteRateLimitHold = !nativeFireTvPlayer && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError });
+  const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
@@ -10515,6 +10516,7 @@ export default function VideoPlayer({
    */
   const websiteSourceChoiceAllowed = (index, item) => {
     if (!publicWebsiteVod) return true;
+    if (websiteRateLimitHold) return false;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
@@ -10917,6 +10919,7 @@ export default function VideoPlayer({
 
         <div
           data-mg-player-stage="true"
+          data-mg-website-rate-limit-hold={websiteRateLimitHold ? "true" : undefined}
           data-mg-website-engine={publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
           data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
@@ -11018,7 +11021,7 @@ export default function VideoPlayer({
                 </button>
               )}
 
-              {vidSrcEmbedUrl && (
+              {!publicWebsiteVod && vidSrcEmbedUrl && (
                 <button
                   type="button"
                   data-mg-vidsrc-open="true"
@@ -11029,7 +11032,7 @@ export default function VideoPlayer({
                 </button>
               )}
 
-              {isRdSource && (
+              {isRdSource && !websiteRateLimitHold && (
                 <button
                   type="button"
                   onClick={retryResolution}
@@ -11721,7 +11724,7 @@ export default function VideoPlayer({
           )}
 
           {publicWebsiteVod && selectableSourceCount === 0 && (
-            <p role="status" className="text-xs text-white/70">No verified browser-compatible sources are ready.</p>
+            <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : "No verified browser-compatible sources are ready."}</p>
           )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
@@ -11923,7 +11926,7 @@ export default function VideoPlayer({
                   </button>
                 )}
 
-              {isRdSource && (
+              {isRdSource && !websiteRateLimitHold && (
                 <button
                   type="button"
                   onClick={
