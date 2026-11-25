@@ -133,9 +133,15 @@ try {
         console.log(host,"mixed source list: only compatible direct choice presented");
       }
       if (strict) {
-        // React can replace the button between finding its handle and clicking.
-        // Reacquire a visible, stable element; still require a genuine click.
-        await page.locator('[data-mg-audio-unlock="true"] button').setTimeout(15000).click();
+        // Activate the real sound button with a trusted keyboard gesture.
+        // In a mobile emulation viewport an overlay can have no clickable
+        // pointer coordinates in this minimal fixture. Do not call play()
+        // directly or inject a synthetic click: the product handler must run.
+        const unlockSelector = '[data-mg-audio-unlock="true"] button';
+        await page.waitForSelector(unlockSelector,{timeout:15000});
+        await page.focus(unlockSelector);
+        assert.equal(await page.evaluate(selector=>document.activeElement?.matches(selector),unlockSelector),true,"sound action is keyboard focusable");
+        await page.keyboard.press("Enter");
         await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
         console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }
