@@ -96,7 +96,7 @@ async function serve(req,res) {
   let verified;
   try { verified=await verifyIdentity(req.headers.authorization); }
   catch { return reply(res,503,{error:"Account verification temporarily unavailable"},origin); }
-  if (!verified) return reply(res,401,{error:"Sign in to your new Media God account"},origin);
+  if (!verified) return reply(res,401,{error:"Sign in to your new Media God account",code:"MG_SESSION_REJECTED"},origin);
   if (limited(verified.user.id)) return reply(res,429,{error:"Too many requests. Try shortly."},origin);
   let size=0,parts=[],body;
   try {
