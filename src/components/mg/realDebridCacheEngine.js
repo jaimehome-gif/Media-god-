@@ -1,3 +1,4 @@
+import { magnetFromInput } from "@/components/mg/magnetStreamHelpers";
 import { base44 } from "@/api/base44Client";
 import { withGuestDebridPayload } from "@/components/mg/guestDebridDevice";
 
@@ -806,7 +807,7 @@ export async function runRealDebridCacheSession({
   onProgress,
 }) {
   const hash = sourceHash(source);
-  const magnet = sourceMagnet(source);
+  const magnet = sourceMagnet(source) || magnetFromInput(hash);
 
   if (!/^[a-f0-9]{40}$/i.test(hash)) {
     return failureResult("This torrent source is missing a valid info hash.", {

@@ -79,10 +79,11 @@ try {
     ["sample.m3u8","h264","aac","127.0.0.1",false],
     ["sample.mp4","h264","","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
+    ...["library","unknown","fallback","preparing"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
-  for (const [name,v,a,host,full,mobile,strict] of cases) {
+  for (const [name,v,a,host,full,mobile,strict,torrentMode] of cases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -127,7 +128,17 @@ try {
         return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
       };
       let gate;
-      if (strict) {
+      if (torrentMode) {
+        await page.evaluate(async ({name,mode}) => {
+          const fixture = await import("/tests/fixtures/website-torrent-sources.jsx");
+          fixture.mountTorrentTitle({ url: new URL(name,location.href).href, mode });
+        }, {name,mode:torrentMode});
+        await page.waitForFunction(()=>Array.from(document.querySelectorAll("button")).some(button=>
+          button.innerText.includes("Owned Test Clip 2025 English")));
+        const button = await page.evaluateHandle(()=>Array.from(document.querySelectorAll("button"))
+          .find(row=>row.innerText.includes("Play in Media God")));
+        await button.asElement().click();
+      } else if (strict) {
         const session = await page.createCDPSession();
         const response = await session.send("Runtime.evaluate", {
           expression:"("+mount.toString()+")("+JSON.stringify(input)+")",
@@ -140,7 +151,7 @@ try {
         gate = await page.evaluate(mount,input);
       }
       if (full) {
-        assert.equal(gate.route,true);
+        if (!torrentMode) assert.equal(gate.route,true);
         await page.waitForSelector('movi-player');
         if (input.mixedChoices) {
           await page.click('[data-mg-open-in-player-sources="true"]');
@@ -162,6 +173,11 @@ try {
               return samples.some(sample=>Math.abs(sample)>0.005);
             });
         },{timeout:30000});
+        if (torrentMode) {
+          const actions = await page.evaluate(()=>window.fixtureDebridActions);
+          const expected = {library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info"};
+          assert.ok(actions.includes(expected[torrentMode]), "torrent resolver action: "+torrentMode);
+        }
         assert.deepEqual(renderErrors,[]);
         console.log(host,name,"Sources rendered moving video and non-silent audio");
         continue;
