@@ -79,7 +79,7 @@ try {
     ["sample.m3u8","h264","aac","127.0.0.1",false],
     ["sample.mp4","h264","","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
-    ...["library","unknown","fallback","preparing"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
+    ...["library","unknown","fallback","preparing","ranked"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
@@ -128,6 +128,7 @@ try {
         return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
       };
       let gate;
+      let panelLookupCount;
       if (torrentMode) {
         await page.evaluate(async ({name,mode}) => {
           const fixture = await import("/tests/fixtures/website-torrent-sources.jsx");
@@ -137,6 +138,7 @@ try {
           button.innerText.includes("Owned Test Clip 2025 English")));
         const button = await page.evaluateHandle(()=>Array.from(document.querySelectorAll("button"))
           .find(row=>row.innerText.includes("Play in Media God")));
+        panelLookupCount = await page.evaluate(()=>window.fixtureLookups);
         await button.asElement().click();
       } else if (strict) {
         const session = await page.createCDPSession();
@@ -175,7 +177,9 @@ try {
         },{timeout:30000});
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
-          const expected = {library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info"};
+          const expected = {library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
+          assert.equal(await page.evaluate(()=>window.fixtureLookups), panelLookupCount, "reuses the panel discovery");
+          if (torrentMode === "ranked") assert.ok(actions.indexOf("broken") >= 0 && actions.indexOf("working") > actions.indexOf("broken"), "automatically tried both ranked torrents");
           assert.ok(actions.includes(expected[torrentMode]), "torrent resolver action: "+torrentMode);
         }
         assert.deepEqual(renderErrors,[]);

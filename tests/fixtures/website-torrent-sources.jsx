@@ -19,12 +19,25 @@ export function mountTorrentTitle({ url, mode }) {
     fallback_stream_url: mode === "fallback" ? url : "",
   };
 
+  const streams = mode === "ranked" ? [
+    { ...item, label: item.label + " 2160p", rdTorrentId: "broken" },
+    { ...item, id: "second", label: "Owned Test Clip 2025 English 720p", infoHash: "bd".repeat(20),
+      src: "magnet:?xt=urn:btih:" + "bd".repeat(20), url: "", magnet: "", rdTorrentId: "working" },
+  ] : [item];
+  window.fixtureLookups = 0;
   window.fixtureDebridActions = [];
   base44.functions.invoke = async (name, params) => {
     if (name === "realDebridAuth") return { data: { connected: true, valid: true } };
-    if (name === "fetchAddonStreams") return { data: { streams: [item], addons_checked: 1 } };
+    if (name === "fetchAddonStreams") {
+      window.fixtureLookups++;
+      return { data: { streams, addons_checked: 1 } };
+    }
     if (name === "realDebrid") {
       window.fixtureDebridActions.push(params.action);
+      if (mode === "ranked" && params.action === "torrent_info") {
+        window.fixtureDebridActions.push(params.torrent_id);
+        if (params.torrent_id === "broken") return { data: { ...ready, stream_url: new URL("unavailable.mp4", url).href } };
+      }
       if (mode === "preparing" && params.action === "torrent_info" &&
           window.fixtureDebridActions.filter(action => action === "torrent_info").length === 1) {
         return { data: { status: "preparing", torrent_id: ready.torrent_id, rd_status: "downloading",
