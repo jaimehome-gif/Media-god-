@@ -29,7 +29,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
       audio_tracks: [{codec:audioCodec,language:"English"}],
     };
   }
-  const streams = mode === "ranked" ? [
+  const streams = ["ranked","seedless"].includes(mode) ? [
     { ...item, id: "incompatible", label: "Owned Test Clip 2025 English 4K HDR HEVC",
       infoHash: "ef".repeat(20), rdTorrentId: "must-never-resolve" },
     { ...item, rdTorrentId: "broken" },
@@ -60,8 +60,12 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     if (name === "realDebrid") {
       window.fixtureDebridActions.push(params.action);
       if (mode.startsWith("cooldown")) return invoke(name, params);
-      if (mode === "ranked" && params.action === "torrent_info") {
+      if (["ranked","seedless"].includes(mode) && params.action === "torrent_info") {
         window.fixtureDebridActions.push(params.torrent_id);
+        if (mode === "seedless" && params.torrent_id === "broken") return {data:{
+          status:"preparing", torrent_id:"broken", rd_status:"magnet_conversion",
+          torrent_progress:{progress:0, seeders:0, speed_bps:0, downloaded_bytes:0, status:"magnet_conversion"},
+        }};
         if (params.torrent_id === "broken") return { data: { ...ready, stream_url: new URL("unavailable.mp4", url).href } };
       }
       if (mode === "preparing" && params.action === "torrent_info" &&

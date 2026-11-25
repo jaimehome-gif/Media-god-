@@ -9106,6 +9106,7 @@ export default function VideoPlayer({
       scan.started = Date.now();
       scan.proven = false;
       scan.decoderFailed = false;
+      scan.noPeersSince = null;
     }
     const player = stageRef.current?.querySelector("movi-player");
     if (!scan.decoderFailed && player?.videoWidth && player.audioTracks?.length &&
@@ -9115,7 +9116,13 @@ export default function VideoPlayer({
       return;
     }
     if (scan.proven && !scan.decoderFailed) return;
-    if (!rdError && !resolvedSourceUrl && rdTorrentId && (rdPolling || rdPreparation)) {
+    const preparing = !rdError && !resolvedSourceUrl && rdTorrentId && (rdPolling || rdPreparation);
+    const noPeers = preparing && rdPreparation?.seeders != null && Number(rdPreparation.seeders) === 0 &&
+      !rdPreparation.lastPollError && Number(rdPreparation.speed_bps || 0) === 0 &&
+      Number(rdPreparation.downloaded_bytes || 0) === 0 && Number(rdPreparation.progress || 0) === 0;
+    scan.noPeersSince = noPeers ? (scan.noPeersSince ?? Date.now()) : null;
+    const seedless = noPeers && Date.now() - scan.noPeersSince >= 30000;
+    if (preparing && !seedless) {
       setWebsiteScanMessage("Real-Debrid is preparing the selected torrent…");
       return;
     }
@@ -9124,7 +9131,7 @@ export default function VideoPlayer({
     // A signed-in resolution request has its own timeout. Switching at the
     // short decoder deadline discards the resulting URL and queues another request.
     const lookupDeadline = isRdSource && rdResolving ? 125000 : 25000;
-    const failed = scan.decoderFailed || !!rdError || awaitingCacheChoice ||
+    const failed = seedless || scan.decoderFailed || !!rdError || awaitingCacheChoice ||
       (resolvedSourceUrl && !moviSource) || waitingForDiscovery || elapsed >= (resolvedSourceUrl ? 12000 : lookupDeadline);
     if (!failed) {
       setWebsiteScanMessage(isRdSource && !resolvedSourceUrl
@@ -9137,14 +9144,22 @@ export default function VideoPlayer({
       return;
     }
     if (scanSourceKey) scan.tried.add(websiteAttemptKey(active, activeIdx));
-    const next = selectableSourceEntries.find(({item,index}) =>
+    const candidates = selectableSourceEntries.filter(({item,index}) =>
       index !== activeIdx && !failedSourcesRef.current.has(index) &&
       (!sourceNeedsCaching(item) || canResolveWebsiteTorrent(item)) &&
       (playbackMediaType !== "tv" || (episodeAutoplayCanTrustSource(item) && !hasUnusableEpisodeAudio(item))) &&
       !scan.tried.has(websiteAttemptKey(item,index)) &&
       !["youtube","provider","external","status"].includes(String(item.type || "").toLowerCase()));
+    const next = seedless
+      ? candidates.find(({item}) => sourceHasAuthoritativeCachedSignal(item) ||
+          (!sourceTorrentHash(item) && /^https?:/.test(getSourceUrl(item)))) || candidates[0]
+      : candidates[0];
     if (next && switchToSource(next.index, { preservePosition: true })) {
       setWebsiteScanMessage("Trying the next source…");
+      return;
+    }
+    if (seedless) {
+      setWebsiteScanMessage("No unused compatible source is available. Still checking this torrent for seeders.");
       return;
     }
     setWebsiteScanMessage(waitingForDiscovery && ["searching","verifying","fast-start","preparing"].includes(source?.sourceDiagnostics?.phase)
@@ -10832,7 +10847,9 @@ export default function VideoPlayer({
       : cacheSeeders <= 0 &&
           cacheSpeedBps <= 0 &&
           cacheElapsedSeconds >= 30
-        ? sourceReportedSeeders > 0
+        ? autoCheckWebsiteSources && !manualSourceLockActive() && cacheProgress === 0 && cacheDownloadedBytes === 0
+          ? "Real-Debrid has no active seeders. Media God checks for another compatible source after 30 seconds without activity."
+          : sourceReportedSeeders > 0
           ? `Comet found ${sourceReportedSeeders} seeder${sourceReportedSeeders === 1 ? "" : "s"}, but Real-Debrid currently reports no active peers. Media God will keep this source selected while it checks.`
           : "Real-Debrid reports no active seeders. Media God will keep this source selected rather than silently switching torrents."
         : cacheSpeedBps <= 0 &&
