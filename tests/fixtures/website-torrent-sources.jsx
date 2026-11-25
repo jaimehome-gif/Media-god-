@@ -13,7 +13,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
   };
   if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
   if (mode !== "unknown") item.debridCached = true;
-  if (mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
+  if (mode.startsWith("cooldown") || mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
   const ready = {
     status: "ready", torrent_id: "owned-fixture-id", filename: "Owned Test Clip 2025.mkv",
     stream_url: mode === "fallback" ? new URL("unavailable.mp4", url).href : url,
@@ -38,6 +38,19 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
   ] : [item];
   window.fixtureLookups = 0;
   window.fixtureDebridActions = [];
+  const invoke = base44.functions.invoke;
+  if (mode.startsWith("cooldown")) {
+    window.localStorage.setItem("mg:jaime-home-session:v1", "fixture");
+    const originalFetch = window.fetch;
+    window.fixtureResolutionCalls = [];
+    window.fetch = async (url, options) => {
+      if (!String(url).endsWith("/functions/realDebrid")) return originalFetch(url, options);
+      const body = JSON.parse(options.body);
+      window.fixtureResolutionCalls.push({id:body.torrent_id, time:Date.now()});
+      return Response.json((mode === "cooldown-repeat" || window.fixtureResolutionCalls.length === 1)
+        ? {status:"failed", upstream_status:429, retry_after:2, error:"too_many_requests"} : ready);
+    };
+  }
   base44.functions.invoke = async (name, params) => {
     if (name === "realDebridAuth") return { data: { connected: true, valid: true } };
     if (name === "fetchAddonStreams") {
@@ -46,6 +59,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     }
     if (name === "realDebrid") {
       window.fixtureDebridActions.push(params.action);
+      if (mode.startsWith("cooldown")) return invoke(name, params);
       if (mode === "ranked" && params.action === "torrent_info") {
         window.fixtureDebridActions.push(params.torrent_id);
         if (params.torrent_id === "broken") return { data: { ...ready, stream_url: new URL("unavailable.mp4", url).href } };
