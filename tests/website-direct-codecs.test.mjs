@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -60,4 +60,27 @@ test("original protected source remains excluded even when resolved rendition la
   assert.equal(checkWebsiteDirectMedia({url,item:item(),originalItem:item(),...caps}).allowed,true);
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   assert.match(player,/item: rdOverride \|\| active, originalItem: active/);
+});
+
+
+test("website chooser excludes unknown, failed and non-direct media without renumbering entries",()=>{
+  const entries=[{index:2,item:{...item(),src:url}},{index:4,item:{...item("h264","dts"),src:url}},{index:7,item:{src:url}},{index:9,item:{...item(),src:url,headers:{Authorization:"synthetic"}}},{index:12,item:{...item(),src:url}},{index:14,item:{...item(),src:url,type:"external"}}];
+  const result=entries.filter(({index,item})=>isWebsiteDirectSourceChoice({item,originalItem:item,url:item.src,failed:index===12,...caps}));
+  assert.deepEqual(result.map(entry=>entry.index),[2]);
+});
+
+test("website chooser does not inherit original codecs for an unverified rendition",()=>{
+  const originalItem={...item(),src:url};
+  assert.equal(isWebsiteDirectSourceChoice({item:{src:url},originalItem,url,...caps}),false);
+  assert.equal(isWebsiteDirectSourceChoice({item:originalItem,originalItem,url,...caps}),true);
+});
+
+test("all in-player website menus use the screened entries and native paths retain original choices",()=>{
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  const controls=readFileSync(new URL("../src/components/mg/MediaPlayerControls.jsx",import.meta.url),"utf8");
+  assert.match(player,/const presentedSourceEntries = websiteSourcesPlayback[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
+  assert.match(player,/entries=\{presentedSourceEntries\}/);
+  assert.match(player,/presentedSelectorEntries\.map\(/);
+  assert.equal((player.match(/sourceChoiceAllowed=\{websiteSourcesPlayback \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
+  assert.match(controls,/!sourceChoiceAllowed \|\| sourceChoiceAllowed\(index, item\)/);
 });
