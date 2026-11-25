@@ -77,8 +77,26 @@ export async function invokeIndependentMetadata(payload = {}, {
   timeoutMs = REQUEST_TIMEOUT_MS,
 } = {}) {
   if (!fetchImpl) throw new Error("Catalogue network unavailable");
-  const request = payload && typeof payload === "object" && !Array.isArray(payload)
+  const input = payload && typeof payload === "object" && !Array.isArray(payload)
     ? payload : {};
+  // Match the public catalogue contract. Do not send or persist arbitrary
+  // account fields or nested credentials supplied by an SDK caller.
+  const fields = ["category","community_reviews","country","date","genre","include_global_releases",
+    "language","media_type","movie_id","multi_search","person_id","provider_catalog","provider_id",
+    "provider_pages","providers_only","query","region","season_number","timezone","tmdb_id","year","page"];
+  const scalar = value => typeof value === "string" || typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value));
+  const request = Object.fromEntries(fields.filter(key => scalar(input[key])).map(key => [key,input[key]]));
+  if (Array.isArray(input.provider_ids)) request.provider_ids = input.provider_ids.filter(scalar);
+  else if (scalar(input.provider_ids)) request.provider_ids = input.provider_ids;
+  if (Array.isArray(input.release_alerts)) {
+    request.release_alerts = input.release_alerts.slice(0,24).flatMap(item => {
+      if (!item || typeof item !== "object") return [];
+      const id = item.tmdb_id ?? item.id;
+      if (!/^[1-9][0-9]{0,8}$/.test(String(id))) return [];
+      return [{tmdb_id: id, media_type: item.media_type === "tv" ? "tv" : "movie"}];
+    });
+  }
   try {
     // The home grid can request the same catalogue segment from several
     // components at once. On TV-box WebViews, share just the pending network
@@ -246,6 +264,7 @@ const PUBLIC_FEATURE_FIELDS = {
     "duration", "duration_seconds", "durationSeconds",
   ],
   getFireTvApkLink: [],
+  publicDiscovery: ["action", "region", "date"],
 };
 export async function invokeIndependentPublicFeature(name, payload = {}, {
   fetchImpl = globalThis.fetch,

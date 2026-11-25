@@ -20,6 +20,7 @@ const ACCOUNT_PREFERENCE_EVENT = "mg:account-preferences-changed";
 const LIVE_TV_SYNC_INTERVAL_MS = 2000;
 
 let pendingPatch = {};
+let pendingSession = "";
 let flushTimer = null;
 
 const hasOwn = (object, key) =>
@@ -121,6 +122,8 @@ const missingRemoteSeed = (remote, local) => {
 };
 
 export const hydrateAccountPreferences = async (user) => {
+  const session = base44.auth.getAccessToken();
+  if (!session) return;
   const remote =
     user?.preferences && typeof user.preferences === "object"
       ? user.preferences
@@ -192,13 +195,10 @@ export const hydrateAccountPreferences = async (user) => {
     seed.subtitlePreferenceVersion = 2;
   }
 
-  if (Object.keys(seed).length > 0) {
+  if (Object.keys(seed).length > 0 && base44.auth.getAccessToken() === session) {
     try {
       await base44.auth.updateMe({
-        preferences: {
-          ...remote,
-          ...seed,
-        },
+        preferences: seed,
       });
     } catch {
       // A temporary network failure must not block login.
@@ -209,23 +209,16 @@ export const hydrateAccountPreferences = async (user) => {
 const flushPreferencePatch = async () => {
   flushTimer = null;
   const patch = cleanPatch(pendingPatch);
+  const session = pendingSession;
   pendingPatch = {};
+  pendingSession = "";
 
-  if (Object.keys(patch).length === 0) return;
+  if (!session || session !== base44.auth.getAccessToken() || Object.keys(patch).length === 0) return;
 
   try {
-    const user = await base44.auth.me();
-    const current =
-      user?.preferences && typeof user.preferences === "object"
-        ? user.preferences
-        : {};
-
-    await base44.auth.updateMe({
-      preferences: {
-        ...current,
-        ...patch,
-      },
-    });
+    // The identity API merges preference fields atomically. Sending only the
+    // change avoids overwriting newer settings from another device.
+    await base44.auth.updateMe({ preferences: patch });
   } catch {
     // Preference sync is best effort and must never interrupt playback.
   }
@@ -236,6 +229,10 @@ export const queueAccountPreferencePatch = (patch) => {
     return;
   }
 
+  const session = base44.auth.getAccessToken();
+  if (!session) return;
+  if (pendingSession !== session) pendingPatch = {};
+  pendingSession = session;
   pendingPatch = {
     ...pendingPatch,
     ...cleanPatch(patch),
@@ -323,5 +320,7 @@ export const installAccountPreferenceSync = () => {
       window.clearTimeout(flushTimer);
       flushTimer = null;
     }
+    pendingPatch = {};
+    pendingSession = "";
   };
 };

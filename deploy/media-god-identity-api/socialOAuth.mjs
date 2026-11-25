@@ -296,12 +296,14 @@ export function createSocialOAuth({pool,issueSession,requireUser,limitRate}) {
         if(!user.rows[0]) return respond(res,401,{error:"Account not verified"},origin);
         return respond(res,200,{status:"approved",...(await issueSession(user.rows[0]))},origin);
       }
+      // Approval can occur between the atomic DELETE and this lookup.
+      // An unexpired token, even if just approved, must remain pollable.
+      // Only DELETE above may consume it and issue a session.
       const pending=await pool.query(
-        "SELECT provider FROM identity_device_logins WHERE token_hash=$1 AND approved_user IS NULL AND expires_at>NOW()",
+        "SELECT provider FROM identity_device_logins WHERE token_hash=$1 AND expires_at>NOW()",
         [sha(deviceToken)]);
-      return pending.rows[0]
-        ? respond(res,200,{status:"pending"},origin)
-        : respond(res,410,{error:"Device sign-in expired or already completed"},origin);
+      if(pending.rows[0]) return respond(res,200,{status:"pending"},origin);
+      return respond(res,410,{error:"Device sign-in expired or already completed"},origin);
     }
     if(path==="/auth/device/verify"&&req.method==="POST") {
       const owner=await requireUser(req);

@@ -48,7 +48,9 @@ export const AuthProvider = ({ children }) => {
 
   const checkUserAuth = async ({ markAuthRequired = false } = {}) => {
     const generation = ++authGeneration.current;
-    if (!base44.auth.getAccessToken()) setIsLoadingAuth(true);
+    const session = base44.auth.getAccessToken();
+    const currentCheck = () => generation === authGeneration.current && session === base44.auth.getAccessToken();
+    if (!session) setIsLoadingAuth(true);
 
     try {
       // Always ask the Media God backend instead of relying only on whether an
@@ -57,7 +59,7 @@ export const AuthProvider = ({ children }) => {
       // also allows the platform to recognise any valid persisted session.
       const currentUser = await base44.auth.me();
 
-      if (generation !== authGeneration.current) return null;
+      if (!currentCheck()) return null;
       setRetryNeeded(false);
       setUser(currentUser);
       setIsAuthenticated(true);
@@ -74,7 +76,7 @@ export const AuthProvider = ({ children }) => {
 
       return currentUser;
     } catch (error) {
-      if (generation !== authGeneration.current) return null;
+      if (!currentCheck()) return null;
       if (error?.status !== 401 && error?.status !== 403 && base44.auth.getAccessToken()) {
         setRetryNeeded(true);
         setAuthError(null);
@@ -122,7 +124,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated) return undefined;
     return installAccountPreferenceSync();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     if (!retryNeeded) return;
@@ -141,6 +143,9 @@ export const AuthProvider = ({ children }) => {
 
   const continueAsGuest = () => {
     authGeneration.current++;
+    // Guest UI must not retain an authenticated capability. Logout clears the
+    // local session immediately, even if the revocation network call fails.
+    void base44.auth.logout();
     setRetryNeeded(false);
     setUser(null);
     setIsAuthenticated(false);

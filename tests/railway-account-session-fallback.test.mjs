@@ -72,13 +72,20 @@ function createHarness({ railwayStatus = 200, signedIn = true, firstPartyLinked 
   return {client: result, calls};
 }
 
-test("Railway remains primary for a working Media God session", async () => {
-  const {client, calls} = createHarness();
-  const result = await client.functions.invoke("realDebridAuth", {action:"status"});
-  assert.equal(result.data.provider, "railway");
-  assert.equal(calls.railway.length, 1);
-  assert.equal(calls.native.length, 0);
-  assert.equal(calls.verified, 0);
+test("Railway remains primary for a working Media God session", async()=>{
+  await withIndependentSession("primary-test-session",async client=>{
+    const calls=[];
+    globalThis.fetch=async(url,init)=>{
+      calls.push({url,init});
+      return gatewayResponse(200,{connected:true,provider:"railway"});
+    };
+    assert.equal((await client.functions.invoke("realDebridAuth",{action:"status",guest_device_key:"must-not-forward"})).data.provider,"railway");
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].url,RD_API+"/functions/realDebridAuth");
+    assert.equal(calls[0].init.headers.Authorization,"Bearer primary-test-session");
+    assert.equal(calls[0].init.credentials,"omit");
+    assert.deepEqual(JSON.parse(calls[0].init.body),{action:"status"});
+  });
 });
 
 test("signed-in account keeps RD access when Railway rejects its token with 401", async () => {
@@ -106,23 +113,24 @@ test("a guest cannot turn Railway's 401 into an authenticated Base44 request", a
     "only first-party status verification may be attempted");
 });
 
-test("Railway 403 stays a permission denial, never an account fallback", async () => {
-  const {client, calls} = createHarness({railwayStatus:403});
-  await assert.rejects(
-    client.functions.invoke("realDebrid", {action:"status"}),
-    error => error.status === 403,
-  );
-  assert.equal(calls.native.length, 0);
-  assert.equal(calls.verified, 0);
+test("Railway 403 stays a permission denial, never an account fallback",async()=>{
+  await withIndependentSession("forbidden-test-session",async client=>{
+    let calls=0;
+    globalThis.fetch=async(url)=>{assert.equal(url,RD_API+"/functions/realDebrid");calls++;return gatewayResponse(403,{error:"Forbidden"});};
+    await assert.rejects(client.functions.invoke("realDebrid",{action:"status"}),error=>error.status===403);
+    assert.equal(calls,1);
+    assert.equal(client.auth.getAccessToken(),"forbidden-test-session");
+  });
 });
 
-test("Railway 500 stays an upstream failure, not a false login problem", async () => {
-  const {client, calls} = createHarness({railwayStatus:500});
-  await assert.rejects(
-    client.functions.invoke("realDebrid", {action:"status"}),
-    error => error.status === 500,
-  );
-  assert.equal(calls.native.length, 0);
+test("Railway 500 stays an upstream failure, not a false login problem",async()=>{
+  await withIndependentSession("upstream-test-session",async client=>{
+    let calls=0;
+    globalThis.fetch=async(url)=>{assert.equal(url,RD_API+"/functions/realDebrid");calls++;return gatewayResponse(500,{error:"Upstream unavailable"});};
+    await assert.rejects(client.functions.invoke("realDebrid",{action:"status"}),error=>error.status===500);
+    assert.equal(calls,1);
+    assert.equal(client.auth.getAccessToken(),"upstream-test-session");
+  });
 });
 
 test("signed-in Base44 account without exported bearer token keeps its existing RD account", async () => {
@@ -207,20 +215,44 @@ test("a first-party RD function can recover a verified existing account if User/
   assert.ok(calls.native.every(c => !c.payload?.guest_device_key));
 });
 
-test("failed Railway account verification does not flood the backend on subsequent requests", async () => {
-  const {client, calls} = createHarness({
-    signedIn:false,
-    firstPartyLinked:false,
-    railwayStatus:401,
+test("failed Railway account verification does not flood the backend on subsequent requests",async()=>{
+  await withIndependentSession("rejected-test-session",async client=>{
+    const calls=[];
+    globalThis.fetch=async(url,init)=>{
+      assert.equal(url,RD_API+"/functions/realDebridAuth");
+      calls.push(init.headers.Authorization);
+      return calls.length===1?gatewayResponse(401,{error:"Sign in to your new Media God account"}):gatewayResponse(200,{connected:true});
+    };
+    const fire=()=>client.functions.invoke("realDebridAuth",{action:"status"});
+    for(let i=0;i<9;i++)await assert.rejects(fire(),error=>error.status===401);
+    assert.equal(calls.length,1,"rejected account must not repeatedly hit gateway");
+    client.auth.setToken("replacement-test-session");
+    assert.equal((await fire()).data.connected,true);
+    assert.deepEqual(calls,["Bearer rejected-test-session","Bearer replacement-test-session"]);
   });
-  const fire = () => client.functions.invoke("realDebrid",{action:"resolve_best"});
-  await assert.rejects(fire(), error => error.status === 401);
-  const firstCount = calls.railway.length;
-  for (let index=0;index<8;index++) {
-    await assert.rejects(fire(), error => error.status === 401);
+});
+
+/* The independent session gateway replaces the former Base44 fallback.
+ * Test the actual client module, not a VM containing the retired SDK. */
+import {base44 as independentClient,RD_API} from "../src/api/base44Client.js";
+
+async function withIndependentSession(token,run){
+  const oldWindow=globalThis.window,oldFetch=globalThis.fetch;
+  const values=new Map();
+  globalThis.window={localStorage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)}};
+  independentClient.auth.setToken(token);
+  try{await run(independentClient);}finally{
+    globalThis.fetch=oldFetch;
+    if(oldWindow===undefined)delete globalThis.window;else globalThis.window=oldWindow;
   }
-  assert.equal(firstCount,1);
-  assert.equal(calls.railway.length,1,"authentication failures must not be retried for every candidate");
-  assert.ok(calls.native.every(c => c.name === "realDebridAuth"),
-    "no unverified guest or account can invoke RD resolution in Base44");
+}
+const gatewayResponse=(status,data)=>({ok:status===200,status,json:async()=>data});
+
+test("upstream provider 401 is not treated as an invalid Media God session",async()=>{
+  await withIndependentSession("provider-test-session",async client=>{
+    let calls=0;
+    globalThis.fetch=async(url)=>{assert.equal(url,RD_API+"/functions/realDebridAuth");calls++;return gatewayResponse(401,{error:"Provider connection expired"});};
+    for(let i=0;i<2;i++)await assert.rejects(client.functions.invoke("realDebridAuth",{action:"status"}),e=>e.status===401);
+    assert.equal(calls,2);
+  });
 });

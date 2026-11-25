@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Loader2, RefreshCw, Radio, Tv, Film, AlertCircle, ExternalLink } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { invokeIndependentPublicFeature } from "@/api/independentMetadata";
 import { readPublicSection, savePublicSection, orderUpcomingReleases } from "./publicSectionCache.js";
 
-const API = "https://media-god-metadata-api-production.up.railway.app/functions/publicDiscovery";
 const TODAY = () => { const now=new Date(); return [now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); };
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value||"")) ? value : "";
 const tabs = [
@@ -39,16 +39,12 @@ function DiscoveryCard({ item }) {
     </div>
   </article>;
 }
-async function discovery(action, region, signal) {
-  const response = await fetch(API, {
-    method: "POST", credentials: "omit",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, region }),
-    signal,
+async function discovery(action, region) {
+  const { data } = await invokeIndependentPublicFeature("publicDiscovery", {
+    action, region, date: TODAY(),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) throw new Error(data.error || "Discovery service unavailable");
-  return Array.isArray(data.results) ? data.results : [];
+  if (!Array.isArray(data?.results)) throw new Error("Discovery service returned invalid schedule data");
+  return data.results;
 }
 export default function WatchmodeHub() {
   const [tab, setTab] = useState("sports");
@@ -84,7 +80,7 @@ export default function WatchmodeHub() {
         if (!Array.isArray(items)) throw new Error("Film and TV release data is temporarily unavailable");
         nextRows = orderUpcomingReleases(items, releaseType, TODAY());
       } else {
-        nextRows = await discovery(tab, region, signal);
+        nextRows = await discovery(tab, region);
       }
       if (signal.aborted) return;
       setRows(nextRows);

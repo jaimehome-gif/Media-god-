@@ -23,7 +23,9 @@ const storage = () => {
   catch { return null; }
 };
 export const getIndependentSessionToken = () => storage()?.getItem(SESSION_KEY) || "";
+let sessionRevision=0;
 export const saveIndependentSessionToken = value => {
+  sessionRevision++;
   if (value) storage()?.setItem(SESSION_KEY,String(value));
   else storage()?.removeItem(SESSION_KEY);
 };
@@ -36,6 +38,12 @@ const asError = (response, data) => {
 };
 // A gateway rate limit applies across torrent choices in the same session.
 let playbackCooldown = { session: "", until: 0 };
+// Only a gateway-confirmed invalid Media God session is cached, never an
+// upstream provider credential error, 403, network failure or a successful
+// authentication. A new session token is unaffected.
+let rejectedRdSession = { token: "", until: 0, data: null };
+const rdSessionRejected = (data) => data?.code === "MEDIA_GOD_SESSION_REQUIRED" ||
+  data?.error === "Sign in to your new Media God account";
 const playbackRateLimitError = seconds => {
   const error = new Error(`Real-Debrid is busy. Try again in ${seconds} seconds.`);
   error.status = 429;
@@ -45,12 +53,24 @@ const playbackRateLimitError = seconds => {
 };
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
+  if (endpoint === RD_API && token && rejectedRdSession.token === token && rejectedRdSession.until > Date.now()) {
+    throw asError({status:401},rejectedRdSession.data);
+  }
   if (playbackRequest && playbackCooldown.session === token && playbackCooldown.until > Date.now()) {
     throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
   }
   const controller = new AbortController();
-  const timer = setTimeout(()=>controller.abort(),timeoutMs);
-  try {
+  let timer, timeoutError;
+  const assertActive = () => { if (timeoutError) throw timeoutError; };
+  const deadline = new Promise((_,reject)=>{
+    timer=setTimeout(()=>{
+      timeoutError=new Error("Media God request timed out. Please retry.");
+      timeoutError.code="NETWORK_TIMEOUT";
+      reject(timeoutError);
+      controller.abort();
+    },timeoutMs);
+  });
+  const operation=async()=>{
     const response = await fetch(endpoint+path,{
       method,
       headers:{
@@ -60,7 +80,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       ...(body!==undefined?{body:JSON.stringify(body)}:{}),
       credentials:"omit",cache:"no-store",signal:controller.signal
     });
+    assertActive();
     const data = await response.json().catch(()=>({}));
+    assertActive();
     if (playbackRequest && response.status === 429) {
       const delay = response.headers?.get?.("Retry-After") || data?.retry_after;
       const seconds = Number(delay) > 0 ? Number(delay) : (Date.parse(delay) - Date.now()) / 1000;
@@ -69,8 +91,14 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       playbackCooldown = { session: token, until: Math.max(until, playbackCooldown.session === token ? playbackCooldown.until : 0) };
       throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
     }
+    if (endpoint === RD_API && token && response.status === 401 && rdSessionRejected(data)) {
+      rejectedRdSession = { token, until: Date.now() + 15_000, data };
+    }
     if (!response.ok) throw asError(response,data);
     return data;
+  };
+  try {
+    return await Promise.race([operation(),deadline]);
   } catch(error) {
     if (error?.name==="AbortError") {
       const e = new Error("Media God request timed out. Please retry.");
@@ -82,6 +110,19 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
     clearTimeout(timer);
   }
 };
+function acceptSession(result, expectedRevision) {
+  if (sessionRevision !== expectedRevision) {
+    const error=new Error("Sign-in was superseded by another account action.");
+    error.code="SESSION_SUPERSEDED";
+    throw error;
+  }
+  if (typeof result?.access_token !== "string" || !result.access_token.trim()) {
+    const error=new Error("Sign-in service returned no session. Please retry.");
+    error.code="INVALID_SESSION_RESPONSE";
+    throw error;
+  }
+  saveIndependentSessionToken(result.access_token);
+}
 const auth = {
   // Legacy-account linking and recovery need the independent session helpers.
   // Keep the verified Railway session separate from Base44 provider tokens.
@@ -99,11 +140,12 @@ const auth = {
     });
   },
   async pollDeviceSocialLogin(deviceToken) {
+    const revision=sessionRevision;
     const result=await call(IDENTITY_API,"/auth/device/status",{
       method:"POST",body:{device_token:deviceToken},token:"",timeoutMs:12000
     });
-    if(result.status==="approved" && result.access_token){
-      saveIndependentSessionToken(result.access_token);
+    if(result.status==="approved"){
+      acceptSession(result,revision);
     }
     return result;
   },
@@ -146,15 +188,17 @@ const auth = {
     if(typeof ticket!=="string" || ticket.length<40 || ticket.length>100) {
       throw new Error("Missing social sign-in ticket");
     }
+    const revision=++sessionRevision;
     const result=await call(IDENTITY_API,"/auth/oauth/exchange",{
       method:"POST",body:{ticket},token:"",timeoutMs:12000
     });
-    saveIndependentSessionToken(result.access_token);
+    acceptSession(result,revision);
     return result;
   },
   async loginViaEmailPassword(email,password) {
+    const revision=++sessionRevision;
     const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
-    saveIndependentSessionToken(result.access_token);
+    acceptSession(result,revision);
     return result;
   },
   async register({email,password,name}={}) {
@@ -187,11 +231,14 @@ const auth = {
     return call(IDENTITY_API,"/auth/me",{method:"PATCH",body:patch});
   },
   async logout(returnTo) {
-    try {
-      if (getIndependentSessionToken()) await call(IDENTITY_API,"/auth/logout",{method:"POST",body:{}});
-    } catch { /* Always clear the local session. */ }
+    // Clear the old session immediately. A delayed revocation response must
+    // never erase a different session created by a subsequent login.
+    const previousToken=getIndependentSessionToken();
     saveIndependentSessionToken("");
-    if (returnTo && typeof window!=="undefined") window.location.assign(returnTo);
+    try {
+      if (previousToken) await call(IDENTITY_API,"/auth/logout",{method:"POST",body:{},token:previousToken});
+    } catch { /* Local sign-out still succeeds when the network is down. */ }
+    if (returnTo && typeof window!=="undefined" && !getIndependentSessionToken()) window.location.assign(returnTo);
   },
   setToken: saveIndependentSessionToken,
   getAccessToken: getIndependentSessionToken,
