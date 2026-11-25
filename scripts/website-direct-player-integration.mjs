@@ -133,8 +133,9 @@ try {
         console.log(host,"mixed source list: only compatible direct choice presented");
       }
       if (strict) {
-        const unlock = await page.waitForSelector('[data-mg-audio-unlock="true"] button',{timeout:15000});
-        await unlock.click();
+        // React can replace the button between finding its handle and clicking.
+        // Reacquire a visible, stable element; still require a genuine click.
+        await page.locator('[data-mg-audio-unlock="true"] button').setTimeout(15000).click();
         await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
         console.log(host,"strict autoplay policy: explicit sound unlock accepted");
       }
