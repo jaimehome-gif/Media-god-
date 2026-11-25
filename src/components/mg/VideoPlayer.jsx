@@ -1,4 +1,5 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
+import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
 import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
@@ -10891,6 +10892,8 @@ export default function VideoPlayer({
                 />
           </div>
         </div>
+
+        {websiteSourcesPlayback && <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
