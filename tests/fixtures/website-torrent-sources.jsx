@@ -4,7 +4,7 @@ import { base44 } from "../../src/api/base44Client";
 import { PlayerProvider } from "../../src/components/mg/PlayerProvider";
 import Sources from "../../src/components/mg/MediaStreamSourcesBox";
 
-export function mountTorrentTitle({ url, mode }) {
+export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
   const hash = "ac".repeat(20);
   const magnet = "magnet:?xt=urn:btih:" + hash;
   const item = {
@@ -20,6 +20,15 @@ export function mountTorrentTitle({ url, mode }) {
     fallback_stream_url: mode === "fallback" ? url : "",
   };
 
+  if (mode === "format") {
+    item.label = "Owned Test Clip 2025 English 1080p " + videoCodec + " " + audioCodec;
+    item.videoCodec = videoCodec;
+    item.rdTorrentId = ready.torrent_id;
+    ready.media_info = {
+      video_tracks: [{codec:videoCodec,height:1080}],
+      audio_tracks: [{codec:audioCodec,language:"English"}],
+    };
+  }
   const streams = mode === "ranked" ? [
     { ...item, id: "incompatible", label: "Owned Test Clip 2025 English 4K HDR HEVC",
       infoHash: "ef".repeat(20), rdTorrentId: "must-never-resolve" },

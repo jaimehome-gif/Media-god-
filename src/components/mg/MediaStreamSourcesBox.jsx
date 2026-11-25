@@ -26,7 +26,7 @@ import {
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import { getPlaybackDeviceProfile } from "./mediaCompatibility";
-import { isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
+import { noWebsiteTorrentMatch, websiteTorrentFilterDescription, isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
@@ -928,7 +928,7 @@ export default function StreamSourcesBox({
       )
       .map(item => ({ ...item, preferNativeVlc: true }));
     if (websiteCatalogue && addonStreams.length && !playableSources.length) {
-      setMessage("No compatible website source found. Look for H.264 or VP9 at 1080p or lower.");
+      setMessage(noWebsiteTorrentMatch);
       return;
     }
     try {
@@ -1993,7 +1993,7 @@ export default function StreamSourcesBox({
       </p>
 
       {websiteCatalogue && addonStreams.some(item => !websiteTorrentCandidate(item)) && (
-        <p className="mb-2 px-1 text-xs text-white/70">Website torrent filter: H.264 or VP9, up to 1080p. Playback checks picture and sound.</p>
+        <p className="mb-2 px-1 text-xs text-white/70">{websiteTorrentFilterDescription} Playback checks picture and sound.</p>
       )}
       {blockedNativeOnWww && mediaType !== "live" && (
         <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="status">

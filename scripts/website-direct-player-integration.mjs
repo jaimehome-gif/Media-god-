@@ -31,6 +31,17 @@ try {
   for (const [name,codec,bitrate] of [["ac3","ac3","192k"],["eac3","eac3","192k"],["dts","dca","768k"]]) {
     run("ffmpeg",[...common,...avc,"-c:a",codec,"-strict","-2","-b:a",bitrate,join(dir,name+".mkv")]);
   }
+  const additionalFormats = [
+    ["hevc.mkv","hevc","aac","libx265","aac",["-preset","ultrafast","-x265-params","pools=1:frame-threads=1"]],
+    ["av1.mkv","av1","opus","libaom-av1","libopus",["-cpu-used","8"]],
+    ["xvid.mkv","mpeg4","mp3","mpeg4","libmp3lame",[]],
+    ["vp8.webm","vp8","vorbis","libvpx","libvorbis",[]],
+    ["flac.mkv","h264","flac","libx264","flac",[]],
+    ["mp3.mkv","h264","mp3","libx264","libmp3lame",[]],
+  ];
+  for (const [name,,,encoder,audioEncoder,options] of additionalFormats) {
+    run("ffmpeg",[...common,"-c:v",encoder,...options,"-threads","2","-pix_fmt","yuv420p","-c:a",audioEncoder,"-ac","2",join(dir,name)]);
+  }
   const files = new Map();
   for (const name of await readdir(dir)) {
     const mime = name.endsWith(".mkv") ? "video/x-matroska" : name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".webm") ? "video/webm" :
@@ -79,6 +90,7 @@ try {
     ["sample.m3u8","h264","aac","127.0.0.1",false],
     ["sample.mp4","h264","","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
+    ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false,"format"]),
     ...["library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
@@ -130,10 +142,10 @@ try {
       let gate;
       let panelLookupCount;
       if (torrentMode) {
-        await page.evaluate(async ({name,mode}) => {
+        await page.evaluate(async ({name,mode,v,a}) => {
           const fixture = await import("/tests/fixtures/website-torrent-sources.jsx");
-          fixture.mountTorrentTitle({ url: new URL(name,location.href).href, mode });
-        }, {name,mode:torrentMode});
+          fixture.mountTorrentTitle({ url: new URL(name,location.href).href, mode, videoCodec:v, audioCodec:a });
+        }, {name,v,a,mode:torrentMode});
         if (torrentMode === "incompatible") {
           await page.waitForFunction(()=>document.body.innerText.includes("Website torrent filter"));
           await page.evaluate(()=>Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Play in Media God")).click());
@@ -186,7 +198,7 @@ try {
         },{timeout:30000});
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
-          const expected = {library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
+          const expected = {format:"torrent_info",library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
           assert.equal(await page.evaluate(()=>window.fixtureLookups), panelLookupCount, "reuses the panel discovery");
           assert.ok(!actions.includes("must-never-resolve"), "website excludes 4K HDR HEVC before resolution");
           if (torrentMode === "ranked") assert.ok(actions.indexOf("broken") >= 0 && actions.indexOf("working") > actions.indexOf("broken"), "automatically tried both ranked torrents");
