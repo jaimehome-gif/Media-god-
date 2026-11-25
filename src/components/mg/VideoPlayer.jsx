@@ -951,13 +951,16 @@ export default function VideoPlayer({
     useState(0);
   // The Sources button in OnlyFlix explicitly requests our own player
   // with the source list already open. A normal Play never sets this flag.
+  const autoCheckWebsiteSources = Boolean(source?.openSourcesDrawer && !source?.manualSourceSelection &&
+    isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
+      source, isLive: source?.type === "live" }));
   const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(
-    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live" && !autoCheckWebsiteSources)
   );
 
   useEffect(() => {
     setInPlayerSourcesOpen(
-      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live" && !autoCheckWebsiteSources)
     );
   }, [source?.playRequestId]);
 
@@ -8989,6 +8992,67 @@ export default function VideoPlayer({
     : null;
   const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
     canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride);
+  // Source discovery may publish more rows while a decoder is opening. Read
+  // the latest ranked pool without restarting the active candidate's timeout.
+  const websiteScanRef = useRef(null);
+  const websiteScanState = useRef(null);
+  const [websiteScanMessage, setWebsiteScanMessage] = useState("");
+  const scanSourceKey = activeResolutionKey;
+  const scanRequestKey = JSON.stringify([source?.playRequestId, source?.tmdbId, source?.title,
+    source?.season, source?.episode, source?.startTime]);
+
+  websiteScanRef.current = () => {
+    const scan = websiteScanState.current;
+    if (!scan || !autoCheckWebsiteSources || manualSourceLockActive() || websiteRateLimitHold ||
+        /sign in|log in|unauthori[sz]ed|forbidden|\b(401|403)\b/i.test(rdError || "")) {
+      setWebsiteScanMessage("");
+      return;
+    }
+    if (scan.key !== scanSourceKey || scan.url !== resolvedSourceUrl) {
+      scan.key = scanSourceKey;
+      scan.url = resolvedSourceUrl;
+      scan.started = Date.now();
+      scan.proven = false;
+      scan.decoderFailed = false;
+    }
+    const player = stageRef.current?.querySelector("movi-player");
+    if (!scan.decoderFailed && player?.videoWidth && player.audioTracks?.length &&
+        player.getVideoPlaybackQuality?.().totalVideoFrames > 1 && player.currentTime > 0.25) {
+      scan.proven = true;
+      setWebsiteScanMessage("");
+      return;
+    }
+    if (scan.proven && !scan.decoderFailed) return;
+    const elapsed = Date.now() - scan.started;
+    const waitingForDiscovery = !sourceIsUserSelectable(active);
+    const failed = scan.decoderFailed || !!rdError || awaitingCacheChoice ||
+      (resolvedSourceUrl && !moviSource) || waitingForDiscovery || elapsed >= (resolvedSourceUrl ? 12000 : 25000);
+    if (!failed) {
+      setWebsiteScanMessage("Checking source for picture and sound…");
+      return;
+    }
+    if (scanSourceKey) scan.tried.add(scanSourceKey);
+    const next = selectableSourceEntries.find(({item,index}) =>
+      index !== activeIdx && !failedSourcesRef.current.has(index) && !sourceNeedsCaching(item) &&
+      (playbackMediaType !== "tv" || (episodeAutoplayCanTrustSource(item) && !hasUnusableEpisodeAudio(item))) &&
+      !scan.tried.has(stablePlaybackSourceKey(item,index)) &&
+      !["youtube","provider","external","status"].includes(String(item.type || "").toLowerCase()));
+    if (next && switchToSource(next.index, { preservePosition: true })) {
+      setWebsiteScanMessage("Trying the next source…");
+      return;
+    }
+    setWebsiteScanMessage(waitingForDiscovery && ["searching","verifying","fast-start","preparing"].includes(source?.sourceDiagnostics?.phase)
+      ? "Searching for sources…" : "No working source found yet. You can open Sources to choose another.");
+  };
+  useEffect(() => {
+    if (!autoCheckWebsiteSources) return;
+    websiteScanState.current = { tried: new Set(), started: Date.now() };
+    const timer = window.setInterval(() => websiteScanRef.current?.(), 500);
+    return () => {
+      window.clearInterval(timer);
+      websiteScanState.current = null;
+    };
+  }, [autoCheckWebsiteSources, scanRequestKey]);
   // The chooser contains resolver inputs as well as directly playable files.
   const filterDirectChoices = publicWebsiteVod && (!websiteSourcesPlayback || websiteRateLimitHold);
   const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
@@ -9044,7 +9108,7 @@ export default function VideoPlayer({
     setVodStartupNotice("");
 
     if (
-      isLive ||
+      autoCheckWebsiteSources || isLive ||
       isYoutube ||
       isProvider ||
       useNativePlayback ||
@@ -10909,6 +10973,9 @@ export default function VideoPlayer({
         {publicWebsiteVod && !moviSource && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
           <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
+        {autoCheckWebsiteSources && websiteScanMessage && (
+          <p role="status" className="px-3 py-2 text-sm text-white/80">{websiteScanMessage}</p>
+        )}
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
             title={source?.title}
@@ -11177,7 +11244,15 @@ export default function VideoPlayer({
           ) : moviSource ? (
             <WebsiteSourcesMovi key={resolvedSourceUrl} url={resolvedSourceUrl}
               onMetadata={handleLoadedMetadata} onProgress={handleTimeUpdate}
-              onFailure={rdOverride ? handleRdPlaybackError : handleDirectPlaybackError} />
+              onFailure={() => {
+                if (websiteScanState.current && !manualSourceLockActive()) {
+                  websiteScanState.current.key = scanSourceKey;
+                  websiteScanState.current.url = resolvedSourceUrl;
+                  websiteScanState.current.decoderFailed = true;
+                  websiteScanRef.current?.();
+                } else if (rdOverride) handleRdPlaybackError();
+                else handleDirectPlaybackError();
+              }} />
           ) : websiteDirectMediaCheck?.allowed === false ? (
             <div role="alert" data-mg-website-codec-rejected="true"
               className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">

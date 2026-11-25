@@ -40,10 +40,10 @@ test("the embedded Sources button enters Media God, not another web iframe", () 
   assert.match(route,/src: ""/);
 });
 
-test("on Sources entry the built-in player opens with the full source drawer visible", () => {
+test("website Sources starts automatic checks and keeps the full drawer available manually", () => {
   assert.match(player,/const \[inPlayerSourcesOpen, setInPlayerSourcesOpen\] = useState\(/);
-  assert.match(player,/\(\) => Boolean\(source\?\.openSourcesDrawer && source\?\.mediaType !== "live"\)/);
-  assert.match(player,/setInPlayerSourcesOpen\(\s*Boolean\(source\?\.openSourcesDrawer && source\?\.mediaType !== "live"\)/);
+  assert.match(player,/\(\) => Boolean\(source\?\.openSourcesDrawer && source\?\.mediaType !== "live" && !autoCheckWebsiteSources\)/);
+  assert.match(player,/setInPlayerSourcesOpen\(\s*Boolean\(source\?\.openSourcesDrawer && source\?\.mediaType !== "live" && !autoCheckWebsiteSources\)/);
   assert.match(player,/\{inPlayerSourcesOpen && \(/);
   assert.match(player,/<InPlayerSourceDrawer/);
   assert.match(player,/onSelect=\{\(index, item\) => \{/);

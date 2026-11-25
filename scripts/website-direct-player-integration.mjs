@@ -121,9 +121,10 @@ try {
       // Puppeteer's page.evaluate grants a user gesture. The strict case must
       // mount without activation, using CDP explicitly with userGesture:false.
       const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
-      const mount = async ({name,v,a,full,mixedChoices})=>{
+      input.automaticFallback = full && !mobile && name === "ac3.mkv";
+      const mount = async ({name,v,a,full,mixedChoices,automaticFallback})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
       };
       let gate;
       if (strict) {
