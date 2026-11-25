@@ -65,3 +65,15 @@ export function getBrowserMediaCapabilities() {
   return { canPlayType: mime => video?.canPlayType?.(mime) || "",
     mseSupports: mime => typeof MediaSource !== "undefined" && MediaSource.isTypeSupported?.(mime) === true };
 }
+
+// A chooser row must be an already inspected direct media rendition. Keep the
+// original array indices so filtering never changes the identity of a choice.
+export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = false, ...capabilities } = {}) {
+  if (failed || !item || !originalItem) return false;
+  const type = String(item.type || "").toLowerCase();
+  if (["provider", "external", "youtube", "status", "live"].includes(type) || item.live || item.diagnostic) return false;
+  // HTML media elements cannot apply arbitrary per-file request headers.
+  if ([item.headers, item.requestHeaders, originalItem.headers, originalItem.requestHeaders]
+    .some(headers => headers && Object.keys(headers).length)) return false;
+  return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
+}
