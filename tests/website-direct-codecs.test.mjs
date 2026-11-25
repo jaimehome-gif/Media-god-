@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -114,4 +114,24 @@ test("public direct playback menu is screened regardless of launch route without
   assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!publicWebsiteVod\) return true;/);
   assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
   assert.match(player,/const presentedSourceEntries = publicWebsiteVod/);
+});
+
+
+test("rate-limit notice never exposes the unrestricted website menu even if layout is misclassified",()=>{
+  for(const hostname of ["underworldhub.co.uk","www.underworldhub.co.uk"]){
+    const input={...context,hostname,error:"Real-Debrid is temporarily rate-limiting requests."};
+    assert.equal(isWebsiteRateLimitHold(input),true);
+    assert.equal(isWebsiteRateLimitHold({...input,profile:{...profile,fireTv:true}}),true);
+    assert.equal(isWebsiteRateLimitHold({...input,error:"HTTP 429"}),true);
+    for(const flag of ["nativePlayerAvailable","nativeAndroidMobile","nativeFireTv","mobileApp","nativePlatform"])
+      assert.equal(isWebsiteRateLimitHold({...input,profile:{...profile,[flag]:true}}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,isLive:true}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,error:"Other media error"}),false);
+    assert.equal(isWebsiteRateLimitHold({...input,hostname:"example.test"}),false);
+  }
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const publicWebsiteVod = [^\n]+ \|\| websiteRateLimitHold\)/);
+  assert.match(player,/if \(websiteRateLimitHold\) return false;/);
+  assert.equal((player.match(/isRdSource && !websiteRateLimitHold && \(/g)||[]).length,2);
+  assert.match(player,/source choices are paused/);
 });
