@@ -83,6 +83,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
         try { window.sessionStorage.setItem("mg:rd-cooldown-until", String(playbackCooldown.until)); }
         catch { /* storage unavailable */ }
       }
+      if (website && token === getIndependentSessionToken() && typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("mg:rd-playback-limited", {detail:{until:playbackCooldown.until}}));
+      }
       throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
     }
     if (!response.ok) throw asError(response,data);

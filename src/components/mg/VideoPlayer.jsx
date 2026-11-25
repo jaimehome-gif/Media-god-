@@ -2604,6 +2604,30 @@ export default function VideoPlayer({
     return candidates[0]?.index ?? -1;
   };
 
+  const limitUntilRef = useRef(0);
+  const handledLimit = useRef(0);
+  const [websiteResolveRetry, setWebsiteResolveRetry] = useState(0);
+  const [limitUntil, setLimitUntil] = useState(0);
+  const [limitSeconds, setLimitSeconds] = useState(0);
+  const retriedLimitedRequest = useRef(null);
+  useEffect(() => {
+    if (!filterWebsiteTorrents) return;
+    limitUntilRef.current = 0;
+    handledLimit.current = 0;
+    setLimitUntil(0);
+    setLimitSeconds(0);
+    const hold = until => {
+      if (until <= Date.now() || !Number.isFinite(until)) return;
+      limitUntilRef.current = Math.max(limitUntilRef.current, until);
+      setLimitUntil(limitUntilRef.current);
+      setLimitSeconds(Math.ceil((limitUntilRef.current - Date.now()) / 1000));
+    };
+    const onLimit = event => hold(Number(event.detail?.until));
+    window.addEventListener("mg:rd-playback-limited", onLimit);
+    try { hold(Number(window.sessionStorage.getItem("mg:rd-cooldown-until"))); } catch {}
+    return () => window.removeEventListener("mg:rd-playback-limited", onLimit);
+  }, [filterWebsiteTorrents, source?.playRequestId]);
+
   const websiteScanState = useRef(null);
   const websiteAttemptKey = (item, index) => {
     const hash = sourceTorrentHash(item);
@@ -2624,6 +2648,7 @@ export default function VideoPlayer({
      * but it must never fight the viewer by jumping back to source 1 or another
      * release. Only another manual source choice can replace the lock.
      */
+    if (!manualSelection && filterWebsiteTorrents && limitUntilRef.current > Date.now()) return false;
     if (!manualSelection && manualSourceLockActive()) {
       return false;
     }
@@ -6207,6 +6232,7 @@ export default function VideoPlayer({
     },
     [
       activeIdx,
+      websiteResolveRetry,
       activeResolutionKey,
       activeUrl,
       rdMediaContextKey,
@@ -9018,7 +9044,31 @@ export default function VideoPlayer({
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
   };
-  const websiteRateLimitHold = !nativeFireTvPlayer && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError });
+  const cooldownExpired = limitUntil > 0 && limitSeconds === 0;
+  const websiteRateLimitHold = !nativeFireTvPlayer && (
+    (filterWebsiteTorrents && limitSeconds > 0 && !resolvedSourceUrl) ||
+    (!cooldownExpired && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError })));
+  const limitedRequestKey = JSON.stringify([source?.playRequestId, rdMediaContextKey]);
+  useEffect(() => {
+    if (!filterWebsiteTorrents || !limitUntil) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((limitUntil - Date.now()) / 1000));
+      setLimitSeconds(remaining);
+      if (remaining > 0) return;
+      window.clearInterval(timer);
+      if (limitUntilRef.current !== limitUntil || handledLimit.current === limitUntil) return;
+      handledLimit.current = limitUntil;
+      if (!isRdSource || resolvedSourceUrl || retriedLimitedRequest.current === limitedRequestKey) return;
+      retriedLimitedRequest.current = limitedRequestKey;
+      setRdError("");
+      setRdPreparation(null);
+      if (sourceNeedsCaching(active)) setRdCacheEngineNonce(n => n + 1);
+      else setWebsiteResolveRetry(n => n + 1);
+    };
+    const timer = window.setInterval(tick, 250);
+    tick();
+    return () => window.clearInterval(timer);
+  }, [filterWebsiteTorrents, limitUntil, limitedRequestKey, isRdSource, resolvedSourceUrl]);
   const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
@@ -9039,6 +9089,8 @@ export default function VideoPlayer({
 
   websiteScanRef.current = () => {
     const scan = websiteScanState.current;
+    if (cooldownExpired && retriedLimitedRequest.current === limitedRequestKey &&
+        isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError })) return;
     if (!scan || !autoCheckWebsiteSources || manualSourceLockActive() || websiteRateLimitHold ||
         /sign in|log in|unauthori[sz]ed|forbidden|\b(401|403)\b/i.test(rdError || "")) {
       setWebsiteScanMessage("");
@@ -11065,7 +11117,13 @@ export default function VideoPlayer({
           }}
           className="relative flex min-h-[34vh] w-full items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl sm:min-h-0 sm:aspect-video"
         >
-          {busy ? (
+          {filterWebsiteTorrents && limitSeconds > 0 && !resolvedSourceUrl ? (
+            <p role="status" className="p-6 text-center text-sm text-white/85">
+              {retriedLimitedRequest.current === limitedRequestKey
+                ? `Real-Debrid is still busy. Retry this source in ${limitSeconds}s.`
+                : `Real-Debrid is busy. Media God will retry this source once in ${limitSeconds}s.`}
+            </p>
+          ) : busy ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-3 p-5 text-center sm:p-6">
               <div className="flex h-14 w-14 items-center justify-center rounded-full border border-mg-green/20 bg-mg-green/5">
                 <Loader2 className="h-7 w-7 animate-spin text-mg-green" />

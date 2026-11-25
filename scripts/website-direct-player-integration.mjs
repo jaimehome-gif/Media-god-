@@ -91,7 +91,7 @@ try {
     ["sample.mp4","h264","","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
     ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false,"format"]),
-    ...["library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
+    ...["cooldown","cooldown-repeat","library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
@@ -161,6 +161,15 @@ try {
           .find(row=>row.innerText.includes("Play in Media God")));
         panelLookupCount = await page.evaluate(()=>window.fixtureLookups);
         await button.asElement().click();
+        if (torrentMode === "cooldown-repeat") {
+          await page.waitForFunction(()=>document.body.innerText.includes("Real-Debrid is still busy"),{timeout:12000});
+          await page.waitForFunction(()=>[...document.querySelectorAll("button")].some(b=>b.innerText.includes("Retry this source")),{timeout:12000});
+          await new Promise(resolve=>setTimeout(resolve,2300));
+          assert.equal((await page.evaluate(()=>window.fixtureResolutionCalls)).length,2);
+          console.log("PASS repeated 429 stopped after one retry and offered manual retry.");
+          continue;
+        }
+
       } else if (strict) {
         const session = await page.createCDPSession();
         const response = await session.send("Runtime.evaluate", {
@@ -198,7 +207,13 @@ try {
         },{timeout:30000});
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
-          const expected = {format:"torrent_info",library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
+          if (torrentMode === "cooldown") {
+            const calls = await page.evaluate(()=>window.fixtureResolutionCalls);
+            assert.equal(calls.length,2);
+            assert.equal(calls[0].id,calls[1].id);
+            assert.ok(calls[1].time - calls[0].time >= 2000);
+          }
+          const expected = {cooldown:"torrent_info",format:"torrent_info",library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
           assert.equal(await page.evaluate(()=>window.fixtureLookups), panelLookupCount, "reuses the panel discovery");
           assert.ok(!actions.includes("must-never-resolve"), "website excludes 4K HDR HEVC before resolution");
           if (torrentMode === "ranked") assert.ok(actions.indexOf("broken") >= 0 && actions.indexOf("working") > actions.indexOf("broken"), "automatically tried both ranked torrents");
