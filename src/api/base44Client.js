@@ -23,7 +23,9 @@ const storage = () => {
   catch { return null; }
 };
 export const getIndependentSessionToken = () => storage()?.getItem(SESSION_KEY) || "";
+let sessionRevision=0;
 export const saveIndependentSessionToken = value => {
+  sessionRevision++;
   if (value) storage()?.setItem(SESSION_KEY,String(value));
   else storage()?.removeItem(SESSION_KEY);
 };
@@ -108,7 +110,12 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
     clearTimeout(timer);
   }
 };
-function acceptSession(result) {
+function acceptSession(result, expectedRevision) {
+  if (sessionRevision !== expectedRevision) {
+    const error=new Error("Sign-in was superseded by another account action.");
+    error.code="SESSION_SUPERSEDED";
+    throw error;
+  }
   if (typeof result?.access_token !== "string" || !result.access_token.trim()) {
     const error=new Error("Sign-in service returned no session. Please retry.");
     error.code="INVALID_SESSION_RESPONSE";
@@ -133,11 +140,12 @@ const auth = {
     });
   },
   async pollDeviceSocialLogin(deviceToken) {
+    const revision=sessionRevision;
     const result=await call(IDENTITY_API,"/auth/device/status",{
       method:"POST",body:{device_token:deviceToken},token:"",timeoutMs:12000
     });
     if(result.status==="approved"){
-      acceptSession(result);
+      acceptSession(result,revision);
     }
     return result;
   },
@@ -180,15 +188,17 @@ const auth = {
     if(typeof ticket!=="string" || ticket.length<40 || ticket.length>100) {
       throw new Error("Missing social sign-in ticket");
     }
+    const revision=++sessionRevision;
     const result=await call(IDENTITY_API,"/auth/oauth/exchange",{
       method:"POST",body:{ticket},token:"",timeoutMs:12000
     });
-    acceptSession(result);
+    acceptSession(result,revision);
     return result;
   },
   async loginViaEmailPassword(email,password) {
+    const revision=++sessionRevision;
     const result = await call(IDENTITY_API,"/auth/login",{method:"POST",body:{email,password},token:""});
-    acceptSession(result);
+    acceptSession(result,revision);
     return result;
   },
   async register({email,password,name}={}) {
