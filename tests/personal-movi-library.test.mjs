@@ -22,3 +22,22 @@ test("personal media range validates bounds and rejects full file responses",asy
     await assert.rejects(readPersonalRange(server,personalEndpoint(server,"/Items"),0,1));
   }finally{globalThis.fetch=original;}
 });
+
+
+test("existing personal Sources results reach Movi on the website without changing native playback",async()=>{
+  const {readFileSync}=await import("node:fs");
+  const read=path=>readFileSync(new URL("../"+path,import.meta.url),"utf8");
+  const sources=read("src/components/mg/SourcesView.jsx");
+  const movi=read("src/components/mg/PersonalServerMovi.jsx");
+  const start=sources.indexOf("const playPersonalResult");
+  const end=sources.indexOf("const playCustomDebridSource",start);
+  const handler=sources.slice(start,end);
+  assert.match(handler,/if \(canOpenPersonalMovi\(\)\) \{\s*setPersonalMoviSelection\(\{ id: String\(result.id\), serverId: result.server.id, title: result.title \}\);\s*return;/);
+  assert.match(handler,/player\.play\(/);
+  assert.match(handler,/preferNativeVlc: true/);
+  assert.match(sources,/<PersonalServerMovi initialItem=\{personalMoviSelection\} playbackOnly/);
+  assert.match(movi,/if\(initialItem && canOpenPersonalMovi\(\)\) void play\(initialItem\)/);
+  assert.match(movi,/servers\.find\(s=>s\.id===item\.serverId&&s\.active!==false\)/);
+  assert.match(movi,/sandbox="allow-scripts"/);
+  assert.doesNotMatch(movi,/allow-same-origin/);
+});
