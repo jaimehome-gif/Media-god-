@@ -187,11 +187,14 @@ const auth = {
     return call(IDENTITY_API,"/auth/me",{method:"PATCH",body:patch});
   },
   async logout(returnTo) {
-    try {
-      if (getIndependentSessionToken()) await call(IDENTITY_API,"/auth/logout",{method:"POST",body:{}});
-    } catch { /* Always clear the local session. */ }
+    // Clear the old session immediately. A delayed revocation response must
+    // never erase a different session created by a subsequent login.
+    const previousToken=getIndependentSessionToken();
     saveIndependentSessionToken("");
-    if (returnTo && typeof window!=="undefined") window.location.assign(returnTo);
+    try {
+      if (previousToken) await call(IDENTITY_API,"/auth/logout",{method:"POST",body:{},token:previousToken});
+    } catch { /* Local sign-out still succeeds when the network is down. */ }
+    if (returnTo && typeof window!=="undefined" && !getIndependentSessionToken()) window.location.assign(returnTo);
   },
   setToken: saveIndependentSessionToken,
   getAccessToken: getIndependentSessionToken,
