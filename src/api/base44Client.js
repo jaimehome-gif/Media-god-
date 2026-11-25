@@ -14,6 +14,9 @@ import {
 export const IDENTITY_API = "https://media-god-identity-api-production.up.railway.app";
 export const RD_API = "https://media-god-rd-independent-api-production.up.railway.app";
 const SESSION_KEY = "mg:jaime-home-session:v1";
+// Briefly suppress repeated requests only after an explicit identity-verifier denial.
+// An upstream provider 401 is not evidence that the Media God session is invalid.
+let rejectedSession = { token: "", until: 0 };
 const AUTH_ERROR = "Please sign in to Media God again. Your existing verified email address is still valid; there is no need to create a different account.";
 const PUBLIC_FUNCTIONS = new Set(["getTmdbMovies","resolveImdb","resolveTvImdb","fetchAddonStreams","getEntertainmentNews","getSkipSegments","getFireTvApkLink"]);
 const PRIVATE_FUNCTIONS = new Set(["realDebrid","realDebridAuth","multiDebrid","findRdLibrary"]);
@@ -25,6 +28,7 @@ const storage = () => {
 export const getIndependentSessionToken = () => storage()?.getItem(SESSION_KEY) || "";
 export const saveIndependentSessionToken = value => {
   if (value !== getIndependentSessionToken()) {
+    rejectedSession = { token: "", until: 0 };
     try { window.sessionStorage.removeItem("mg:rd-cooldown-until"); } catch { /* storage unavailable */ }
   }
   if (value) storage()?.setItem(SESSION_KEY,String(value));
@@ -47,6 +51,10 @@ const playbackRateLimitError = seconds => {
   return error;
 };
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
+  const privateGatewayRequest = endpoint === RD_API && Boolean(token);
+  if (privateGatewayRequest && rejectedSession.token === token && rejectedSession.until > Date.now()) {
+    throw asError({status:401}, {error:AUTH_ERROR, code:"MG_SESSION_REJECTED"});
+  }
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
   const website = /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
     !globalThis.window?.MediaGodNative;
@@ -88,7 +96,12 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       }
       throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
     }
-    if (!response.ok) throw asError(response,data);
+    if (!response.ok) {
+      if (privateGatewayRequest && response.status === 401 && data?.code === "MG_SESSION_REJECTED" && token === getIndependentSessionToken()) {
+        rejectedSession = {token, until: Date.now() + 10000};
+      }
+      throw asError(response,data);
+    }
     return data;
   } catch(error) {
     if (error?.name==="AbortError") {

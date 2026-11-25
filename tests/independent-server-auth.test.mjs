@@ -62,7 +62,9 @@ globalThis.fetch=(url,options)=>{
         ...(token ? {Authorization:"Bearer "+token}: {})},body:JSON.stringify(body)});
     for(const route of ["realDebrid","realDebridAuth","findRdLibrary","multiDebrid","fetchAddonStreams"]){
       assert.equal((await post(route)).status,401,route+" rejects anonymous requests");
-      assert.equal((await post(route,tokens.revoked)).status,401,route+" rejects revoked sessions");
+      const denied = await post(route,tokens.revoked);
+      assert.equal(denied.status,401,route+" rejects revoked sessions");
+      assert.equal((await denied.json()).code,"MG_SESSION_REJECTED");
     }
     assert.equal((await post("realDebridAuth",tokens.outage)).status,503);
     assert.equal((await post("realDebridAuth",tokens.a,{action:"status",user_id:ids.b})).status,400);
