@@ -1,5 +1,5 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
-import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities } from "./websiteDirectMediaPolicy.js";
+import { isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -10510,8 +10510,27 @@ export default function VideoPlayer({
    * provider-labelled rows only from the counter made the UI report "6 ready"
    * while the chooser had a much larger cached/selectable set.
    */
-  const selectableSourceCount = selectableSourceEntries.length;
+  const websiteSourceChoiceAllowed = (index, item) => {
+    if (!websiteSourcesPlayback) return true;
+    const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
+    return isWebsiteDirectSourceChoice({
+      item: rendition, originalItem: item, url: getSourceUrl(rendition),
+      failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
+    });
+  };
+  const presentedSourceEntries = websiteSourcesPlayback
+    ? selectableSourceEntries.filter(({ index, item }) => websiteSourceChoiceAllowed(index, item))
+    : selectableSourceEntries;
+  const presentedSelectorEntries = websiteSourcesPlayback ? presentedSourceEntries : visibleSourceSelectorEntries;
+  const presentedSelectorValue = websiteSourcesPlayback
+    ? (presentedSourceEntries.some(entry => entry.index === activeIdx) ? activeIdx : "")
+    : visibleSourceSelectorValue;
+  const selectableSourceCount = presentedSourceEntries.length;
   const showSourceChooser = () => {
+    if (websiteSourcesPlayback) {
+      setInPlayerSourcesOpen(true);
+      return;
+    }
     sourceChooserRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     sourceChooserRef.current?.focus({ preventScroll: true });
     try {
@@ -10523,7 +10542,7 @@ export default function VideoPlayer({
   const noPlayableVodSources =
     !isLive &&
     Boolean(source?.sourceDiagnostics?.diagnosticLabel) &&
-    selectableSourceCount === 0 &&
+    selectableSourceEntries.length === 0 &&
     !rdOverride;
 
   const failedSourceCount =
@@ -10876,13 +10895,14 @@ export default function VideoPlayer({
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
             title={source?.title}
-            entries={selectableSourceEntries}
+            entries={presentedSourceEntries}
             activeIdx={activeIdx}
             failedSources={failedSources}
             sourceLabel={sourceCacheStateLabel}
             discovering={["searching", "fast-start", "verifying", "preparing"].includes(String(source?.sourceDiagnostics?.phase || ""))}
             onClose={() => setInPlayerSourcesOpen(false)}
             onSelect={(index, item) => {
+              if (!websiteSourceChoiceAllowed(index, item)) return;
               selectSource(index, item);
               setInPlayerSourcesOpen(false);
             }}
@@ -11244,6 +11264,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
+                sourceChoiceAllowed={websiteSourcesPlayback ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11384,6 +11405,7 @@ export default function VideoPlayer({
                 failedSources={
                   failedSources
                 }
+                sourceChoiceAllowed={websiteSourcesPlayback ? websiteSourceChoiceAllowed : undefined}
                 onSelectSource={
                   selectSource
                 }
@@ -11629,7 +11651,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {availableSortOptions.length > 1 && (
+          {!websiteSourcesPlayback && availableSortOptions.length > 1 && (
             <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
                 {playbackMediaType === "tv"
@@ -11691,16 +11713,19 @@ export default function VideoPlayer({
             </label>
           )}
 
+          {websiteSourcesPlayback && selectableSourceCount === 0 && (
+            <p role="status" className="text-xs text-white/70">No verified browser-compatible sources are ready.</p>
+          )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                All sources / quality
+                {websiteSourcesPlayback ? "Browser-compatible sources" : "All sources / quality"}
               </span>
 
               <div className="relative">
                 <select
                   ref={sourceChooserRef}
-                  value={visibleSourceSelectorValue}
+                  value={presentedSelectorValue}
                   onPointerDown={pinSourceSelector}
                   onKeyDown={(event) => {
                     if (selectorOpenKey(event)) pinSourceSelector();
@@ -11708,21 +11733,22 @@ export default function VideoPlayer({
                   onBlur={releaseSourceSelector}
                   onChange={(event) => {
                     const value = event.target.value;
-                    const selectedEntry = visibleSourceSelectorEntries.find(
+                    const selectedEntry = presentedSelectorEntries.find(
                       (entry) => String(entry.index) === String(value)
                     );
                     releaseSourceSelector();
+                    if (websiteSourcesPlayback && (!selectedEntry || !websiteSourceChoiceAllowed(selectedEntry.index, selectedEntry.item))) return;
                     selectSource(value, selectedEntry?.item || null);
                   }}
                   className="min-h-11 w-full appearance-none rounded-lg border border-white/10 bg-mg-card py-2.5 pl-3 pr-9 text-xs font-medium text-white outline-none transition focus:border-mg-green focus:ring-2 focus:ring-mg-green/30 sm:min-h-10 sm:text-sm"
                   aria-label="Choose from all playback sources"
                 >
-                  {visibleSourceSelectorValue === "" ? (
+                  {presentedSelectorValue === "" ? (
                     <option value="" disabled>
-                      Preparing uncached sources…
+                      {websiteSourcesPlayback ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
-                  {visibleSourceSelectorEntries.map(
+                  {presentedSelectorEntries.map(
                     ({ item, index }) => {
                       const failed =
                         failedSources.has(
@@ -11757,7 +11783,7 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {vidSrcEmbedUrl && (
+          {!websiteSourcesPlayback && vidSrcEmbedUrl && (
             <button
               type="button"
               data-mg-vidsrc-open="true"
@@ -11769,7 +11795,7 @@ export default function VideoPlayer({
             </button>
           )}
 
-          {rdOverride &&
+          {!websiteSourcesPlayback && rdOverride &&
             visibleRdFileSelectorFiles.length > 1 && (
               <label className="min-w-[12rem] flex-1 basis-[18rem]">
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
