@@ -12,7 +12,7 @@ const clips = [
 function HandoffTest() {
   const { play } = usePlayer();
   const [notice, setNotice] = useState("");
-  const launch = async (file) => {
+  const launch = async (file, automatic = false) => {
     const ordered = [...clips].sort(([a],[b]) => a === file ? -1 : b === file ? 1 : 0);
     const sources = ordered.map(([name,label]) => {
       const url = new URL("/decoder-lab/samples/" + name, location.origin).href;
@@ -22,9 +22,9 @@ function HandoffTest() {
     setNotice("Opening the Media God player…");
     try {
       await play({ id:"generated-phone-preview", title:"Generated Phone Preview",
-        mediaType:"movie", type:"movie", openSourcesDrawer:true, manualSourceSelection:true,
+        mediaType:"movie", type:"movie", openSourcesDrawer:true, manualSourceSelection:!automatic,
         skipAddonLookup:true, skipRdLookup:true, noRd:true, allowNonPlaybackFallback:false,
-        verifiedPlaybackPolicy:"manual", sources:[sources[0]], completeSources:sources });
+        verifiedPlaybackPolicy:"manual", sources:automatic ? sources : [sources[0]], completeSources:sources });
       setNotice("Check the picture, tone and Sources chooser.");
     } catch {
       setNotice("Player handoff failed. Please report this message.");
@@ -37,6 +37,7 @@ function HandoffTest() {
       {clips.map(([file,label]) => <button key={file} type="button" onClick={() => launch(file)}
         className="rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold">Play {label}</button>)}
     </div>
+    <button type="button" onClick={() => launch("ac3.mkv", true)} className="rounded-lg bg-mg-green px-4 py-3 text-sm font-bold text-black">Automatic Sources test</button>
     <p role="status" className="text-sm">{notice}</p>
   </section>;
 }
