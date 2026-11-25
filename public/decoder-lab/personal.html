@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Media God personal media</title>
+<style>body{font:15px system-ui,sans-serif;background:#101010;color:#fff;margin:12px}input,button{max-width:100%;color:#fff;background:#272727;border:1px solid #555;border-radius:8px;padding:10px}movi-player{display:block;width:100%;aspect-ratio:16/9;background:#000;margin-top:10px}#status{overflow-wrap:anywhere}</style>
+</head>
+<body>
+<h2>Play a personal video</h2>
+<p>Select a video file from your device, then press Play. The file stays in your browser.</p>
+<label for="file">Choose video</label>
+<input id="file" type="file" accept="video/*,.mkv,.mp4,.m4v,.webm,.mov,.avi,.ts,.m2ts" disabled>
+<button id="close" type="button" disabled>Clear video</button>
+<p id="status" role="status">Loading Movi…</p><div id="stage"></div>
+<script type="module" src="./personal.js"></script>
+</body></html>

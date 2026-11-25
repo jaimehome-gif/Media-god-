@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Media God decoder test</title>
+<style>
+body{font:15px system-ui,sans-serif;background:#101010;color:#fff;margin:12px}
+button{background:#272727;color:#fff;border:1px solid #555;border-radius:8px;padding:10px;margin:4px;cursor:pointer}
+movi-player{display:block;width:100%;aspect-ratio:16/9;background:#000;margin-top:10px}
+p{line-height:1.5} #status{overflow-wrap:anywhere;color:#ddd}
+</style>
+</head>
+<body>
+<h2>Movi / FFmpeg software mode</h2>
+<p>Select a generated test clip, then press Play. You should see moving bars and hear a steady tone.</p>
+<div id="choices"></div>
+<p id="status" role="status">Loading pinned decoder…</p>
+<div id="stage"></div>
+<script type="module" src="./lab.js"></script>
+</body>
+</html>

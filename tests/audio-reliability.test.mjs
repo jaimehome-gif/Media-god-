@@ -217,7 +217,7 @@ test("audio diagnostics keep track and decoder evidence without private links", 
 test("trailers are excluded while torrent alternatives remain in the chooser", () => {
   assert.match(provider, /const stripVodTrailerSources =/);
   assert.match(provider, /!\["youtube", "provider", "external"\]\.includes\(type\)/);
-  assert.match(player, /const presentedSourceEntries = publicWebsiteVod[\s\S]*?: selectableSourceEntries;/);
+  assert.match(player, /const presentedSourceEntries = filterDirectChoices[\s\S]*?: selectableSourceEntries;/);
   assert.match(player, /const selectableSourceCount = presentedSourceEntries\.length/);
   assert.match(player, /sourceIsUserSelectable\(/);
 });

@@ -6,6 +6,7 @@ import React, {
 import {
   Bookmark,
   CalendarDays,
+  Database,
   Download,
   Film,
   Globe2,
@@ -32,6 +33,8 @@ import {
   nativeFireTvExitAvailable,
 } from "@/components/mg/nativeFireTvBridge";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
+import { canOpenPersonalMovi } from "@/components/mg/PersonalMoviSource";
 
 const NAV = [
   { id: "home", label: "Home", icon: HomeIcon },
@@ -321,6 +324,13 @@ export default function Navbar({
           </div>
 
           <nav className="scrollbar-hide flex flex-1 flex-col gap-1 overflow-y-auto p-2 md:p-3">
+            {canOpenPersonalMovi() && (
+              <Link to="/personal-sources" title="Personal Sources" aria-label="Personal Sources"
+                className={cn(linkClass("personal-sources"), "justify-center px-2 py-2 md:justify-start md:px-3")}>
+                <Database className="h-5 w-5 shrink-0" />
+                <span className="hidden truncate md:block">Personal Sources</span>
+              </Link>
+            )}
             {NAV.map((item) => {
               const Icon = item.icon;
 

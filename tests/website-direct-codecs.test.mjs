@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -75,10 +75,10 @@ test("website chooser does not inherit original codecs for an unverified renditi
   assert.equal(isWebsiteDirectSourceChoice({item:originalItem,originalItem,url,...caps}),true);
 });
 
-test("all in-player website menus use the screened entries and native paths retain original choices",()=>{
+test("Sources chooser retains resolver inputs and other website menus retain codec screening",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   const controls=readFileSync(new URL("../src/components/mg/MediaPlayerControls.jsx",import.meta.url),"utf8");
-  assert.match(player,/const presentedSourceEntries = publicWebsiteVod[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
+  assert.match(player,/const presentedSourceEntries = filterDirectChoices[\s\S]*?websiteSourceChoiceAllowed\(index, item\)[\s\S]*?: selectableSourceEntries/);
   assert.match(player,/entries=\{presentedSourceEntries\}/);
   assert.match(player,/presentedSelectorEntries\.map\(/);
   assert.equal((player.match(/sourceChoiceAllowed=\{publicWebsiteVod \? websiteSourceChoiceAllowed : undefined\}/g)||[]).length,2);
@@ -109,11 +109,11 @@ test("both public hostnames use the same direct media engine regardless of launc
 });
 
 
-test("public direct playback menu is screened regardless of launch route without changing the active stream guard",()=>{
+test("public Sources screens the resolved transport independently of chooser rows",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
-  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!publicWebsiteVod\) return true;/);
+  assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!filterDirectChoices\) return true;/);
   assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
-  assert.match(player,/const presentedSourceEntries = publicWebsiteVod/);
+  assert.match(player,/const presentedSourceEntries = filterDirectChoices/);
 });
 
 
@@ -155,4 +155,48 @@ test("synthetic website menu remains restricted through normal, rate-limit and r
     assert.deepEqual(visible("HTTP 429"),[]);
     assert.deepEqual(visible(""),[0]);
   }
+});
+
+test("Movi accepts a secure resolved file without codec labels and honours transport constraints", () => {
+  assert.equal(canOpenWebsiteMovi(url, { type: "torrent" }, {}), true);
+  for (const value of ["", "magnet:?xt=demo", "https://user:password@media.example.test/video"]) {
+    assert.equal(canOpenWebsiteMovi(value, {}, {}), false);
+  }
+  for (const field of [{ drm: {} }, { requestHeaders: { Authorization: "fixture" } }]) {
+    assert.equal(canOpenWebsiteMovi(url, {}, field), false);
+    assert.equal(canOpenWebsiteMovi(url, field, {}), false);
+  }
+});
+
+test("explicitly saved personal torrent is pending, never treated as a verified direct file",()=>{
+  const saved={type:"rd",addon:"Sources",magnet:"magnet:?xt=urn:btih:"+"a".repeat(40)};
+  const source={id:"debrid-source:fixture",skipAddonLookup:true,skipRdLookup:true,sources:[saved]};
+  const input={source,item:saved};
+  assert.equal(isWebsiteSavedPersonalPendingChoice(input),true);
+  assert.equal(isWebsiteDirectSourceChoice({item:saved,originalItem:saved,url:saved.magnet,...caps}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,resolvedUrl:url}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,failed:true}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,item:{...saved,drm:true}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,source:{...source,id:"catalogue:fixture"}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,source:{...source,skipAddonLookup:false}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,item:{...saved,magnet:saved.magnet+"b"}}),false);
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/if \(websiteRateLimitHold\) return false;\s*if \(websitePersonalPendingChoice\(index, item\)\) return true;/);
+  assert.match(player,/websiteDirectMediaCheck\?\.allowed === false/);
+  assert.match(player,/awaiting compatibility check/);
+});
+
+test("website catalogue torrents need compatible video evidence before resolution", () => {
+  const candidate = label => websiteTorrentCandidate({type:"rd",label});
+  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
+    assert.equal(candidate(label),false,label);
+  for (const label of ["release.1080p.x264.AAC", "720p H.264 DD+", "1080p VP9 Opus", "1080p x265 AAC", "AV1 Opus", "XviD MP3", "VP8 Vorbis", "H264 FLAC"])
+    assert.equal(candidate(label),true,label);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("hevc","aac")}),true);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"unknown",...item("h264","dts")}),true);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("h264","truehd")}),false);
+  for (const track of [{height:2160}, {bit_depth:10}, {color_transfer:"smpte2084"}, {pix_fmt:"yuv420p10le"}])
+    assert.equal(websiteTorrentCandidate({type:"rd",mediaInfo:{video_tracks:[{codec:"hevc",...track}],audio_tracks:[{codec:"aac"}]}}),false);
+  assert.equal(candidate("1080p MPEG-4 container"),false);
+  assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });

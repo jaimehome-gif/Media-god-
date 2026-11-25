@@ -1,6 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
+import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
+import { noWebsiteTorrentMatch, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -102,6 +103,7 @@ import {
   recordSuccessfulPlaybackSource,
   recordTrustedCachedSource,
 } from "@/components/mg/trustedCachedSources";
+import { magnetFromInput } from "@/components/mg/magnetStreamHelpers";
 import { sourceHasAuthoritativeCachedSignal } from "@/components/mg/sourceCacheVisibility";
 import { sourceMatchesRequestedIdentity } from "@/components/mg/sourceIdentity";
 import { sourceIsAioStreamsCandidate } from "@/components/mg/sourceProviderIdentity";
@@ -937,7 +939,7 @@ export default function VideoPlayer({
    * Reconcile both on every render so a late six-row fast-start snapshot can
    * never hide the rest of the confirmed cached sources from either selector.
    */
-  const sources = mergeCompleteSourcePool(
+  const mergedSources = mergeCompleteSourcePool(
     publishedSources,
     source?.completeSources,
     {
@@ -946,17 +948,28 @@ export default function VideoPlayer({
     }
   );
 
+  const filterWebsiteTorrents = (source?.openSourcesDrawer || source?.manualSourceSelection) &&
+    !String(source?.id || "").startsWith("debrid-source:") &&
+    isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
+      source, isLive: source?.type === "live" });
+  const sources = filterWebsiteTorrents ? mergedSources.filter(websiteTorrentCandidate) : mergedSources;
+  const noWebsiteMatches = filterWebsiteTorrents && mergedSources.some(item => !websiteTorrentCandidate(item)) &&
+    !sources.some(item => !item.diagnostic && item.type !== "status");
+
   const [activeIdx, setActiveIdx] =
     useState(0);
   // The Sources button in OnlyFlix explicitly requests our own player
   // with the source list already open. A normal Play never sets this flag.
+  const autoCheckWebsiteSources = Boolean(source?.openSourcesDrawer && !source?.manualSourceSelection &&
+    isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
+      source, isLive: source?.type === "live" }));
   const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(
-    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+    () => Boolean(source?.openSourcesDrawer && source?.mediaType !== "live" && !autoCheckWebsiteSources)
   );
 
   useEffect(() => {
     setInPlayerSourcesOpen(
-      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live")
+      Boolean(source?.openSourcesDrawer && source?.mediaType !== "live" && !autoCheckWebsiteSources)
     );
   }, [source?.playRequestId]);
 
@@ -2591,6 +2604,36 @@ export default function VideoPlayer({
     return candidates[0]?.index ?? -1;
   };
 
+  const limitUntilRef = useRef(0);
+  const handledLimit = useRef(0);
+  const [websiteResolveRetry, setWebsiteResolveRetry] = useState(0);
+  const [limitUntil, setLimitUntil] = useState(0);
+  const [limitSeconds, setLimitSeconds] = useState(0);
+  const retriedLimitedRequest = useRef(null);
+  useEffect(() => {
+    if (!filterWebsiteTorrents) return;
+    limitUntilRef.current = 0;
+    handledLimit.current = 0;
+    setLimitUntil(0);
+    setLimitSeconds(0);
+    const hold = until => {
+      if (until <= Date.now() || !Number.isFinite(until)) return;
+      limitUntilRef.current = Math.max(limitUntilRef.current, until);
+      setLimitUntil(limitUntilRef.current);
+      setLimitSeconds(Math.ceil((limitUntilRef.current - Date.now()) / 1000));
+    };
+    const onLimit = event => hold(Number(event.detail?.until));
+    window.addEventListener("mg:rd-playback-limited", onLimit);
+    try { hold(Number(window.sessionStorage.getItem("mg:rd-cooldown-until"))); } catch {}
+    return () => window.removeEventListener("mg:rd-playback-limited", onLimit);
+  }, [filterWebsiteTorrents, source?.playRequestId]);
+
+  const websiteScanState = useRef(null);
+  const websiteAttemptKey = (item, index) => {
+    const hash = sourceTorrentHash(item);
+    return hash ? hash + ":" + String(item.fileIdx ?? item.file_idx ?? "") : stablePlaybackSourceKey(item, index);
+  };
+
   const switchToSource = (
     nextIndex,
     {
@@ -2605,6 +2648,7 @@ export default function VideoPlayer({
      * but it must never fight the viewer by jumping back to source 1 or another
      * release. Only another manual source choice can replace the lock.
      */
+    if (!manualSelection && filterWebsiteTorrents && limitUntilRef.current > Date.now()) return false;
     if (!manualSelection && manualSourceLockActive()) {
       return false;
     }
@@ -2622,6 +2666,14 @@ export default function VideoPlayer({
       )
     ) {
       return false;
+    }
+
+    // Every automatic handoff shares the browser scan's attempted-file set.
+    // Different providers can publish the same torrent under different row IDs.
+    const scan = autoCheckWebsiteSources && websiteScanState.current;
+    if (scan && !manualSelection) {
+      if (scan.tried.has(websiteAttemptKey(sources[nextIndex], nextIndex))) return false;
+      scan.tried.add(websiteAttemptKey(active, activeIdx));
     }
 
     if (manualSelection) {
@@ -3310,7 +3362,16 @@ export default function VideoPlayer({
   );
   const [requestedCacheJob, setRequestedCacheJob] = useState("");
   const cacheJobKey = JSON.stringify([source?.playRequestId, rdMediaContextKey, activeResolutionKey]);
+  // Website Sources checks uncertain magnets through the existing account resolver.
+  // Explicit cache misses stay available for the viewer to prepare on demand.
+  const websiteTorrentLaunch = sourcesPlayback && isPublicWebsiteVod({
+    hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(), source, isLive,
+  });
+  const canResolveWebsiteTorrent = item => websiteTorrentLaunch && source?.hasRd !== false &&
+    Boolean(sourceTorrentHash(item)) && item?.cacheRequired !== true &&
+    item?.debridCacheCheckState !== "uncached" && !(item?.debridCacheChecked && item?.debridCached === false);
   const awaitingCacheChoice = sourcesPlayback && activeNeedsCaching &&
+    !(websiteTorrentLaunch && manualSourceLockActive()) && !canResolveWebsiteTorrent(active) &&
     !sourceHasAuthoritativeCachedSignal(active) && requestedCacheJob !== cacheJobKey;
 
   const startupHandoffAvailable = canAutoHandoffStartup({
@@ -4705,7 +4766,8 @@ export default function VideoPlayer({
               active?.magnet ||
               active?.magnetLink ||
               richMagnet ||
-              "";
+              active?.rdTorrentId ||
+              magnetFromInput(activeTorrentHash);
 
             if (
               !magnet
@@ -4872,7 +4934,9 @@ export default function VideoPlayer({
                   torrentId: existingData.torrent_id || rdTorrentId || active?.rdTorrentId || "",
                 });
                 setRdFiles(existingData.files || []);
-                setRdTorrentId(existingRdTorrentId);
+                // Keep the library ID on the resolved file for file switching.
+                // A pending ID keeps the stage in the preparation screen.
+                setRdTorrentId(null);
                 setRdResolving(false);
                 setRdPreparation(null);
                 return;
@@ -6168,6 +6232,7 @@ export default function VideoPlayer({
     },
     [
       activeIdx,
+      websiteResolveRetry,
       activeResolutionKey,
       activeUrl,
       rdMediaContextKey,
@@ -8975,19 +9040,150 @@ export default function VideoPlayer({
 
   const [browserFallbackSource, setBrowserFallbackSource] = useState("");
   const resolvedSourceUrl = rdOverride?.src || (isDirectFile ? activeUrl : "");
-  // Public website Sources alone use the existing HTML5/HLS playback engine.
-  // The exact resolved rendition must have verified audio and video metadata.
   const websitePlaybackContext = {
     hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
     source, active, isLive,
   };
-  const websiteRateLimitHold = !nativeFireTvPlayer && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError });
+  const cooldownExpired = limitUntil > 0 && limitSeconds === 0;
+  const websiteRateLimitHold = !nativeFireTvPlayer && (
+    (filterWebsiteTorrents && limitSeconds > 0 && !resolvedSourceUrl) ||
+    (!cooldownExpired && isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError })));
+  const limitedRequestKey = JSON.stringify([source?.playRequestId, rdMediaContextKey]);
+  useEffect(() => {
+    if (!filterWebsiteTorrents || !limitUntil) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((limitUntil - Date.now()) / 1000));
+      setLimitSeconds(remaining);
+      if (remaining > 0) return;
+      window.clearInterval(timer);
+      if (limitUntilRef.current !== limitUntil || handledLimit.current === limitUntil) return;
+      handledLimit.current = limitUntil;
+      if (!isRdSource || resolvedSourceUrl || retriedLimitedRequest.current === limitedRequestKey) return;
+      retriedLimitedRequest.current = limitedRequestKey;
+      setRdError("");
+      setRdPreparation(null);
+      if (sourceNeedsCaching(active)) setRdCacheEngineNonce(n => n + 1);
+      else setWebsiteResolveRetry(n => n + 1);
+    };
+    const timer = window.setInterval(tick, 250);
+    tick();
+    return () => window.clearInterval(timer);
+  }, [filterWebsiteTorrents, limitUntil, limitedRequestKey, isRdSource, resolvedSourceUrl]);
   const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
+  const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
+    canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride) &&
+    (!filterWebsiteTorrents || !rdOverride?.mediaInfo || rdOverride.audioRescue?.used || rdOverride.videoRescue?.used ||
+      websiteTorrentCandidate({ ...active, mediaInfo: rdOverride.mediaInfo }));
+  // Source discovery may publish more rows while a decoder is opening. Read
+  // the latest ranked pool without restarting the active candidate's timeout.
+  const websiteScanRef = useRef(null);
+  const [websiteScanMessage, setWebsiteScanMessage] = useState("");
+  const scanSourceKey = activeResolutionKey;
+  const scanRequestKey = JSON.stringify([source?.playRequestId, source?.tmdbId, source?.title,
+    source?.season, source?.episode, source?.startTime]);
+
+  websiteScanRef.current = () => {
+    const scan = websiteScanState.current;
+    if (cooldownExpired && retriedLimitedRequest.current === limitedRequestKey &&
+        isWebsiteRateLimitHold({ ...websitePlaybackContext, error: rdError })) return;
+    if (!scan || !autoCheckWebsiteSources || manualSourceLockActive() || websiteRateLimitHold ||
+        /sign in|log in|unauthori[sz]ed|forbidden|\b(401|403)\b/i.test(rdError || "")) {
+      setWebsiteScanMessage("");
+      return;
+    }
+    if (noWebsiteMatches) {
+      setWebsiteScanMessage(noWebsiteTorrentMatch);
+      return;
+    }
+    if (scan.key !== scanSourceKey || scan.url !== resolvedSourceUrl) {
+      scan.key = scanSourceKey;
+      scan.url = resolvedSourceUrl;
+      scan.started = Date.now();
+      scan.proven = false;
+      scan.decoderFailed = false;
+      scan.noPeersSince = null;
+    }
+    const player = stageRef.current?.querySelector("movi-player");
+    if (!scan.decoderFailed && player?.videoWidth && player.audioTracks?.length &&
+        player.getVideoPlaybackQuality?.().totalVideoFrames > 1 && player.currentTime > 0.25) {
+      scan.proven = true;
+      setWebsiteScanMessage("");
+      return;
+    }
+    if (scan.proven && !scan.decoderFailed) return;
+    // A resolved file can be ready while the browser waits for a user gesture.
+    // Give the viewer time to press Play without consuming the startup timeout.
+    if (moviSource && !rdError && !scan.decoderFailed && player?.paused === true &&
+        player.videoWidth > 0 && player.audioTracks?.length > 0) {
+      scan.started = Date.now();
+      setWebsiteScanMessage("Tap Play to start this source.");
+      return;
+    }
+    const preparing = !rdError && !resolvedSourceUrl && rdTorrentId && (rdPolling || rdPreparation);
+    const noPeers = preparing && rdPreparation?.seeders != null && Number(rdPreparation.seeders) === 0 &&
+      !rdPreparation.lastPollError && Number(rdPreparation.speed_bps || 0) === 0 &&
+      Number(rdPreparation.downloaded_bytes || 0) === 0 && Number(rdPreparation.progress || 0) === 0;
+    scan.noPeersSince = noPeers ? (scan.noPeersSince ?? Date.now()) : null;
+    const seedless = noPeers && Date.now() - scan.noPeersSince >= 30000;
+    if (preparing && !seedless) {
+      setWebsiteScanMessage("Real-Debrid is preparing the selected torrent…");
+      return;
+    }
+    const elapsed = Date.now() - scan.started;
+    const waitingForDiscovery = !sourceIsUserSelectable(active);
+    // A signed-in resolution request has its own timeout. Switching at the
+    // short decoder deadline discards the resulting URL and queues another request.
+    const lookupDeadline = isRdSource && rdResolving ? 125000 : 25000;
+    const failed = seedless || scan.decoderFailed || !!rdError || awaitingCacheChoice ||
+      (resolvedSourceUrl && !moviSource) || waitingForDiscovery || elapsed >= (resolvedSourceUrl ? 12000 : lookupDeadline);
+    if (!failed) {
+      setWebsiteScanMessage(isRdSource && !resolvedSourceUrl
+        ? "Checking this torrent with Real-Debrid…"
+        : "Checking source for picture and sound…");
+      return;
+    }
+    if (rdOverride?.fallbackSrc && rdOverride.fallbackSrc !== resolvedSourceUrl && !rdOverride.fallbackTried) {
+      handleRdPlaybackError();
+      return;
+    }
+    if (scanSourceKey) scan.tried.add(websiteAttemptKey(active, activeIdx));
+    const candidates = selectableSourceEntries.filter(({item,index}) =>
+      index !== activeIdx && !failedSourcesRef.current.has(index) &&
+      (!sourceNeedsCaching(item) || canResolveWebsiteTorrent(item)) &&
+      (playbackMediaType !== "tv" || (episodeAutoplayCanTrustSource(item) && !hasUnusableEpisodeAudio(item))) &&
+      !scan.tried.has(websiteAttemptKey(item,index)) &&
+      !["youtube","provider","external","status"].includes(String(item.type || "").toLowerCase()));
+    const next = seedless
+      ? candidates.find(({item}) => sourceHasAuthoritativeCachedSignal(item) ||
+          (!sourceTorrentHash(item) && /^https?:/.test(getSourceUrl(item)))) || candidates[0]
+      : candidates[0];
+    if (next && switchToSource(next.index, { preservePosition: true })) {
+      setWebsiteScanMessage("Trying the next source…");
+      return;
+    }
+    if (seedless) {
+      setWebsiteScanMessage("No unused compatible source is available. Still checking this torrent for seeders.");
+      return;
+    }
+    setWebsiteScanMessage(waitingForDiscovery && ["searching","verifying","fast-start","preparing"].includes(source?.sourceDiagnostics?.phase)
+      ? "Searching for sources…" : "No working source found yet. You can open Sources to choose another.");
+  };
+  useEffect(() => {
+    if (!autoCheckWebsiteSources) return;
+    websiteScanState.current = { tried: new Set(), started: Date.now() };
+    const timer = window.setInterval(() => websiteScanRef.current?.(), 500);
+    return () => {
+      window.clearInterval(timer);
+      websiteScanState.current = null;
+    };
+  }, [autoCheckWebsiteSources, scanRequestKey]);
+  // The chooser contains resolver inputs as well as directly playable files.
+  const filterDirectChoices = publicWebsiteVod && (!websiteSourcesPlayback || websiteRateLimitHold);
   const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
@@ -9021,7 +9217,7 @@ export default function VideoPlayer({
     /^https?:\/\//i.test(nativePlaybackUrl) &&
     nativeFallbackUrl === nativePlaybackUrl;
 
-  useProactiveCodecGuard({ active, activeIdx, activeUrl, rdOverride, isDirectFile, isLive, isYoutube, isProvider, useNativePlayback, nativeFireTvPlayer, rdResolving, rdPolling, rdTorrentId, rdPreparation, manualSourceLockActive, markSourceFailed, findNextPlayableSource, switchToSource, setForceNativePlayback, setNativeFallbackUrl, setRdError, sourceDisplayLabel });
+  useProactiveCodecGuard({ softwareDecoder: moviSource, active, activeIdx, activeUrl, rdOverride, isDirectFile, isLive, isYoutube, isProvider, useNativePlayback, nativeFireTvPlayer, rdResolving, rdPolling, rdTorrentId, rdPreparation, manualSourceLockActive, markSourceFailed, findNextPlayableSource, switchToSource, setForceNativePlayback, setNativeFallbackUrl, setRdError, sourceDisplayLabel });
 
   /*
    * VOD STARTUP WATCHDOG
@@ -9041,7 +9237,7 @@ export default function VideoPlayer({
     setVodStartupNotice("");
 
     if (
-      isLive ||
+      autoCheckWebsiteSources || isLive ||
       isYoutube ||
       isProvider ||
       useNativePlayback ||
@@ -9061,6 +9257,7 @@ export default function VideoPlayer({
 
     const timer = window.setTimeout(() => {
       const video = stageRef.current?.querySelector("video");
+      if (stageRef.current?.querySelector("movi-player")?.currentTime > 0.25) return;
       const realProgress =
         video instanceof HTMLVideoElement &&
         !video.ended &&
@@ -10514,20 +10711,25 @@ export default function VideoPlayer({
    * provider-labelled rows only from the counter made the UI report "6 ready"
    * while the chooser had a much larger cached/selectable set.
    */
+  const websitePersonalPendingChoice = (index, item) => isWebsiteSavedPersonalPendingChoice({
+    source, item, resolvedUrl: Number(index) === activeIdx ? rdOverride?.src : "",
+    failed: failedSources.has(index),
+  });
   const websiteSourceChoiceAllowed = (index, item) => {
-    if (!publicWebsiteVod) return true;
+    if (!filterDirectChoices) return true;
     if (websiteRateLimitHold) return false;
+    if (websitePersonalPendingChoice(index, item)) return true;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
       failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
     });
   };
-  const presentedSourceEntries = publicWebsiteVod
+  const presentedSourceEntries = filterDirectChoices
     ? selectableSourceEntries.filter(({ index, item }) => websiteSourceChoiceAllowed(index, item))
     : selectableSourceEntries;
-  const presentedSelectorEntries = publicWebsiteVod ? presentedSourceEntries : visibleSourceSelectorEntries;
-  const presentedSelectorValue = publicWebsiteVod
+  const presentedSelectorEntries = filterDirectChoices ? presentedSourceEntries : visibleSourceSelectorEntries;
+  const presentedSelectorValue = filterDirectChoices
     ? (presentedSourceEntries.some(entry => entry.index === activeIdx) ? activeIdx : "")
     : visibleSourceSelectorValue;
   const selectableSourceCount = presentedSourceEntries.length;
@@ -10653,7 +10855,9 @@ export default function VideoPlayer({
       : cacheSeeders <= 0 &&
           cacheSpeedBps <= 0 &&
           cacheElapsedSeconds >= 30
-        ? sourceReportedSeeders > 0
+        ? autoCheckWebsiteSources && !manualSourceLockActive() && cacheProgress === 0 && cacheDownloadedBytes === 0
+          ? "Real-Debrid has no active seeders. Media God checks for another compatible source after 30 seconds without activity."
+          : sourceReportedSeeders > 0
           ? `Comet found ${sourceReportedSeeders} seeder${sourceReportedSeeders === 1 ? "" : "s"}, but Real-Debrid currently reports no active peers. Media God will keep this source selected while it checks.`
           : "Real-Debrid reports no active seeders. Media God will keep this source selected rather than silently switching torrents."
         : cacheSpeedBps <= 0 &&
@@ -10897,16 +11101,21 @@ export default function VideoPlayer({
           </div>
         </div>
 
-        {publicWebsiteVod && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
+        {publicWebsiteVod && !moviSource && (websiteSourcesPlayback || isDirectFile || Boolean(rdOverride?.src)) &&
           <WebsiteAudioDiagnostic stageRef={stageRef} playbackKey={resolvedSourceUrl} />}
 
+        {autoCheckWebsiteSources && websiteScanMessage && (
+          <p role="status" className="px-3 py-2 text-sm text-white/80">{websiteScanMessage}</p>
+        )}
         {inPlayerSourcesOpen && (
           <InPlayerSourceDrawer
             title={source?.title}
             entries={presentedSourceEntries}
             activeIdx={activeIdx}
             failedSources={failedSources}
-            sourceLabel={sourceCacheStateLabel}
+            sourceLabel={(item,index) => publicWebsiteVod && websitePersonalPendingChoice(index,item)
+              ? `Saved file · awaiting compatibility check · ${sourceCacheStateLabel(item,index)}`
+              : sourceCacheStateLabel(item,index)}
             discovering={["searching", "fast-start", "verifying", "preparing"].includes(String(source?.sourceDiagnostics?.phase || ""))}
             onClose={() => setInPlayerSourcesOpen(false)}
             onSelect={(index, item) => {
@@ -10920,8 +11129,8 @@ export default function VideoPlayer({
         <div
           data-mg-player-stage="true"
           data-mg-website-rate-limit-hold={websiteRateLimitHold ? "true" : undefined}
-          data-mg-website-engine={publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
-          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
+          data-mg-website-engine={moviSource ? "movi" : publicWebsiteVod && resolvedSourceUrl ? "html5-hls" : undefined}
+          data-mg-website-sources-state={websiteSourcesPlayback ? (busy ? "resolving" : displayedError ? "resolution-error" : !resolvedSourceUrl ? "no-direct-media" : moviSource ? "decoding" : websiteDirectMediaCheck?.allowed ? "compatible" : "incompatible") : undefined}
           ref={
             stageRef
           }
@@ -10933,7 +11142,13 @@ export default function VideoPlayer({
           }}
           className="relative flex min-h-[34vh] w-full items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl sm:min-h-0 sm:aspect-video"
         >
-          {busy ? (
+          {filterWebsiteTorrents && limitSeconds > 0 && !resolvedSourceUrl ? (
+            <p role="status" className="p-6 text-center text-sm text-white/85">
+              {retriedLimitedRequest.current === limitedRequestKey
+                ? `Real-Debrid is still busy. Retry this source in ${limitSeconds}s.`
+                : `Real-Debrid is busy. Media God will retry this source once in ${limitSeconds}s.`}
+            </p>
+          ) : busy ? (
             <div className="flex w-full max-w-lg flex-col items-center gap-3 p-5 text-center sm:p-6">
               <div className="flex h-14 w-14 items-center justify-center rounded-full border border-mg-green/20 bg-mg-green/5">
                 <Loader2 className="h-7 w-7 animate-spin text-mg-green" />
@@ -11163,6 +11378,18 @@ export default function VideoPlayer({
                 Media God is handing this stream to the Android native video engine.
               </p>
             </div>
+          ) : moviSource ? (
+            <WebsiteSourcesMovi key={resolvedSourceUrl} url={resolvedSourceUrl}
+              onMetadata={handleLoadedMetadata} onProgress={handleTimeUpdate}
+              onFailure={() => {
+                if (websiteScanState.current && !manualSourceLockActive()) {
+                  websiteScanState.current.key = scanSourceKey;
+                  websiteScanState.current.url = resolvedSourceUrl;
+                  websiteScanState.current.decoderFailed = true;
+                  websiteScanRef.current?.();
+                } else if (rdOverride) handleRdPlaybackError();
+                else handleDirectPlaybackError();
+              }} />
           ) : websiteDirectMediaCheck?.allowed === false ? (
             <div role="alert" data-mg-website-codec-rejected="true"
               className="flex max-w-lg flex-col items-center gap-3 p-6 text-center">
@@ -11661,7 +11888,7 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {!publicWebsiteVod && availableSortOptions.length > 1 && (
+          {!filterDirectChoices && availableSortOptions.length > 1 && (
             <label className="w-[10.5rem] shrink-0 sm:w-[12.5rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
                 {playbackMediaType === "tv"
@@ -11723,13 +11950,13 @@ export default function VideoPlayer({
             </label>
           )}
 
-          {publicWebsiteVod && selectableSourceCount === 0 && (
+          {filterDirectChoices && selectableSourceCount === 0 && (
             <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : "No verified browser-compatible sources are ready."}</p>
           )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                {publicWebsiteVod ? "Browser-compatible sources" : "All sources / quality"}
+                {filterDirectChoices ? (presentedSourceEntries.some(({index,item}) => websitePersonalPendingChoice(index,item)) ? "Saved file / compatibility status" : "Browser-compatible sources") : "All sources / quality"}
               </span>
 
               <div className="relative">
@@ -11755,7 +11982,7 @@ export default function VideoPlayer({
                 >
                   {presentedSelectorValue === "" ? (
                     <option value="" disabled>
-                      {publicWebsiteVod ? "Choose a verified browser source" : "Preparing uncached sources…"}
+                      {filterDirectChoices ? "Choose a verified browser source" : "Preparing uncached sources…"}
                     </option>
                   ) : null}
                   {presentedSelectorEntries.map(
@@ -11766,7 +11993,9 @@ export default function VideoPlayer({
                         );
 
                       const rawLabel = sourceDisplayLabel(item, index);
-                      const label = sourceCacheStateLabel(item, index);
+                      const label = publicWebsiteVod && websitePersonalPendingChoice(index,item)
+                        ? `Awaiting compatibility check · ${sourceCacheStateLabel(item,index)}`
+                        : sourceCacheStateLabel(item,index);
 
                       return (
                         <option

@@ -25,6 +25,8 @@ import {
 
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
+import { getPlaybackDeviceProfile } from "./mediaCompatibility";
+import { noWebsiteTorrentMatch, websiteTorrentFilterDescription, isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
@@ -292,6 +294,8 @@ const serverAddonLookup = async ({
   }
 };
 
+const EMPTY_ALIASES = Object.freeze([]);
+
 export default function StreamSourcesBox({
   title,
   poster,
@@ -299,8 +303,8 @@ export default function StreamSourcesBox({
   providers,
   loading,
   rdYear,
-  alternateYears = [],
-  alternateTitles = [],
+  alternateYears = EMPTY_ALIASES,
+  alternateTitles = EMPTY_ALIASES,
   tmdbId,
   imdbId,
   mediaType = "movie",
@@ -777,6 +781,7 @@ export default function StreamSourcesBox({
             // TMDB Embed is an optional self-hosted source; ignore failures.
           }
 
+          if (cancelled) return;
           setAddonStreams(
             streams
           );
@@ -850,14 +855,14 @@ export default function StreamSourcesBox({
     episode,
   ]);
 
+  const websiteCatalogue = isPublicWebsiteVod({ hostname: globalThis.location?.hostname,
+    profile: getPlaybackDeviceProfile(), source: { mediaType }, isLive: mediaType === "live" });
   const visibleAddonStreams =
     useMemo(
       () =>
         addonStreams.filter(
           (stream) => {
-            if (
-              !stream
-            ) {
+            if (!stream || (websiteCatalogue && !websiteTorrentCandidate(stream))) {
               return false;
             }
 
@@ -878,7 +883,7 @@ export default function StreamSourcesBox({
         ),
       [
         addonStreams,
-
+        websiteCatalogue,
         hasDebrid,
       ]
     );
@@ -922,6 +927,10 @@ export default function StreamSourcesBox({
         )
       )
       .map(item => ({ ...item, preferNativeVlc: true }));
+    if (websiteCatalogue && addonStreams.length && !playableSources.length) {
+      setMessage(noWebsiteTorrentMatch);
+      return;
+    }
     try {
       await player.play({
         startTime: Math.max(0, Number(resumeAt) || 0),
@@ -1983,6 +1992,9 @@ export default function StreamSourcesBox({
         formats may vary.
       </p>
 
+      {websiteCatalogue && addonStreams.some(item => !websiteTorrentCandidate(item)) && (
+        <p className="mb-2 px-1 text-xs text-white/70">{websiteTorrentFilterDescription} Playback checks picture and sound.</p>
+      )}
       {blockedNativeOnWww && mediaType !== "live" && (
         <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="status">
           <p className="font-semibold">Media God's native VLC connection is blocked on the www address.</p>

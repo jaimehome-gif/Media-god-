@@ -25,9 +25,26 @@ try {
   run("ffmpeg", [...common,...avc,"-f","hls","-hls_time","1","-hls_playlist_type","vod",
     "-hls_segment_filename",join(dir,"segment%03d.ts"),join(dir,"sample.m3u8")]);
   run("openssl", ["req","-x509","-newkey","rsa:2048","-keyout",join(dir,"key.pem"),"-out",join(dir,"cert.pem"),"-days","1","-nodes","-subj","/CN=localhost"]);
+  // Use the same pinned decoder distribution as the production web image.
+  run("npm", ["pack","--ignore-scripts","--pack-destination",dir,"movi-player@0.4.1"]);
+  run("tar", ["-xf",join(dir,"movi-player-0.4.1.tgz"),"-C",dir]);
+  for (const [name,codec,bitrate] of [["ac3","ac3","192k"],["eac3","eac3","192k"],["dts","dca","768k"]]) {
+    run("ffmpeg",[...common,...avc,"-c:a",codec,"-strict","-2","-b:a",bitrate,join(dir,name+".mkv")]);
+  }
+  const additionalFormats = [
+    ["hevc.mkv","hevc","aac","libx265","aac",["-preset","ultrafast","-x265-params","pools=1:frame-threads=1"]],
+    ["av1.mkv","av1","opus","libaom-av1","libopus",["-cpu-used","8"]],
+    ["xvid.mkv","mpeg4","mp3","mpeg4","libmp3lame",[]],
+    ["vp8.webm","vp8","vorbis","libvpx","libvorbis",[]],
+    ["flac.mkv","h264","flac","libx264","flac",[]],
+    ["mp3.mkv","h264","mp3","libx264","libmp3lame",[]],
+  ];
+  for (const [name,,,encoder,audioEncoder,options] of additionalFormats) {
+    run("ffmpeg",[...common,"-c:v",encoder,...options,"-threads","2","-pix_fmt","yuv420p","-c:a",audioEncoder,"-ac","2",join(dir,name)]);
+  }
   const files = new Map();
   for (const name of await readdir(dir)) {
-    const mime = name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".webm") ? "video/webm" :
+    const mime = name.endsWith(".mkv") ? "video/x-matroska" : name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".webm") ? "video/webm" :
       name.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : name.endsWith(".ts") ? "video/mp2t" : "";
     if (mime) files.set("/__mg_fixture/"+name,[mime,await readFile(join(dir,name))]);
   }
@@ -37,7 +54,16 @@ try {
     appType:"custom",
     server:{host:"127.0.0.1",port:0,allowedHosts:["underworldhub.co.uk","www.underworldhub.co.uk"],https:{key:await readFile(join(dir,"key.pem")),cert:await readFile(join(dir,"cert.pem"))}},
     plugins:[{name:"generated-media-only",configureServer(server){
-      server.middlewares.use((req,res,next)=>{
+      server.middlewares.use(async (req,res,next)=>{
+        const path = new URL(req.url,"https://fixture.invalid").pathname;
+        if (/^\/decoder-lab\/vendor\/[a-zA-Z0-9_./-]+$/.test(path)) {
+          const file = path.slice("/decoder-lab/vendor/".length);
+          try {
+            const body = await readFile(join(dir,"package/dist",file));
+            res.writeHead(200,{"Content-Type":file.endsWith(".wasm")?"application/wasm":"application/javascript"}).end(body);
+          } catch { res.writeHead(404).end(); }
+          return;
+        }
         if (req.url === "/__mg_fixture/") {
           res.writeHead(200,{"Content-Type":"text/html"}).end('<!doctype html><title>Player integration</title><div id="root"></div>'); return;
         }
@@ -58,8 +84,18 @@ try {
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
   strictBrowser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=document-user-activation-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
-  const cases = [["sample.mp4","h264","aac","127.0.0.1",false],["sample.webm","vp9","opus","127.0.0.1",false],["sample.m3u8","h264","aac","127.0.0.1",false],["sample.mp4","h264","aac","underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true],["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],["sample.mp4","h264","dts","www.underworldhub.co.uk",true,false,false,true],["sample.mp4","h264","","www.underworldhub.co.uk",true,false,false,true]];
-  for (const [name,v,a,host,full,mobile,strict,rejected] of cases) {
+  const cases = [
+    ["sample.mp4","h264","aac","127.0.0.1",false],
+    ["sample.webm","vp9","opus","127.0.0.1",false],
+    ["sample.m3u8","h264","aac","127.0.0.1",false],
+    ["sample.mp4","h264","","underworldhub.co.uk",true],
+    ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
+    ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false,"format"]),
+    ...["account-match","seedless","cooldown","cooldown-repeat","library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
+    ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
+      .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
+  ];
+  for (const [name,v,a,host,full,mobile,strict,torrentMode] of cases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -82,16 +118,59 @@ try {
       }
     });
     try {
+      if (full) await page.evaluateOnNewDocument(() => {
+        window.audioMeters = [];
+        const connect = AudioNode.prototype.connect;
+        AudioNode.prototype.connect = function(target,...rest) {
+          if (target === this.context.destination) {
+            const meter = this.context.createAnalyser();
+            connect.call(this,meter);
+            window.audioMeters.push(meter);
+          }
+          return connect.call(this,target,...rest);
+        };
+      });
       await page.goto(base);
       // Puppeteer's page.evaluate grants a user gesture. The strict case must
       // mount without activation, using CDP explicitly with userGesture:false.
-      const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && !rejected && host === "underworldhub.co.uk"};
-      const mount = async ({name,v,a,full,mixedChoices})=>{
+      const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
+      input.automaticFallback = full && !mobile && name === "ac3.mkv";
+      const mount = async ({name,v,a,full,mixedChoices,automaticFallback})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
       };
       let gate;
-      if (strict) {
+      let panelLookupCount;
+      if (torrentMode) {
+        await page.evaluate(async ({name,mode,v,a}) => {
+          const fixture = await import("/tests/fixtures/website-torrent-sources.jsx");
+          fixture.mountTorrentTitle({ url: new URL(name,location.href).href, mode, videoCodec:v, audioCodec:a });
+        }, {name,v,a,mode:torrentMode});
+        if (torrentMode === "incompatible") {
+          await page.waitForFunction(()=>document.body.innerText.includes("Website torrent filter"));
+          await page.evaluate(()=>Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Play in Media God")).click());
+          await page.waitForFunction(()=>document.body.innerText.includes("No compatible website source found"));
+          assert.deepEqual(await page.evaluate(()=>window.fixtureDebridActions), []);
+          assert.equal(await page.$("movi-player"), null);
+          console.log("Incompatible-only catalogue stopped before resolution");
+          continue;
+        }
+        await page.waitForFunction(()=>Array.from(document.querySelectorAll("button")).some(button=>
+          button.innerText.includes("Owned Test Clip 2025 English")));
+        const button = await page.evaluateHandle(()=>Array.from(document.querySelectorAll("button"))
+          .find(row=>row.innerText.includes("Play in Media God")));
+        panelLookupCount = await page.evaluate(()=>window.fixtureLookups);
+        await button.asElement().click();
+        if (torrentMode === "cooldown-repeat") {
+          await page.waitForFunction(()=>document.body.innerText.includes("Real-Debrid is still busy"),{timeout:12000});
+          await page.waitForFunction(()=>[...document.querySelectorAll("button")].some(b=>b.innerText.includes("Retry this source")),{timeout:12000});
+          await new Promise(resolve=>setTimeout(resolve,2300));
+          assert.equal((await page.evaluate(()=>window.fixtureResolutionCalls)).length,2);
+          console.log("PASS repeated 429 stopped after one retry and offered manual retry.");
+          continue;
+        }
+
+      } else if (strict) {
         const session = await page.createCDPSession();
         const response = await session.send("Runtime.evaluate", {
           expression:"("+mount.toString()+")("+JSON.stringify(input)+")",
@@ -103,48 +182,49 @@ try {
       } else {
         gate = await page.evaluate(mount,input);
       }
-      if(full) assert.equal(gate.route,true,host+" real website route");
-      assert.equal(gate.allowed,!rejected,name+" compatibility gate");
-      if (rejected) {
-        await page.waitForSelector('[data-mg-website-codec-rejected="true"]',{timeout:15000});
-        assert.equal(await page.$('video[data-mg-playback-surface="active"]'),null,"rejected fixture must not start video");
-        assert.deepEqual(renderErrors, [], "no exceptions in rejection path");
-        console.log(host,"rejected fixture",a || "unknown audio",gate.reason);
+      if (full) {
+        if (!torrentMode) assert.equal(gate.route,true);
+        await page.waitForSelector('movi-player',{timeout:torrentMode === 'seedless' ? 60000 : 30000});
+        if (input.mixedChoices) {
+          await page.click('[data-mg-open-in-player-sources="true"]');
+          const choices = await page.$$eval('[data-mg-source-choice]',rows=>rows.map(r=>r.textContent));
+          assert.equal(choices.length,3);
+          assert.ok(choices.some(label=>label.includes("Unknown audio fixture")));
+          await page.click('[aria-label="Return to video player"]');
+        }
+        if (strict) {
+          await page.focus("movi-player");
+          await page.evaluate(()=>document.querySelector("movi-player").play());
+        }
+        await page.waitForFunction(()=>{
+          const p = document.querySelector("movi-player");
+          return p?.currentTime > 0.5 && p.videoWidth > 0 && p.getVideoPlaybackQuality().totalVideoFrames > 0 &&
+            !p.muted && window.audioMeters.some(meter=>{
+              const samples = new Float32Array(meter.fftSize);
+              meter.getFloatTimeDomainData(samples);
+              return samples.some(sample=>Math.abs(sample)>0.005);
+            });
+        },{timeout:30000});
+        if (torrentMode) {
+          const actions = await page.evaluate(()=>window.fixtureDebridActions);
+          if (torrentMode === "cooldown") {
+            const calls = await page.evaluate(()=>window.fixtureResolutionCalls);
+            assert.equal(calls.length,2);
+            assert.equal(calls[0].id,calls[1].id);
+            assert.ok(calls[1].time - calls[0].time >= 2000);
+          }
+          if (torrentMode === "account-match") assert.deepEqual(actions, ["find_cached"]);
+          const expected = {"account-match":"find_cached",seedless:"torrent_info",cooldown:"torrent_info",format:"torrent_info",library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
+          assert.equal(await page.evaluate(()=>window.fixtureLookups), panelLookupCount, "reuses the panel discovery");
+          assert.ok(!actions.includes("must-never-resolve"), "website excludes 4K HDR HEVC before resolution");
+          if (["seedless","ranked"].includes(torrentMode)) assert.ok(actions.indexOf("broken") >= 0 && actions.indexOf("working") > actions.indexOf("broken"), "automatically tried both ranked torrents");
+          assert.ok(actions.includes(expected[torrentMode]), "torrent resolver action: "+torrentMode);
+        }
+        assert.deepEqual(renderErrors,[]);
+        console.log(host,name,"Sources rendered moving video and non-silent audio");
         continue;
       }
-      try {
-        await page.waitForSelector('video[data-mg-playback-surface="active"]',{timeout:20000});
-      } catch (error) {
-        console.error("Mount diagnostics",await page.evaluate(()=>({
-          readyState:document.readyState,
-          root:document.getElementById("root")?.innerHTML.slice(0,1000),
-          videoCount:document.querySelectorAll("video").length
-        })));
-        throw error;
-      }
-      if (full) assert.equal(await page.$eval('[data-mg-player-stage="true"]', element=>element.dataset.mgWebsiteSourcesState), "compatible",host+" real handoff compatibility state");
-      if (input.mixedChoices) {
-        await page.click('[data-mg-open-in-player-sources="true"]');
-        await page.waitForSelector('[data-mg-source-drawer-list="true"]');
-        const labels = await page.evaluate(() => Array.from(document.querySelectorAll('[data-mg-source-choice]'), row => row.textContent));
-        assert.equal(labels.length,1,"only the inspected compatible fixture is offered");
-        assert.match(labels[0],/Owned synthetic browser sample/);
-        assert.ok(labels.every(label=>!/Unknown audio fixture|Unsupported audio fixture/.test(label)));
-        console.log(host,"mixed source list: only compatible direct choice presented");
-      }
-      if (strict) {
-        // Activate the real sound button with a trusted keyboard gesture.
-        // In a mobile emulation viewport an overlay can have no clickable
-        // pointer coordinates in this minimal fixture. Do not call play()
-        // directly or inject a synthetic click: the product handler must run.
-        const unlockSelector = '[data-mg-audio-unlock="true"] button';
-        await page.waitForSelector(unlockSelector,{timeout:15000});
-        await page.focus(unlockSelector);
-        assert.equal(await page.evaluate(selector=>document.activeElement?.matches(selector),unlockSelector),true,"sound action is keyboard focusable");
-        await page.keyboard.press("Enter");
-        await page.waitForFunction(()=>!document.querySelector('[data-mg-audio-unlock="true"]'),{timeout:10000});
-        console.log(host,"strict autoplay policy: explicit sound unlock accepted");
-      }
+      assert.equal(gate.allowed,true);
       const result = await page.evaluate(async ()=>{
         const video = document.querySelector('video[data-mg-playback-surface="active"]');
         const context = new AudioContext();
