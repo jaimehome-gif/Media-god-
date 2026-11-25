@@ -106,3 +106,18 @@ export function canOpenWebsiteMovi(url, original, rendition) {
     return false;
   }
 }
+
+// Saved personal torrents are explicit user selections, not catalogue results.
+// They may be shown as pending before an existing account resolver returns a
+// file. This is a chooser state only: checkWebsiteDirectMedia still gates decoding.
+export function isWebsiteSavedPersonalPendingChoice({source,item,resolvedUrl,failed=false}={}) {
+  if (failed || resolvedUrl || !/^debrid-source:[^\s]+$/.test(String(source?.id || "")) ||
+      source?.skipAddonLookup !== true || source?.skipRdLookup !== true ||
+      !item || item.drm || item.live || item.diagnostic || item.addon !== "Sources" ||
+      String(item.type || "").toLowerCase() !== "rd") return false;
+  const magnet = String(item.magnet || "");
+  if (!/^magnet:\?xt=urn:btih:[a-z0-9]+(?:&|$)/i.test(magnet)) return false;
+  return Array.isArray(source.sources) && source.sources.some(saved =>
+    saved?.addon === "Sources" && saved?.type === "rd" && !saved.drm &&
+    saved.magnet === magnet);
+}

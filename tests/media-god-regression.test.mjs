@@ -2494,7 +2494,7 @@ test("source selector stays visible with a single ready source and expands as mo
     "utf8"
   );
 
-  assert.match(playerSource, /selectableSourceCount > 0[\s\S]{0,360}?filterDirectChoices \? "Browser-compatible sources" : "All sources \/ quality"/);
+  assert.match(playerSource, /selectableSourceCount > 0[\s\S]{0,360}?filterDirectChoices \? [^\n]*"Browser-compatible sources"\) : "All sources \/ quality"/);
   assert.match(playerSource, /presentedSelectorEntries\.map/);
   assert.match(controlsSource, /selectableSourceEntries\.length > 0/);
   assert.match(controlsSource, /visibleSourceChoices\.map/);

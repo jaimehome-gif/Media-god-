@@ -76,7 +76,7 @@ test("the VideoPlayer always has its own usable Sources button for VOD", () => {
   assert.match(player, /entries=\{presentedSourceEntries\}/);
   assert.match(player, /const presentedSourceEntries = filterDirectChoices[\s\S]*?: selectableSourceEntries;/);
   assert.match(player, /selectSource\(index, item\)/);
-  assert.match(player, /sourceLabel=\{sourceCacheStateLabel\}/);
+  assert.match(player, /sourceLabel=\{\(item,index\)[\s\S]{0,300}sourceCacheStateLabel\(item,index\)/);
 });
 
 test("the source drawer stays in the player and uses stable buttons even while discovery is changing", () => {

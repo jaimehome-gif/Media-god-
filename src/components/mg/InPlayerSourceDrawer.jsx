@@ -1,5 +1,6 @@
 import React from "react";
 import { ArrowLeft, Check, Film, Loader2 } from "lucide-react";
+import { canOpenPersonalMovi } from "./PersonalMoviSource";
 
 /**
  * In-player source drawer. A visible list of buttons rather than an Android
@@ -20,6 +21,7 @@ export default function InPlayerSourceDrawer({
   discovering = false,
 }) {
   const choices = Array.isArray(entries) ? entries : [];
+  const personalFilesAvailable = canOpenPersonalMovi();
   return (
     <div
       data-mg-in-player-source-drawer="true"
@@ -80,13 +82,21 @@ export default function InPlayerSourceDrawer({
             <div className="flex flex-col items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-9 text-center">
               {discovering ? <Loader2 className="h-6 w-6 animate-spin text-mg-green" /> : <Film className="h-6 w-6 text-white/50" />}
               <p className="text-sm font-semibold">
-                {discovering ? "Looking for alternative sources…" : "No alternative sources found"}
+                {discovering ? "Looking for alternative sources…" : personalFilesAvailable ? "No verified browser-compatible source ready" : "No alternative sources found"}
               </p>
               <p className="text-xs leading-relaxed text-white/60">
                 {discovering
                   ? "The player is checking addons and Real-Debrid. New options appear here without returning to Home."
-                  : "You can go back to the player or exit to choose this title again. Your Continue Watching history is kept."}
+                  : personalFilesAvailable
+                    ? "A discovered file is not necessarily a playable browser rendition. If you own or have permission to use a downloaded video, open it in Personal Sources. This does not replace your existing playback history."
+                    : "You can go back to the player or exit to choose this title again. Your Continue Watching history is kept."}
               </p>
+              {!discovering && personalFilesAvailable && (
+                <a href="/personal-sources" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center rounded-lg border border-mg-green/40 px-4 text-sm font-semibold text-mg-green">
+                  Open personal video file in Movi
+                </a>
+              )}
             </div>
           )}
           {discovering && choices.length > 0 && (

@@ -27,7 +27,8 @@ import {
 import { PUBLIC_PLAYLIST_PRESETS, hasPlaylistUrl } from "@/components/mg/publicPlaylistPresets";
 import { base44 } from "@/api/base44Client";
 import { usePlayer } from "@/components/mg/PlayerProvider";
-import PersonalMoviSource from "@/components/mg/PersonalMoviSource";
+import PersonalMoviSource, { canOpenPersonalMovi } from "@/components/mg/PersonalMoviSource";
+import PersonalServerMovi from "@/components/mg/PersonalServerMovi";
 import {
   addCustomLiveSource,
   addMediaServer,
@@ -384,6 +385,7 @@ export default function SourcesView() {
   const [mediaQuery, setMediaQuery] = useState("");
   const [mediaSearching, setMediaSearching] = useState(false);
   const [mediaResults, setMediaResults] = useState([]);
+  const [personalMoviSelection, setPersonalMoviSelection] = useState(null);
 
   const syncRegistry = () => {
     setLiveSources(readCustomLiveSources());
@@ -864,6 +866,13 @@ export default function SourcesView() {
   const playPersonalResult = async (result) => {
     setError("");
     setMessage("");
+
+    // Browser personal-library results use the same decoder as Personal Sources.
+    // Only a registered server/item identity crosses into the player; no provider URL.
+    if (canOpenPersonalMovi()) {
+      setPersonalMoviSelection({ id: String(result.id), serverId: result.server.id, title: result.title });
+      return;
+    }
 
     try {
       let directUrl = "";
@@ -1459,6 +1468,7 @@ export default function SourcesView() {
           </button>
         </form>
 
+        {personalMoviSelection && <PersonalServerMovi initialItem={personalMoviSelection} playbackOnly onClose={() => setPersonalMoviSelection(null)} />}
         {mediaResults.length > 0 && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {mediaResults.map((result, index) => (

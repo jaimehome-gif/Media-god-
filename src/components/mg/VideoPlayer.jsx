@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice } from "./websiteDirectMediaPolicy.js";
+import { canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -10518,9 +10518,14 @@ export default function VideoPlayer({
    * provider-labelled rows only from the counter made the UI report "6 ready"
    * while the chooser had a much larger cached/selectable set.
    */
+  const websitePersonalPendingChoice = (index, item) => isWebsiteSavedPersonalPendingChoice({
+    source, item, resolvedUrl: Number(index) === activeIdx ? rdOverride?.src : "",
+    failed: failedSources.has(index),
+  });
   const websiteSourceChoiceAllowed = (index, item) => {
     if (!filterDirectChoices) return true;
     if (websiteRateLimitHold) return false;
+    if (websitePersonalPendingChoice(index, item)) return true;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
@@ -10910,7 +10915,9 @@ export default function VideoPlayer({
             entries={presentedSourceEntries}
             activeIdx={activeIdx}
             failedSources={failedSources}
-            sourceLabel={sourceCacheStateLabel}
+            sourceLabel={(item,index) => publicWebsiteVod && websitePersonalPendingChoice(index,item)
+              ? `Saved file · awaiting compatibility check · ${sourceCacheStateLabel(item,index)}`
+              : sourceCacheStateLabel(item,index)}
             discovering={["searching", "fast-start", "verifying", "preparing"].includes(String(source?.sourceDiagnostics?.phase || ""))}
             onClose={() => setInPlayerSourcesOpen(false)}
             onSelect={(index, item) => {
@@ -11737,7 +11744,7 @@ export default function VideoPlayer({
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
               <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/40">
-                {filterDirectChoices ? "Browser-compatible sources" : "All sources / quality"}
+                {filterDirectChoices ? (presentedSourceEntries.some(({index,item}) => websitePersonalPendingChoice(index,item)) ? "Saved file / compatibility status" : "Browser-compatible sources") : "All sources / quality"}
               </span>
 
               <div className="relative">
@@ -11774,7 +11781,9 @@ export default function VideoPlayer({
                         );
 
                       const rawLabel = sourceDisplayLabel(item, index);
-                      const label = sourceCacheStateLabel(item, index);
+                      const label = publicWebsiteVod && websitePersonalPendingChoice(index,item)
+                        ? `Awaiting compatibility check · ${sourceCacheStateLabel(item,index)}`
+                        : sourceCacheStateLabel(item,index);
 
                       return (
                         <option
