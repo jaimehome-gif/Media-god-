@@ -25,6 +25,8 @@ import {
 
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
+import { getPlaybackDeviceProfile } from "./mediaCompatibility";
+import { isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
@@ -853,14 +855,14 @@ export default function StreamSourcesBox({
     episode,
   ]);
 
+  const websiteCatalogue = isPublicWebsiteVod({ hostname: globalThis.location?.hostname,
+    profile: getPlaybackDeviceProfile(), source: { mediaType }, isLive: mediaType === "live" });
   const visibleAddonStreams =
     useMemo(
       () =>
         addonStreams.filter(
           (stream) => {
-            if (
-              !stream
-            ) {
+            if (!stream || (websiteCatalogue && !websiteTorrentCandidate(stream))) {
               return false;
             }
 
@@ -881,7 +883,7 @@ export default function StreamSourcesBox({
         ),
       [
         addonStreams,
-
+        websiteCatalogue,
         hasDebrid,
       ]
     );
@@ -925,6 +927,10 @@ export default function StreamSourcesBox({
         )
       )
       .map(item => ({ ...item, preferNativeVlc: true }));
+    if (websiteCatalogue && addonStreams.length && !playableSources.length) {
+      setMessage("No compatible website source found. Look for H.264 or VP9 at 1080p or lower.");
+      return;
+    }
     try {
       await player.play({
         startTime: Math.max(0, Number(resumeAt) || 0),
@@ -1986,6 +1992,9 @@ export default function StreamSourcesBox({
         formats may vary.
       </p>
 
+      {websiteCatalogue && addonStreams.some(item => !websiteTorrentCandidate(item)) && (
+        <p className="mb-2 px-1 text-xs text-white/70">Website torrent filter: H.264 or VP9, up to 1080p. Playback checks picture and sound.</p>
+      )}
       {blockedNativeOnWww && mediaType !== "live" && (
         <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="status">
           <p className="font-semibold">Media God's native VLC connection is blocked on the www address.</p>

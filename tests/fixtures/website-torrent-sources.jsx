@@ -8,9 +8,10 @@ export function mountTorrentTitle({ url, mode }) {
   const hash = "ac".repeat(20);
   const magnet = "magnet:?xt=urn:btih:" + hash;
   const item = {
-    id: "fixture-torrent", type: "rd", label: "Owned Test Clip 2025 English 1080p",
+    id: "fixture-torrent", type: "rd", label: "Owned Test Clip 2025 English 1080p x264 AAC",
     infoHash: hash, src: magnet, url: magnet, magnet,
   };
+  if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
   if (mode !== "unknown") item.debridCached = true;
   if (mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
   const ready = {
@@ -20,8 +21,10 @@ export function mountTorrentTitle({ url, mode }) {
   };
 
   const streams = mode === "ranked" ? [
-    { ...item, label: item.label + " 2160p", rdTorrentId: "broken" },
-    { ...item, id: "second", label: "Owned Test Clip 2025 English 720p", infoHash: "bd".repeat(20),
+    { ...item, id: "incompatible", label: "Owned Test Clip 2025 English 4K HDR HEVC",
+      infoHash: "ef".repeat(20), rdTorrentId: "must-never-resolve" },
+    { ...item, rdTorrentId: "broken" },
+    { ...item, id: "second", label: "Owned Test Clip 2025 English 720p x264 AAC", infoHash: "bd".repeat(20),
       src: "magnet:?xt=urn:btih:" + "bd".repeat(20), url: "", magnet: "", rdTorrentId: "working" },
   ] : [item];
   window.fixtureLookups = 0;

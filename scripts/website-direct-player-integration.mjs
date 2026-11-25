@@ -79,7 +79,7 @@ try {
     ["sample.m3u8","h264","aac","127.0.0.1",false],
     ["sample.mp4","h264","","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
-    ...["library","unknown","fallback","preparing","ranked"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
+    ...["library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
@@ -134,6 +134,15 @@ try {
           const fixture = await import("/tests/fixtures/website-torrent-sources.jsx");
           fixture.mountTorrentTitle({ url: new URL(name,location.href).href, mode });
         }, {name,mode:torrentMode});
+        if (torrentMode === "incompatible") {
+          await page.waitForFunction(()=>document.body.innerText.includes("Website torrent filter"));
+          await page.evaluate(()=>Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Play in Media God")).click());
+          await page.waitForFunction(()=>document.body.innerText.includes("No compatible website source found"));
+          assert.deepEqual(await page.evaluate(()=>window.fixtureDebridActions), []);
+          assert.equal(await page.$("movi-player"), null);
+          console.log("Incompatible-only catalogue stopped before resolution");
+          continue;
+        }
         await page.waitForFunction(()=>Array.from(document.querySelectorAll("button")).some(button=>
           button.innerText.includes("Owned Test Clip 2025 English")));
         const button = await page.evaluateHandle(()=>Array.from(document.querySelectorAll("button"))
@@ -179,6 +188,7 @@ try {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
           const expected = {library:"torrent_info",unknown:"adopt_hash",fallback:"resolve_best",preparing:"torrent_info",ranked:"torrent_info"};
           assert.equal(await page.evaluate(()=>window.fixtureLookups), panelLookupCount, "reuses the panel discovery");
+          assert.ok(!actions.includes("must-never-resolve"), "website excludes 4K HDR HEVC before resolution");
           if (torrentMode === "ranked") assert.ok(actions.indexOf("broken") >= 0 && actions.indexOf("working") > actions.indexOf("broken"), "automatically tried both ranked torrents");
           assert.ok(actions.includes(expected[torrentMode]), "torrent resolver action: "+torrentMode);
         }

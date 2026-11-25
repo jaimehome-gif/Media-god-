@@ -18,6 +18,8 @@ const createSources = ({
   const vars={
     player:{play:async request=>{calls.push(request);return true;}},
     visibleAddonStreams:savedSources,
+    addonStreams:savedSources,
+    websiteCatalogue:true,
     classifyTvBoxSource,
     setMessage:x=>messages.push(x),
     setRdSearching:()=>{},
