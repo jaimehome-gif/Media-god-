@@ -36,6 +36,12 @@ const asError = (response, data) => {
 };
 // A gateway rate limit applies across torrent choices in the same session.
 let playbackCooldown = { session: "", until: 0 };
+// Only a gateway-confirmed invalid Media God session is cached, never an
+// upstream provider credential error, 403, network failure or a successful
+// authentication. A new session token is unaffected.
+let rejectedRdSession = { token: "", until: 0, data: null };
+const rdSessionRejected = (data) => data?.code === "MEDIA_GOD_SESSION_REQUIRED" ||
+  data?.error === "Sign in to your new Media God account";
 const playbackRateLimitError = seconds => {
   const error = new Error(`Real-Debrid is busy. Try again in ${seconds} seconds.`);
   error.status = 429;
@@ -45,6 +51,9 @@ const playbackRateLimitError = seconds => {
 };
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
+  if (endpoint === RD_API && token && rejectedRdSession.token === token && rejectedRdSession.until > Date.now()) {
+    throw asError({status:401},rejectedRdSession.data);
+  }
   if (playbackRequest && playbackCooldown.session === token && playbackCooldown.until > Date.now()) {
     throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
   }
@@ -68,6 +77,9 @@ const call = async (endpoint, path, { method="GET", body, token=getIndependentSe
       const until = Date.now() + wait * 1000;
       playbackCooldown = { session: token, until: Math.max(until, playbackCooldown.session === token ? playbackCooldown.until : 0) };
       throw playbackRateLimitError(Math.ceil((playbackCooldown.until - Date.now()) / 1000));
+    }
+    if (endpoint === RD_API && token && response.status === 401 && rdSessionRejected(data)) {
+      rejectedRdSession = { token, until: Date.now() + 15_000, data };
     }
     if (!response.ok) throw asError(response,data);
     return data;
