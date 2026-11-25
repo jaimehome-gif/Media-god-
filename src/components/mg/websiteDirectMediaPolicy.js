@@ -10,8 +10,9 @@ export const isWebsiteSourcesPlayback = ({ hostname, profile, source, active, is
 const codec = track => String(track?.codec || track?.codec_name || "").trim().toLowerCase();
 const h264 = v => /^(?:h[._ -]?264|avc|avc1(?:\..*)?)$/.test(v);
 const aac = a => /^(?:aac|aac[ -]?lc|mp4a\.40\.2)$/.test(a);
-const vp = v => /^(?:vp8|vp9|vp08(?:\..*)?|vp09(?:\..*)?)$/.test(v);
-const webAudio = a => a === "opus" || a === "vorbis";
+// Restrict website playback to the tested WebM video/audio combination.
+const vp = v => /^(?:vp9|vp09(?:\..*)?)$/.test(v);
+const webAudio = a => a === "opus";
 const canPlay = (probe, mime) => {
   try { return ["probably", "maybe"].includes(probe?.(mime)); }
   catch { return false; }
@@ -53,7 +54,7 @@ export function checkWebsiteDirectMedia({ url, item, originalItem, canPlayType, 
   } else if (webm) {
     allowed = videos.every(v => vp(codec(v))) && audios.every(a => webAudio(codec(a))) &&
       videos.every(v => audios.every(a => canPlay(canPlayType,
-        'video/webm; codecs="' + (codec(v).startsWith("vp08") ? "vp8" : codec(v).startsWith("vp09") ? "vp9" : codec(v)) + ', ' + codec(a) + '"')));
+        'video/webm; codecs="' + (codec(v).startsWith("vp09") ? "vp9" : codec(v)) + ', ' + codec(a) + '"')));
   }
   return allowed ? { allowed: true, reason: "" } : {
     allowed: false, reason: "This browser cannot verify support for the file's audio, video and container."
