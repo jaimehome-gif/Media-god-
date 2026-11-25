@@ -4,7 +4,12 @@
 // Installed native apps, including those using the public hostname, are excluded.
 export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
   !isLive && source?.mediaType !== "live" &&
-  /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
+  (/^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) ||
+    (hostname === "media-god-audio-test-preview-production.up.railway.app" &&
+      source?.id === "generated-phone-preview" && source?.noRd === true &&
+      source?.skipAddonLookup === true && source?.skipRdLookup === true &&
+      Array.isArray(source.sources) && source.sources.length > 0 &&
+      source.sources.every(item => /^https:\/\/media-god-audio-test-preview-production\.up\.railway\.app\/decoder-lab\/samples\/(?:aac\.mp4|ac3\.mkv|eac3\.mkv|dts\.mkv)$/.test(item?.src || "")))) &&
   profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
   !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv;
 
