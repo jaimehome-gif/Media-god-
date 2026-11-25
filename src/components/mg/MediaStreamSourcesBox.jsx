@@ -292,6 +292,8 @@ const serverAddonLookup = async ({
   }
 };
 
+const EMPTY_ALIASES = Object.freeze([]);
+
 export default function StreamSourcesBox({
   title,
   poster,
@@ -299,8 +301,8 @@ export default function StreamSourcesBox({
   providers,
   loading,
   rdYear,
-  alternateYears = [],
-  alternateTitles = [],
+  alternateYears = EMPTY_ALIASES,
+  alternateTitles = EMPTY_ALIASES,
   tmdbId,
   imdbId,
   mediaType = "movie",
@@ -777,6 +779,7 @@ export default function StreamSourcesBox({
             // TMDB Embed is an optional self-hosted source; ignore failures.
           }
 
+          if (cancelled) return;
           setAddonStreams(
             streams
           );
