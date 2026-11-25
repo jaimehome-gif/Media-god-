@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -155,4 +155,23 @@ test("synthetic website menu remains restricted through normal, rate-limit and r
     assert.deepEqual(visible("HTTP 429"),[]);
     assert.deepEqual(visible(""),[0]);
   }
+});
+
+
+test("explicitly saved personal torrent is pending, never treated as a verified direct file",()=>{
+  const saved={type:"rd",addon:"Sources",magnet:"magnet:?xt=urn:btih:"+"a".repeat(40)};
+  const source={id:"debrid-source:fixture",skipAddonLookup:true,skipRdLookup:true,sources:[saved]};
+  const input={source,item:saved};
+  assert.equal(isWebsiteSavedPersonalPendingChoice(input),true);
+  assert.equal(isWebsiteDirectSourceChoice({item:saved,originalItem:saved,url:saved.magnet,...caps}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,resolvedUrl:url}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,failed:true}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,item:{...saved,drm:true}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,source:{...source,id:"catalogue:fixture"}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,source:{...source,skipAddonLookup:false}}),false);
+  assert.equal(isWebsiteSavedPersonalPendingChoice({...input,item:{...saved,magnet:saved.magnet+"b"}}),false);
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/if \(websiteRateLimitHold\) return false;\s*if \(websitePersonalPendingChoice\(index, item\)\) return true;/);
+  assert.match(player,/websiteDirectMediaCheck\?\.allowed === false/);
+  assert.match(player,/awaiting compatibility check/);
 });
