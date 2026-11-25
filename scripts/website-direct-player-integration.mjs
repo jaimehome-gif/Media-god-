@@ -126,7 +126,7 @@ try {
       if (input.mixedChoices) {
         await page.click('[data-mg-open-in-player-sources="true"]');
         await page.waitForSelector('[data-mg-source-drawer-list="true"]');
-        const labels = await page.$eval('[data-mg-source-choice]', rows => rows.map(row => row.textContent));
+        const labels = await page.evaluate(() => Array.from(document.querySelectorAll('[data-mg-source-choice]'), row => row.textContent));
         assert.equal(labels.length,1,"only the inspected compatible fixture is offered");
         assert.match(labels[0],/Owned synthetic browser sample/);
         assert.ok(labels.every(label=>!/Unknown audio fixture|Unsupported audio fixture/.test(label)));
