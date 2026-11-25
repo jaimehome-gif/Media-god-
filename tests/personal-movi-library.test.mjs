@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {personalEndpoint,personalFileEndpoint,personalHeaders,readPersonalRange} from "../src/components/mg/personalMoviLibrary.js";
+import {personalEndpoint,personalFileEndpoint,personalHeaders,readPersonalRange,personalDeadline} from "../src/components/mg/personalMoviLibrary.js";
 const server={id:"s",type:"jellyfin",baseUrl:"https://example.test/media",apiKey:"secret"};
 test("personal library uses secure registered server endpoints",async()=>{
   assert.equal((await personalFileEndpoint(server,{id:"abc",serverId:"s"})).href,"https://example.test/media/Videos/abc/stream?Static=true");
@@ -40,4 +40,40 @@ test("existing personal Sources results reach Movi on the website without changi
   assert.match(movi,/servers\.find\(s=>s\.id===item\.serverId&&s\.active!==false\)/);
   assert.match(movi,/sandbox="allow-scripts"/);
   assert.doesNotMatch(movi,/allow-same-origin/);
+});
+
+
+test("personal request deadlines settle even when a server ignores abort",async()=>{
+  let signal;
+  await assert.rejects(personalDeadline(active=>{signal=active;return new Promise(()=>{});},undefined,10),/timed out/);
+  assert.equal(signal.aborted,true);
+  const external=new AbortController();
+  const pending=personalDeadline(()=>new Promise(()=>{}),external.signal);
+  const rejected=assert.rejects(pending,/cancelled/);
+  external.abort();
+  await rejected;
+});
+
+test("personal range reads cannot expose credentials beyond the registered server path",async()=>{
+  const previous=globalThis.fetch;
+  try {
+    let calls=0;
+    globalThis.fetch=async()=>{calls++;return new Response(new Uint8Array([1]),{status:206,headers:{"Content-Range":"bytes 0-0/100"}});};
+    await assert.rejects(readPersonalRange(server,new URL("https://example.test/another-service/file"),0,1),/Unexpected server/);
+    await assert.rejects(readPersonalRange(server,new URL("https://user:pass@example.test/media/file"),0,1),/Unexpected server/);
+    assert.equal(calls,0);
+    await readPersonalRange(server,personalEndpoint(server,"/Videos/abc/stream"),0,1);
+    assert.equal(calls,1);
+  }finally{globalThis.fetch=previous;}
+});
+
+test("personal range rejects extra or truncated body bytes",async()=>{
+  const previous=globalThis.fetch;
+  const url=personalEndpoint(server,"/Videos/abc/stream");
+  try {
+    for(const bytes of [[1,2,3],[1]]){
+      globalThis.fetch=async()=>new Response(new Uint8Array(bytes),{status:206,headers:{"Content-Range":"bytes 0-1/100"}});
+      await assert.rejects(readPersonalRange(server,url,0,2),/Invalid media range response/);
+    }
+  }finally{globalThis.fetch=previous;}
 });
