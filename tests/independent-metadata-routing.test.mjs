@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { base44 } from "../src/api/base44Client.js";
 import {
   INDEPENDENT_METADATA_API_URL,
   invokeIndependentMetadata,
@@ -21,6 +22,39 @@ const storage = () => {
     keys: () => [...values.keys()],
   };
 };
+
+
+// Exercise the actual independent facade, with a signed-in synthetic user.
+// The former SDK/rawInvoke/device fallback was deliberately retired.
+async function withPublicFacade(run) {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  let offline = false;
+  Object.defineProperty(globalThis, "window", {configurable:true,writable:true,
+    value:{localStorage:storage(),sessionStorage:storage()}});
+  base44.auth.setToken("SYNTHETIC_ACCOUNT_BEARER");
+  globalThis.fetch = async (url, options) => {
+    calls.push({url:String(url),options});
+    if (offline) return {ok:false,status:503,json:async()=>({error:"Synthetic outage"})};
+    const result = String(url).includes("resolve") ? {imdb_id:"tt1234567"} : {movies:[]};
+    return {ok:true,status:200,json:async()=>result};
+  };
+  try { await run(calls, () => { offline = true; }); }
+  finally {
+    base44.auth.setToken("");
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis,"window",originalWindow);
+    else delete globalThis.window;
+  }
+}
+function assertPublicCall(call,name) {
+  assert.equal(call.url, INDEPENDENT_METADATA_API_URL.replace("getTmdbMovies",name));
+  assert.equal(call.options.method,"POST");
+  assert.equal(call.options.credentials,"omit");
+  assert.equal(call.options.headers.Authorization,undefined);
+  assert.doesNotMatch(call.options.body,/SYNTHETIC_ACCOUNT_BEARER|SYNTHETIC_SECRET|rd_token|guest_device_key/);
+}
 
 test("public TMDB catalogue invokes independent Railway service without Base44 tokens", async () => {
   let url = "", options;
@@ -61,13 +95,20 @@ test("public metadata cache survives a temporary endpoint outage without deletin
     "Never touch Continue Watching, login or user profile data");
 });
 
-test("no silent return to Base44 credits for public catalogue requests", () => {
+test("no silent return to Base44 credits for public catalogue requests", async () => {
   const client = read("src/api/base44Client.js");
-  assert.match(client, /if \(name === 'getTmdbMovies'\) \{\s*return invokeIndependentMetadata\(payload\)/);
-  assert.match(client, /return rawInvoke\(/);
-  assert.match(client, /deviceToken: railwayDeviceToken\(\)/);
+  assert.doesNotMatch(client, /@base44\/sdk|rawInvoke\(|railwayDeviceToken\(/);
   const metadata = read("src/api/independentMetadata.js");
   assert.doesNotMatch(metadata, /base44\.functions\.invoke|rd_token|asServiceRole/);
+  await withPublicFacade(async (calls,goOffline) => {
+    await base44.functions.invoke("getTmdbMovies", {media_type:"movie",page:1,rd_token:"SYNTHETIC_SECRET"});
+    assert.equal(calls.length,1);
+    assertPublicCall(calls[0],"getTmdbMovies");
+    goOffline();
+    await assert.rejects(base44.functions.invoke("getTmdbMovies",{media_type:"movie",page:2}),/temporarily unavailable/);
+    assert.equal(calls.length,2,"no legacy network fallback");
+    assertPublicCall(calls[1],"getTmdbMovies");
+  });
 });
 
 test("standalone metadata port keeps original response and server-held secret", () => {
@@ -96,9 +137,14 @@ test("independent IMDb resolvers pass only public movie/episode identity", async
   assert.equal(result.data.imdb_id, "tt0944947");
   assert.doesNotMatch(init.body, /never-send|rd_token|token/);
   assert.equal(init.credentials, "omit");
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'resolveImdb' \|\| name === 'resolveTvImdb'/);
-  assert.match(client, /return invokeIndependentImdbResolver\(name, payload\)/);
+  await withPublicFacade(async calls => {
+    for (const name of ["resolveImdb","resolveTvImdb"]) {
+      const answer = await base44.functions.invoke(name,{tmdb_id:123,rd_token:"SYNTHETIC_SECRET"});
+      assert.equal(answer.data.imdb_id,"tt1234567");
+      assertPublicCall(calls.at(-1),name);
+    }
+    assert.equal(calls.length,2);
+  });
 });
 
 test("independent backend ports IMDb logic without Base44 integration runtime", () => {
@@ -170,12 +216,20 @@ test("news and skip metadata bypass Base44 and strip all account credentials", a
   assert.equal(seen[2].options.body, "{}");
 });
 
-test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", () => {
-  const client = read("src/api/base44Client.js");
-  assert.match(client, /name === 'getEntertainmentNews'/);
-  assert.match(client, /name === 'getSkipSegments'/);
-  assert.match(client, /name === 'getFireTvApkLink'/);
-  assert.match(client, /return invokeIndependentPublicFeature\(name, payload\)/);
+test("the three independently hosted public handlers are wired and never fall back to credit-limited functions", async () => {
+  await withPublicFacade(async (calls,goOffline) => {
+    for (const name of ["getEntertainmentNews","getSkipSegments","getFireTvApkLink"]) {
+      await base44.functions.invoke(name,{rd_token:"SYNTHETIC_SECRET"});
+      assertPublicCall(calls.at(-1),name);
+    }
+    assert.equal(calls.length,3);
+    goOffline();
+    for (const name of ["getEntertainmentNews","getSkipSegments","getFireTvApkLink"]) {
+      await assert.rejects(base44.functions.invoke(name,{}),/returned 503/);
+      assertPublicCall(calls.at(-1),name);
+    }
+    assert.equal(calls.length,6,"no legacy network fallback on outage");
+  });
   const server = read("deploy/media-god-api/server.mjs");
   const docker = read("deploy/media-god-api/Dockerfile");
   for (const name of ["getEntertainmentNews", "getSkipSegments", "getFireTvApkLink"]) {
