@@ -240,3 +240,30 @@ test("catalogue does not forward or persist nested or top-level account credenti
   assert.doesNotMatch(JSON.stringify(sent),/SECRET|access_token|rd_token/);
   assert.doesNotMatch(local.keys().map(k=>local.getItem(k)).join(""),/SECRET|access_token|rd_token/);
 });
+
+
+test("What to watch uses the canonical Railway metadata origin and public schedule route", async()=>{
+  const view=read("src/components/mg/WatchmodeHub.jsx");
+  assert.match(view,/invokeIndependentPublicFeature\("publicDiscovery"/);
+  assert.doesNotMatch(view,/https:\/\/media-god-metadata-api-production\.up\.railway\.app/);
+  const payload={action:"tv",region:"GB",date:"2026-11-25",access_token:"PRIVATE"};
+  let calls=0;
+  const result=await invokeIndependentPublicFeature("publicDiscovery",payload,{
+    fetchImpl:async(url,options)=>{
+      calls++;
+      assert.equal(url,INDEPENDENT_METADATA_API_URL.replace("/getTmdbMovies","/publicDiscovery"));
+      assert.equal(options.credentials,"omit");
+      assert.deepEqual(JSON.parse(options.body),{action:"tv",region:"GB",date:"2026-11-25"});
+      assert.doesNotMatch(options.body,/PRIVATE/);
+      return {ok:true,json:async()=>({results:[{id:"test-episode",title:"Example programme"}]})};
+    }
+  });
+  assert.equal(calls,1);
+  assert.equal(result.data.results[0].id,"test-episode");
+});
+
+test("public schedules propagate an outage instead of fabricating an empty guide",async()=>{
+  await assert.rejects(invokeIndependentPublicFeature("publicDiscovery",{action:"sports",region:"GB"},{
+    fetchImpl:async()=>({ok:false,status:502})
+  }),/502/);
+});
