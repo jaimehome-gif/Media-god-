@@ -27,7 +27,7 @@ import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
 import PersonalMoviSource from "@/components/mg/PersonalMoviSource";
 import { getPlaybackDeviceProfile } from "./mediaCompatibility";
-import { noWebsiteTorrentMatch, websiteTorrentFilterDescription, isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
+import { noWebsiteTorrentMatch, websiteTorrentFilterDescription, isPublicWebsiteVod, websiteTorrentCandidate, websiteRenditionAllowed } from "./websiteDirectMediaPolicy";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
 import { isNativeFireTvPlayerAvailable, nativeFireTvAppInfo } from "@/components/mg/nativeFireTvBridge";
 import { buildVidSrcEmbedUrl } from "@/components/mg/vidsrcEmbed";
@@ -891,6 +891,12 @@ export default function StreamSourcesBox({
       ]
     );
 
+  // The resolver retains eligible incomplete candidates. The website list only
+  // advertises inspected, decoder-compatible direct files as playback choices.
+  const displayedAddonStreams = useMemo(() => websiteCatalogue
+    ? visibleAddonStreams.filter(item => websiteRenditionAllowed(item.src || item.url, item, item))
+    : visibleAddonStreams, [websiteCatalogue, visibleAddonStreams]);
+
   const failedAddonCount =
     useMemo(
       () =>
@@ -1665,7 +1671,7 @@ export default function StreamSourcesBox({
         })
       ),
 
-    ...visibleAddonStreams.slice(0, visibleSourceCount).map(
+    ...displayedAddonStreams.slice(0, visibleSourceCount).map(
       (
         stream,
         index
@@ -2012,8 +2018,8 @@ export default function StreamSourcesBox({
           <button type="button" className="mt-2 text-sm text-white/70" onClick={() => setWebsitePlayerNotice(null)}>Close player panel</button>
         </section>
       )}
-      {websiteCatalogue && addonStreams.some(item => !websiteTorrentCandidate(item)) && (
-        <p className="mb-2 px-1 text-xs text-white/70">{websiteTorrentFilterDescription} Playback checks picture and sound.</p>
+      {websiteCatalogue && addonStreams.length > displayedAddonStreams.length && (
+        <p role="status" className="mb-2 px-1 text-xs text-white/70">{websiteTorrentFilterDescription} {visibleAddonStreams.length > displayedAddonStreams.length ? "Use Combined Debrid or Play in Media God to check remaining eligible files." : "Playback checks picture and sound."}</p>
       )}
       {blockedNativeOnWww && mediaType !== "live" && (
         <div className="mb-3 rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="status">
@@ -2166,13 +2172,13 @@ export default function StreamSourcesBox({
             )
           )}
 
-          {visibleAddonStreams.length > visibleSourceCount && (
+          {displayedAddonStreams.length > visibleSourceCount && (
             <button
               type="button"
               onClick={() => setVisibleSourceCount((count) => count + 24)}
               className="w-full min-h-11 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-mg-green hover:bg-white/10"
             >
-              Show more sources ({visibleAddonStreams.length - visibleSourceCount} remaining)
+              Show more sources ({displayedAddonStreams.length - visibleSourceCount} remaining)
             </button>
           )}
 
@@ -2199,10 +2205,10 @@ export default function StreamSourcesBox({
                   : "s"}{" "}
                 checked ·{" "}
                 {
-                  visibleAddonStreams.length
+                  displayedAddonStreams.length
                 }{" "}
                 source
-                {visibleAddonStreams.length ===
+                {displayedAddonStreams.length ===
                 1
                   ? ""
                   : "s"}{" "}
