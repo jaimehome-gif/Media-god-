@@ -25,6 +25,7 @@ import {
 
 import { findChannelsByTitle } from "@/components/mg/freeTvPlaylist";
 import { usePlayer } from "@/components/mg/PlayerProvider";
+import PersonalMoviSource from "@/components/mg/PersonalMoviSource";
 import { getPlaybackDeviceProfile } from "./mediaCompatibility";
 import { noWebsiteTorrentMatch, websiteTorrentFilterDescription, isPublicWebsiteVod, websiteTorrentCandidate } from "./websiteDirectMediaPolicy";
 import { classifyTvBoxSource } from "@/components/mg/tvBoxSourceGate";
@@ -349,6 +350,7 @@ export default function StreamSourcesBox({
 
   const [visibleSourceCount, setVisibleSourceCount] = useState(24);
   const [showNonVlcBackups, setShowNonVlcBackups] = useState(false);
+  const [websitePlayerNotice, setWebsitePlayerNotice] = useState(null);
 
   useEffect(() => {
     setVisibleSourceCount(24);
@@ -928,9 +930,11 @@ export default function StreamSourcesBox({
       )
       .map(item => ({ ...item, preferNativeVlc: true }));
     if (websiteCatalogue && addonStreams.length && !playableSources.length) {
+      setWebsitePlayerNotice({ total: addonStreams.length, eligible: 0 });
       setMessage(noWebsiteTorrentMatch);
       return;
     }
+    setWebsitePlayerNotice(null);
     try {
       await player.play({
         startTime: Math.max(0, Number(resumeAt) || 0),
@@ -1992,6 +1996,14 @@ export default function StreamSourcesBox({
         formats may vary.
       </p>
 
+      {websiteCatalogue && websitePlayerNotice && (
+        <section role="status" className="my-3 rounded-lg border border-white/20 bg-black/20 p-3">
+          <p className="font-semibold text-white">Media God Player — no eligible direct file</p>
+          <p className="mt-1 text-sm text-white/70">The player was requested, but none of the {websitePlayerNotice.total} returned entries passed the website compatibility checks. No video was opened. You can open a personal file you have permission to play below.</p>
+          <PersonalMoviSource defaultOpen />
+          <button type="button" className="mt-2 text-sm text-white/70" onClick={() => setWebsitePlayerNotice(null)}>Close player panel</button>
+        </section>
+      )}
       {websiteCatalogue && addonStreams.some(item => !websiteTorrentCandidate(item)) && (
         <p className="mb-2 px-1 text-xs text-white/70">{websiteTorrentFilterDescription} Playback checks picture and sound.</p>
       )}
