@@ -200,3 +200,16 @@ test("website catalogue torrents need compatible video evidence before resolutio
   assert.equal(candidate("1080p MPEG-4 container"),false);
   assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });
+
+test("website catalogue excludes pending releases and unsuitable direct links", () => {
+  const torrent = {type:"rd", label:"1080p H264 AAC"};
+  for (const state of [{label:"Uncached 1080p H264 AAC"}, {rdStatus:"downloading"}, {cometUncached:true},
+      {debridCacheChecked:true,debridCached:false}]) {
+    assert.equal(websiteTorrentCandidate({...torrent,...state}),false);
+  }
+  for (const source of [{url:"http://example.test/movie.mp4"}, {url,type:"embed"},
+      {url,mimeType:"text/html"}, {url,headers:{Referer:"private"}}, {url,...item("h264","truehd")}]) {
+    assert.equal(websiteTorrentCandidate(source),false);
+  }
+  assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
+});

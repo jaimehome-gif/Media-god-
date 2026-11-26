@@ -1,3 +1,5 @@
+import { sourceHasPendingCacheSignal } from "./sourceCacheVisibility.js";
+
 // Web-only direct-media screening. It does not discover or resolve streams,
 // alter DRM/access controls, or make claims about rights to a media URL.
 // The public browser engine must not depend on a particular launch button.
@@ -115,8 +117,19 @@ export function websiteTorrentCandidate(item) {
     item.debridProvider || item.viaRealDebrid || /^(rd|rd_torrent|torrent|magnet)$/.test(item.type) ||
     /^magnet:/i.test(item.src || item.url || "") ||
     /torrentio|mediafusion|comet|aiostreams/i.test(item.addon || "");
-  if (!isTorrent) return true;
-  if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached") return false;
+  if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached" ||
+      (item.debridCacheChecked === true && item.debridCached === false)) return false;
+  if (isTorrent && sourceHasPendingCacheSignal(item)) return false;
+  if (!isTorrent) {
+    if (["provider", "external", "youtube", "embed", "live"].includes(String(item.type || "").toLowerCase())) return false;
+    const url = item.src || item.url;
+    if (!canOpenWebsiteMovi(url, item)) return false;
+    const mime = String(item.mimeType || item.mime_type || item.contentType || "").toLowerCase();
+    const path = new URL(url).pathname;
+    const info = item.mediaInfo || item.media_info;
+    if (!Array.isArray(info?.video_tracks || info?.videoTracks) && !/\.(mp4|m4v|mkv|webm|m3u8|avi)$/i.test(path) &&
+        !/^video\/|mpegurl/.test(mime)) return false;
+  }
   const info = item.mediaInfo || item.media_info;
   const videos = info?.video_tracks || info?.videoTracks;
   const audios = info?.audio_tracks || info?.audioTracks;
@@ -127,6 +140,7 @@ export function websiteTorrentCandidate(item) {
   if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
   if (Array.isArray(audios) && !audios.some(track => catalogueAudioCodec.test(codec(track)))) return false;
   if (Array.isArray(videos)) return videos.some(track => catalogueVideoCodec.test(codec(track)) && standardRangeTrack(track));
+  if (!isTorrent && !Array.isArray(videos)) return true;
   if (/\b(?:truehd|mlp|pcm)\b/i.test(hints) &&
       !/\b(?:aac|opus|ac-?3|e-?ac-?3|dts|ddp?|vorbis|mp3|flac)\b/i.test(hints)) return false;
   // MPEG-4 by itself is also a container name. Only explicit Part 2 or a
@@ -138,11 +152,14 @@ export function websiteTorrentCandidate(item) {
 // Check the resolved transport separately from discovery and codec metadata.
 export function canOpenWebsiteMovi(url, original, rendition) {
   if (original?.drm || rendition?.drm) return false;
+  const media = rendition || original;
+  const mime = String(media?.mimeType || media?.mime_type || media?.contentType || "").toLowerCase();
+  if (/^text\/|html/.test(mime)) return false;
   if ([original, rendition].some(item => [item?.headers, item?.requestHeaders]
     .some(headers => Object.keys(headers || {}).length))) return false;
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password && !/\.html?$/i.test(parsed.pathname);
   } catch {
     return false;
   }
