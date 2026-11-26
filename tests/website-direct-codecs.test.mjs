@@ -186,21 +186,23 @@ test("explicitly saved personal torrent is pending, never treated as a verified 
   assert.match(player,/awaiting compatibility check/);
 });
 
-test("website catalogue torrents need compatible video evidence before resolution", () => {
+test("website discovery excludes known incompatible files but retains incomplete metadata for inspection", () => {
   const candidate = label => websiteTorrentCandidate({type:"rd",label});
-  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
+  for (const label of ["Trusted Cached · 4K · HDR · HEVC", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
     assert.equal(candidate(label),false,label);
   for (const label of ["release.1080p.x264.AAC.mp4", "1080p VP9 Opus.webm", "1080p x265 AAC.mkv", "AV1 Opus.mkv", "XviD MP3.mkv", "VP8 Vorbis.webm", "H264 FLAC.mkv"])
     assert.equal(candidate(label),true,label);
-  for (const label of ["x264 AAC.avi", "x264 DTS.mp4", "x264 AAC", "x264.mkv", "VP9 MP3.webm"])
+  for (const label of ["x264 AAC.avi", "x264 DTS.mp4", "VP9 MP3.webm"])
     assert.equal(candidate(label),false,label);
   assert.equal(websiteRenditionAllowed(url,{label:"x264 AAC.mp4"},{}),false);
   assert.equal(websiteRenditionAllowed(url,item(),item("h264","dts")),false);
   assert.equal(websiteRenditionAllowed(url,item(),item()),true);
   for (const track of [{height:2160}, {bit_depth:10}, {color_transfer:"smpte2084"}, {pix_fmt:"yuv420p10le"}])
     assert.equal(websiteTorrentCandidate({type:"rd",mediaInfo:{video_tracks:[{codec:"hevc",...track}],audio_tracks:[{codec:"aac"}]}}),false);
-  assert.equal(candidate("1080p MPEG-4 container"),false);
-  assert.equal(websiteTorrentCandidate({type:"url",url}),false);
+  for (const label of ["1080p MPEG-4 container", "1080p", "x264 AAC", "x264.mkv"])
+    assert.equal(candidate(label),true,label);
+  assert.equal(websiteTorrentCandidate({type:"url",url}),true);
+  assert.equal(websiteRenditionAllowed(url,{type:"url",url},{}),false);
 });
 
 test("website catalogue excludes pending releases and unsuitable direct links", () => {
@@ -213,7 +215,27 @@ test("website catalogue excludes pending releases and unsuitable direct links", 
       {url,mimeType:"text/html"}, {url,headers:{Referer:"private"}}, {url,...item("h264","truehd")}]) {
     assert.equal(websiteTorrentCandidate(source),false);
   }
-  assert.equal(websiteTorrentCandidate({url,...item("h264","")}),false);
+  assert.equal(websiteTorrentCandidate({url,...item("h264","")}),true);
+  assert.equal(websiteRenditionAllowed(url,{},item("h264","")),false);
   assert.equal(websiteTorrentCandidate({url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}}),false);
-  assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),false);
+  assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
+  assert.equal(websiteRenditionAllowed("https://example.test/opaque",{},item("h264","aac")),false);
+});
+
+// An authorised personal media listing can be incomplete before resolution.
+// Discovery must remain stable without admitting unknown codecs to playback.
+test("incomplete personal-media listings survive discovery but never bypass rendition validation", () => {
+  const candidates = [
+    { type:"url", url, label:"Owned test file" },
+    { type:"url", url, mediaInfo:{video_tracks:[{codec:"h264"}]} },
+    { type:"url", url, mediaInfo:{audio_tracks:[{codec:"aac"}]} },
+    { type:"url", url, ...item("h264","truehd") },
+    { type:"url", url, drm:true },
+  ];
+  assert.deepEqual(candidates.map(websiteTorrentCandidate),[true,true,true,false,false]);
+  for (const candidate of candidates.slice(0,3)) {
+    assert.equal(websiteRenditionAllowed(url,candidate,candidate),false);
+    assert.equal(websiteRenditionAllowed(url,candidate,item()),true);
+  }
+  assert.equal(websiteRenditionAllowed(url,candidates[4],item()),false);
 });
