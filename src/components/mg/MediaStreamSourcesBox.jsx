@@ -922,6 +922,7 @@ export default function StreamSourcesBox({
   const playInMediaGod = async () => {
     if (mediaType === "live") return;
     setMessage("");
+    if (websiteCatalogue) setWebsitePlayerNotice(null);
     const playableSources = visibleAddonStreams
       .filter(item =>
         classifyTvBoxSource(item).kind !== "webpage" &&
@@ -931,13 +932,12 @@ export default function StreamSourcesBox({
       )
       .map(item => ({ ...item, preferNativeVlc: true }));
     if (websiteCatalogue && addonStreams.length && !playableSources.length) {
-      setWebsitePlayerNotice({ total: addonStreams.length, eligible: 0 });
+      setWebsitePlayerNotice({ reason: "no-file", total: addonStreams.length });
       setMessage(noWebsiteTorrentMatch);
       return;
     }
-    setWebsitePlayerNotice(null);
     try {
-      await player.play({
+      const opened = await player.play({
         startTime: Math.max(0, Number(resumeAt) || 0),
         id: tmdbId,
         tmdbId,
@@ -959,7 +959,11 @@ export default function StreamSourcesBox({
         discoveredSources: [],
         src: "", url: "", video_url: "",
       });
+      if (websiteCatalogue && opened === false) {
+        setWebsitePlayerNotice({ reason: "not-opened" });
+      }
     } catch (error) {
+      if (websiteCatalogue) setWebsitePlayerNotice({ reason: "launch-error" });
       setMessage(error?.message || "Media God could not start this source. Try a different direct file.");
     }
   };
@@ -1999,8 +2003,11 @@ export default function StreamSourcesBox({
 
       {websiteCatalogue && websitePlayerNotice && (
         <section role="status" className="my-3 rounded-lg border border-white/20 bg-black/20 p-3">
-          <p className="font-semibold text-white">Media God Player — no eligible direct file</p>
-          <p className="mt-1 text-sm text-white/70">The player was requested, but none of the {websitePlayerNotice.total} returned entries passed the website compatibility checks. No video was opened. You can open a personal file you have permission to play below.</p>
+          <p className="font-semibold text-white">Media God Player</p>
+          <p className="mt-1 text-sm text-white/70">{websitePlayerNotice.reason === "no-file"
+            ? `None of the ${websitePlayerNotice.total} returned entries passed the website compatibility checks.`
+            : websitePlayerNotice.reason === "not-opened" ? "The playback request ended without opening a file."
+            : "The playback request could not be started."} You can open a personal file you have permission to play below.</p>
           <PersonalMoviSource defaultOpen />
           <button type="button" className="mt-2 text-sm text-white/70" onClick={() => setWebsitePlayerNotice(null)}>Close player panel</button>
         </section>
