@@ -69,3 +69,10 @@ test("movie playback has a second TMDB-details IMDb resolver when the primary re
   assert.match(provider, /movie_id: numericTmdbId/);
   assert.match(provider, /method: "tmdb_details_fallback"/);
 });
+
+test("an empty player reports discovered pending torrents", () => {
+  const message = emptyPlaybackSourceMessage({cacheCandidateCount:48, cachedSourceCount:0, pendingSourceCount:48});
+  assert.match(message, /Found 48 torrent candidates/);
+  assert.match(message, /Verified cached: 0/);
+  assert.match(message, /Pending or uncached: 48/);
+});

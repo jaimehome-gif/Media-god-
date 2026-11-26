@@ -210,7 +210,17 @@ test("website catalogue torrents need compatible video evidence before resolutio
   assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });
 
-test("website catalogue excludes pending releases and unsuitable direct links", () => {
+test("identifiable pending torrents can be resolved or prepared while codec restrictions still apply", () => {
+  const hash = "ac".repeat(20);
+  const pending = { type: "rd", label: "1080p x264 AAC", resolutionStrategy: "rd_magnet" };
+  for (const id of [{ infoHash: hash }, { src: "magnet:?xt=urn:btih:" + hash }, { rdTorrentId: "existing" }]) {
+    assert.equal(websiteTorrentCandidate({ ...pending, ...id }), true);
+    assert.equal(websiteTorrentCandidate({ ...pending, ...id, cacheRequired: true }), true);
+    assert.equal(websiteTorrentCandidate({ ...pending, ...id, label: "4K HDR HEVC" }), false);
+    assert.equal(websiteTorrentCandidate({ ...pending, ...id, drm: true }), false);
+  }
+});
+test("website catalogue excludes unidentifiable pending releases and unsuitable direct links", () => {
   const torrent = {type:"rd", label:"1080p H264 AAC"};
   for (const state of [{label:"Uncached 1080p H264 AAC"}, {rdStatus:"downloading"}, {cometUncached:true},
       {debridCacheChecked:true,debridCached:false}]) {

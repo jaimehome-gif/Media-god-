@@ -13,6 +13,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
   };
   if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
   if (!["unknown","account-match"].includes(mode)) item.debridCached = true;
+  if (mode === "account-match") item.resolutionStrategy = "rd_magnet";
   if (mode.startsWith("cooldown") || mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
   const ready = {
     status: "ready", torrent_id: "owned-fixture-id", filename: "Owned Test Clip 2025.mkv",
