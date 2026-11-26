@@ -157,7 +157,7 @@ try {
         }
         await page.waitForFunction(()=>Array.from(document.querySelectorAll("button")).some(button=>
           button.innerText.includes("Owned Test Clip 2025 English")));
-        const launchLabel = torrentMode === "ranked" ? "Combined Debrid" : "Play in Media God";
+        const launchLabel = ["ranked","account-match"].includes(torrentMode) ? "Combined Debrid" : "Play in Media God";
         const button = await page.evaluateHandle(label => Array.from(document.querySelectorAll("button"))
           .find(row => row.innerText.trim().startsWith(label)), launchLabel);
         panelLookupCount = await page.evaluate(()=>window.fixtureLookups);
