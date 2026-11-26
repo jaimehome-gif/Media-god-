@@ -13,13 +13,13 @@ export function attachDecoderLifecycle(player, callbacks) {
     callbacks().onFailure?.();
   };
   // Some browser decoder builds deliver loadeddata before metadata or omit
-  // the metadata notification. Deliver it once when usable duration/picture
+  // the metadata notification. Deliver it once when usable duration and track information
   // are present, so the host's resume handler does not seek repeatedly.
   let metadataDelivered = false;
   const metadata = event => {
     if (closed || failed || metadataDelivered) return;
     if (!(Number(player.duration) > 0 && Number.isFinite(Number(player.duration)) &&
-          Number(player.videoWidth) > 0)) return;
+          (Number(player.videoWidth) > 0 || Number(player.audioTracks?.length) > 0))) return;
     metadataDelivered = true;
     notify("onMetadata", event);
   };
