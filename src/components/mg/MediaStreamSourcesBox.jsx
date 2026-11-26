@@ -351,6 +351,7 @@ export default function StreamSourcesBox({
   const [visibleSourceCount, setVisibleSourceCount] = useState(24);
   const [showNonVlcBackups, setShowNonVlcBackups] = useState(false);
   const [websitePlayerNotice, setWebsitePlayerNotice] = useState(null);
+  useEffect(() => { setWebsitePlayerNotice(null); }, [tmdbId, mediaType, season, episode]);
 
   useEffect(() => {
     setVisibleSourceCount(24);
