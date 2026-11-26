@@ -1,8 +1,11 @@
+import { attachMediaGodControls } from "./media-god-controls.js";
 const input = document.getElementById("file");
 const clear = document.getElementById("close");
 const status = document.getElementById("status");
 const stage = document.getElementById("stage");
+let detachControls = null;
 function reset() {
+  detachControls?.(); detachControls = null;
   for (const child of stage.children) child.pause?.();
   stage.replaceChildren();
   clear.disabled = true;
@@ -32,6 +35,7 @@ try {
     player.addEventListener("play", () => { status.textContent = file.name + " — playing."; });
     player.addEventListener("error", () => { status.textContent = "Movi could not decode this file."; });
     stage.appendChild(player);
+    detachControls = attachMediaGodControls(player, stage, status);
     clear.disabled = false;
     try {
       player.src = file;
