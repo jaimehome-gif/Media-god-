@@ -11,6 +11,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     filename: "Owned Test Clip 2025 " + new URL(url).pathname.split("/").pop(), id: "fixture-torrent", type: "rd", label: "Owned Test Clip 2025 English 1080p x264 AAC",
     infoHash: hash, src: magnet, url: magnet, magnet,
   };
+  if (mode === "missing-codecs") { item.filename = "Owned Test Clip 2025"; item.label = "Owned Test Clip 2025 English 1080p"; }
   if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
   if (!["unknown","account-match"].includes(mode)) item.debridCached = true;
   if (mode.startsWith("cooldown") || mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
