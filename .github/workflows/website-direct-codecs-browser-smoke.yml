@@ -1,7 +1,7 @@
 name: Website direct media browser smoke
 on:
   pull_request:
-    branches: [fix/website-sources-browser-only-20261124, test/in-app-movi-decoder-20261125]
+    branches: [fix/website-sources-browser-only-20261124, test/in-app-movi-decoder-20261125, repair/decoder-metadata-event-order]
   workflow_dispatch:
 permissions:
   contents: read
