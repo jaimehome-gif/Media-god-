@@ -86,6 +86,10 @@ try {
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=document-user-activation-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
   const cases = [
     ["sample.mp4","h264","aac","127.0.0.1",false],
+    ["sample.mp4","h264","aac","www.underworldhub.co.uk",false,false,false,null,"standard"],
+    ["sample.webm","vp9","opus","underworldhub.co.uk",false,false,false,null,"standard"],
+    ["sample.mp4","h264","","www.underworldhub.co.uk",false,false,false,null,"standard-reject"],
+    ["ac3.mkv","h264","ac3","underworldhub.co.uk",false,false,false,null,"standard-reject"],
     ["sample.webm","vp9","opus","127.0.0.1",false],
     ["sample.m3u8","h264","aac","127.0.0.1",false],
     ["sample.mp4","h264","","underworldhub.co.uk",true],
@@ -95,7 +99,7 @@ try {
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
-  for (const [name,v,a,host,full,mobile,strict,torrentMode] of cases) {
+  for (const [name,v,a,host,full,mobile,strict,torrentMode,standardMode] of cases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -133,11 +137,11 @@ try {
       await page.goto(base);
       // Puppeteer's page.evaluate grants a user gesture. The strict case must
       // mount without activation, using CDP explicitly with userGesture:false.
-      const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
+      const input = {name,v,a,full,standardMode,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
       input.automaticFallback = full && !mobile && name === "ac3.mkv";
-      const mount = async ({name,v,a,full,mixedChoices,automaticFallback})=>{
+      const mount = async ({name,v,a,full,standardMode,mixedChoices,automaticFallback})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
+        return (standardMode ? harness.mountStandardSample : full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
       };
       let gate;
       let panelLookupCount;
@@ -181,6 +185,18 @@ try {
         await session.detach();
       } else {
         gate = await page.evaluate(mount,input);
+      }
+      if (standardMode) {
+        assert.equal(gate.route,true);
+        if (standardMode === "standard-reject") {
+          assert.equal(gate.allowed,false);
+          await page.waitForSelector('[data-mg-website-codec-rejected="true"]');
+          assert.equal(await page.$('video[data-mg-playback-surface="active"]'),null);
+          assert.equal(await page.$('movi-player'),null);
+          assert.deepEqual(renderErrors,[]);
+          continue;
+        }
+        await page.waitForSelector('video[data-mg-playback-surface="active"]');
       }
       if (full) {
         if (!torrentMode) assert.equal(gate.route,true);
