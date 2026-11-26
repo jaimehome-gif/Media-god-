@@ -8,14 +8,14 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
   const hash = "ac".repeat(20);
   const magnet = "magnet:?xt=urn:btih:" + hash;
   const item = {
-    id: "fixture-torrent", type: "rd", label: "Owned Test Clip 2025 English 1080p x264 AAC",
+    filename: "Owned Test Clip 2025 " + new URL(url).pathname.split("/").pop(), id: "fixture-torrent", type: "rd", label: "Owned Test Clip 2025 English 1080p x264 AAC",
     infoHash: hash, src: magnet, url: magnet, magnet,
   };
   if (mode === "incompatible") item.label = "Owned Test Clip 2025 English 4K HDR HEVC";
   if (!["unknown","account-match"].includes(mode)) item.debridCached = true;
   if (mode.startsWith("cooldown") || mode === "library" || mode === "preparing") item.rdTorrentId = "owned-fixture-id";
   const ready = {
-    status: "ready", torrent_id: "owned-fixture-id", filename: "Owned Test Clip 2025.mkv",
+    media_info: {video_tracks:[{codec:videoCodec}],audio_tracks:[{codec:audioCodec}]}, status: "ready", torrent_id: "owned-fixture-id", filename: "Owned Test Clip 2025.mkv",
     stream_url: mode === "fallback" ? new URL("unavailable.mp4", url).href : url,
     fallback_stream_url: mode === "fallback" ? url : "",
   };

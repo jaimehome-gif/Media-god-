@@ -12,7 +12,7 @@ export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
 
 export const isWebsiteSourcesPlayback = context =>
   isPublicWebsiteVod(context) &&
-  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
+  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.source?.debridManual || context.active?.preferNativeVlc);
 
 // A transient upstream limit must not reopen a legacy/unfiltered error menu.
 // A TV layout heuristic alone is not evidence of an installed native app.
@@ -96,11 +96,62 @@ export function isWebsiteDirectSourceChoice({ item, originalItem, url, failed = 
   return checkWebsiteDirectMedia({ url, item, originalItem, ...capabilities }).allowed;
 }
 
-const catalogueVideoCodec = /\b(?:[hx][ .-]?26[45]|avc1?|hevc|hev1|hvc1|vp0?[89]|av0?1|xvid|divx|mpeg[ .-]?4(?:[ .-]?part[ .-]?2)?)\b/i;
-const catalogueAudioCodec = /^(?:aac(?:[ -]?lc)?|mp4a(?:\.40\.2)?|ac-?3|e-?ac-?3|dts|opus|vorbis|mp3|flac)$/i;
+// Container, video and audio combinations exercised by the website decoder fixtures.
+const testedFormats = {
+  mp4: { h264: ["aac"] },
+  m3u8: { h264: ["aac"] },
+  webm: { vp9: ["opus"], vp8: ["vorbis"] },
+  mkv: { h264: ["aac", "ac3", "eac3", "dts", "flac", "mp3"], hevc: ["aac"], av1: ["opus"], mpeg4: ["mp3"] },
+};
+
+function canonicalCodec(value) {
+  const name = String(value || "").trim().toLowerCase();
+  if (/^(?:x264|h[.-]?264|avc|avc1(?:\.[a-f0-9]+)?)$/.test(name)) return "h264";
+  if (/^(?:x265|h[.-]?265|hevc|hev1|hvc1)$/.test(name)) return "hevc";
+  if (/^(?:aac(?:[ -]lc)?|mp4a\.40\.2)$/.test(name)) return "aac";
+  if (/^(?:e-?ac-?3|ddp)$/.test(name)) return "eac3";
+  if (/^(?:ac-?3|dd)$/.test(name)) return "ac3";
+  if (/^(?:mpeg4|xvid|divx)$/.test(name)) return "mpeg4";
+  return ({ av01: "av1", vp09: "vp9", vp08: "vp8" })[name] || name;
+}
+
+function testedWebsiteFormat(item, url, inspectedOnly) {
+  const info = item.mediaInfo || item.media_info || {};
+  const videos = info.video_tracks || info.videoTracks;
+  const audios = info.audio_tracks || info.audioTracks;
+  const filename = info.filename || item.filename || item.file || item.behaviorHints?.filename || item.label || "";
+  const hints = [filename, item.label, item.quality, item.description].filter(Boolean).join(" ").replace(/_/g, " ");
+  if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
+  const ext = value => /\.([a-z0-9]{2,5})$/i.exec(String(value || ""))?.[1]?.toLowerCase();
+  const path = /^https?:/i.test(url || "") ? String(url).split(/[?#]/)[0] : "";
+  const container = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
+    "video/x-matroska":"mkv", "application/vnd.apple.mpegurl":"m3u8", "application/x-mpegurl":"m3u8" })[
+      String(item.mimeType || item.mime_type || item.contentType || "").toLowerCase().split(";")[0]];
+  if (!Object.prototype.hasOwnProperty.call(testedFormats, container)) return false;
+  const formats = testedFormats[container];
+  const supports = (video, audio) => {
+    const tracks = formats[canonicalCodec(video)];
+    return Array.isArray(tracks) && tracks.includes(canonicalCodec(audio));
+  };
+  if (inspectedOnly || videos != null || audios != null) {
+    return Array.isArray(videos) && videos.length > 0 && Array.isArray(audios) && audios.length > 0 &&
+      videos.every(v => v && standardRangeTrack(v) && audios.every(a => supports(codec(v), codec(a))));
+  }
+  const video = item.videoCodec || item.video_codec || hints.match(/\b(?:[hx][.-]?26[45]|avc1?|hevc|vp0?[89]|av0?1|xvid|divx)\b/i)?.[0];
+  const audio = item.audioCodec || item.audio_codec || hints.match(/\b(?:aac|ac-?3|e-?ac-?3|dts|ddp?|opus|vorbis|flac|mp3)\b/i)?.[0];
+  return supports(video, audio);
+}
+
+export function websiteRenditionAllowed(url, original, rendition) {
+  if (!canOpenWebsiteMovi(url, original, rendition)) return false;
+  const file = rendition || original;
+  if ((file?.audioRescue?.used || file?.videoRescue?.used) && !(file.mediaInfo || file.media_info)?.rendition_verified) return false;
+  return Boolean(file && testedWebsiteFormat(file, url, true));
+}
+
 const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
-export const websiteTorrentFilterDescription = "Website torrent filter: SDR releases up to 1080p with a recognised video codec.";
-export const noWebsiteTorrentMatch = "No compatible website source found. Look for an SDR release up to 1080p with a listed video codec.";
+export const websiteTorrentFilterDescription = "Website torrent filter: tested container, video and audio combinations up to 1080p SDR.";
+export const noWebsiteTorrentMatch = "No compatible website source found. No release matched a tested container, video and audio combination.";
 
 function standardRangeTrack(track) {
   const transfer = String(track?.color_transfer || track?.colour_transfer || "").toLowerCase();
@@ -130,23 +181,7 @@ export function websiteTorrentCandidate(item) {
     if (!Array.isArray(info?.video_tracks || info?.videoTracks) && !/\.(mp4|m4v|mkv|webm|m3u8|avi)$/i.test(path) &&
         !/^video\/|mpegurl/.test(mime)) return false;
   }
-  const info = item.mediaInfo || item.media_info;
-  const videos = info?.video_tracks || info?.videoTracks;
-  const audios = info?.audio_tracks || info?.audioTracks;
-  const hints = [item.label, item.name, item.title, item.filename, item.description, item.quality,
-    item.audioCodec, item.audio_codec, item.hdr, item.videoCodec, item.video_codec, item.codec,
-    item.behaviorHints?.filename, item.behaviorHints?.bingeGroup]
-    .filter(Boolean).join(" ").replace(/_/g, " ");
-  if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
-  if (Array.isArray(audios) && !audios.some(track => catalogueAudioCodec.test(codec(track)) || (!isTorrent && !codec(track)))) return false;
-  if (Array.isArray(videos)) return videos.some(track => catalogueVideoCodec.test(codec(track)) && standardRangeTrack(track));
-  if (!isTorrent && !Array.isArray(videos)) return true;
-  if (/\b(?:truehd|mlp|pcm)\b/i.test(hints) &&
-      !/\b(?:aac|opus|ac-?3|e-?ac-?3|dts|ddp?|vorbis|mp3|flac)\b/i.test(hints)) return false;
-  // MPEG-4 by itself is also a container name. Only explicit Part 2 or a
-  // codec field identifies the video codec in an uninspected release.
-  return catalogueVideoCodec.test(hints.replace(/\bmpeg[ .-]?4\b(?![ .-]?part[ .-]?2)/ig, "")) ||
-    catalogueVideoCodec.test(String(item.videoCodec || item.video_codec || ""));
+  return testedWebsiteFormat(item, item.src || item.url, !isTorrent);
 }
 
 // Check the resolved transport separately from discovery and codec metadata.
