@@ -138,7 +138,7 @@ export function websiteTorrentCandidate(item) {
     item.behaviorHints?.filename, item.behaviorHints?.bingeGroup]
     .filter(Boolean).join(" ").replace(/_/g, " ");
   if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
-  if (Array.isArray(audios) && !audios.some(track => catalogueAudioCodec.test(codec(track)))) return false;
+  if (Array.isArray(audios) && !audios.some(track => catalogueAudioCodec.test(codec(track)) || (!isTorrent && !codec(track)))) return false;
   if (Array.isArray(videos)) return videos.some(track => catalogueVideoCodec.test(codec(track)) && standardRangeTrack(track));
   if (!isTorrent && !Array.isArray(videos)) return true;
   if (/\b(?:truehd|mlp|pcm)\b/i.test(hints) &&

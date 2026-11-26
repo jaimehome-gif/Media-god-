@@ -211,5 +211,8 @@ test("website catalogue excludes pending releases and unsuitable direct links", 
       {url,mimeType:"text/html"}, {url,headers:{Referer:"private"}}, {url,...item("h264","truehd")}]) {
     assert.equal(websiteTorrentCandidate(source),false);
   }
+  // A present track with incomplete labels can still be inspected by the decoder.
+  assert.equal(websiteTorrentCandidate({url,...item("h264","")}),true);
+  assert.equal(websiteTorrentCandidate({url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}}),false);
   assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
 });
