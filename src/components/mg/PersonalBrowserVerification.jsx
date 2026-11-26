@@ -25,10 +25,12 @@ export default function PersonalBrowserVerification(){
     const video=videoRef.current;
     if(!video||running)return;
     setRunning(true);setResult({state:"pending",reason:"Measuring decoded picture and audio…"});
-    let cancelled=false,timer=null,frameHandle=null;
+    let cancelled=false,timer=null,frameHandle=null,watchdog=null;
     const cleanup=()=>{cancelled=true;if(timer!==null)clearTimeout(timer);
-      if(frameHandle!==null)video.cancelVideoFrameCallback?.(frameHandle);};
+      if(frameHandle!==null)video.cancelVideoFrameCallback?.(frameHandle);
+      if(watchdog!==null)clearTimeout(watchdog);};
     stop.current=cleanup;
+    watchdog=setTimeout(()=>{if(cancelled)return;setResult({state:"pending",reason:"Playback verification timed out. Press Play and try again."});setRunning(false);cleanup();},12000);
     let analyser=null,context=null;
     try{
       const AudioCtor=globalThis.AudioContext||globalThis.webkitAudioContext;
