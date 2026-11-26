@@ -9071,7 +9071,7 @@ export default function VideoPlayer({
   }, [filterWebsiteTorrents, limitUntil, limitedRequestKey, isRdSource, resolvedSourceUrl]);
   const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
-  const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
+  const websiteDirectMediaCheck = publicWebsiteVod && resolvedSourceUrl
     ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
         ...getBrowserMediaCapabilities() })
     : null;
