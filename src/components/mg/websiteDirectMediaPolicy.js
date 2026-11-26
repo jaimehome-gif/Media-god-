@@ -115,7 +115,7 @@ function canonicalCodec(value) {
   return ({ av01: "av1", vp09: "vp9", vp08: "vp8" })[name] || name;
 }
 
-function testedWebsiteFormat(item, url, inspectedOnly) {
+function testedWebsiteFormat(item, url, inspectedOnly, allowIncomplete = false) {
   const info = item.mediaInfo || item.media_info || {};
   const videos = info.video_tracks || info.videoTracks;
   const audios = info.audio_tracks || info.audioTracks;
@@ -127,18 +127,31 @@ function testedWebsiteFormat(item, url, inspectedOnly) {
   const container = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
     "video/x-matroska":"mkv", "application/vnd.apple.mpegurl":"m3u8", "application/x-mpegurl":"m3u8" })[
       String(item.mimeType || item.mime_type || item.contentType || "").toLowerCase().split(";")[0]];
-  if (!Object.prototype.hasOwnProperty.call(testedFormats, container)) return false;
-  const formats = testedFormats[container];
+  // A missing container is not a negative codec result. Discovery may keep
+  // an eligible file pending inspection; the actual decoder gate may not.
+  if (container && !Object.prototype.hasOwnProperty.call(testedFormats, container)) return false;
+  if (!container && !allowIncomplete) return false;
+  const formats = container ? [testedFormats[container]] : Object.values(testedFormats);
   const supports = (video, audio) => {
-    const tracks = formats[canonicalCodec(video)];
-    return Array.isArray(tracks) && tracks.includes(canonicalCodec(audio));
+    const v = canonicalCodec(video), a = canonicalCodec(audio);
+    return formats.some(format => Object.entries(format).some(([name, tracks]) =>
+      (name === v || (allowIncomplete && !v)) &&
+      (tracks.includes(a) || (allowIncomplete && !a))));
   };
   if (inspectedOnly || videos != null || audios != null) {
-    return Array.isArray(videos) && videos.length > 0 && Array.isArray(audios) && audios.length > 0 &&
-      videos.every(v => v && standardRangeTrack(v) && audios.every(a => supports(codec(v), codec(a))));
+    if (!allowIncomplete) {
+      return Array.isArray(videos) && videos.length > 0 && Array.isArray(audios) && audios.length > 0 &&
+        videos.every(v => v && standardRangeTrack(v) && audios.every(a => supports(codec(v), codec(a))));
+    }
+    // Missing track arrays are different from an inspected file with no tracks.
+    if ((Array.isArray(videos) && !videos.length) || (Array.isArray(audios) && !audios.length)) return false;
+    const knownVideos = Array.isArray(videos) ? videos : [{}];
+    const knownAudios = Array.isArray(audios) ? audios : [{}];
+    return knownVideos.every(v => v && standardRangeTrack(v) &&
+      knownAudios.every(a => a && supports(codec(v), codec(a))));
   }
   const video = item.videoCodec || item.video_codec || hints.match(/\b(?:[hx][.-]?26[45]|avc1?|hevc|vp0?[89]|av0?1|xvid|divx)\b/i)?.[0];
-  const audio = item.audioCodec || item.audio_codec || hints.match(/\b(?:aac|ac-?3|e-?ac-?3|dts|ddp?|opus|vorbis|flac|mp3)\b/i)?.[0];
+  const audio = item.audioCodec || item.audio_codec || hints.match(/\b(?:aac|ac-?3|e-?ac-?3|dts|ddp?|opus|vorbis|flac|mp3|truehd|mlp|pcm)\b/i)?.[0];
   return supports(video, audio);
 }
 
@@ -150,8 +163,8 @@ export function websiteRenditionAllowed(url, original, rendition) {
 }
 
 const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
-export const websiteTorrentFilterDescription = "Website torrent filter: tested container, video and audio combinations up to 1080p SDR.";
-export const noWebsiteTorrentMatch = "No compatible website source found. No release matched a tested container, video and audio combination.";
+export const websiteTorrentFilterDescription = "Website playback requires a tested container and verified video and audio codecs up to 1080p SDR. Incomplete source metadata is checked after resolution.";
+export const noWebsiteTorrentMatch = "No eligible website source found. No available result passed the initial source checks.";
 
 function standardRangeTrack(track) {
   const transfer = String(track?.color_transfer || track?.colour_transfer || "").toLowerCase();
@@ -160,8 +173,9 @@ function standardRangeTrack(track) {
     highRangeRelease.test(track?.profile || ""));
 }
 
-// Catalogue torrents without a recognised video format stay out of the website
-// queue. A matching release label admits a candidate for an actual decoder test.
+// Discovery eligibility is not decoder eligibility. Missing codec or container
+// metadata must not empty an otherwise eligible source pool. Only an inspected
+// rendition that passes websiteRenditionAllowed may open the website decoder.
 export function websiteTorrentCandidate(item) {
   if (!item || item.diagnostic || item.type === "status") return true;
   const isTorrent = item.infoHash || item.info_hash || item.rdTorrentId || item.magnet ||
@@ -181,7 +195,7 @@ export function websiteTorrentCandidate(item) {
     if (!Array.isArray(info?.video_tracks || info?.videoTracks) && !/\.(mp4|m4v|mkv|webm|m3u8|avi)$/i.test(path) &&
         !/^video\/|mpegurl/.test(mime)) return false;
   }
-  return testedWebsiteFormat(item, item.src || item.url, !isTorrent);
+  return testedWebsiteFormat(item, item.src || item.url, false, true);
 }
 
 // Check the resolved transport separately from discovery and codec metadata.
