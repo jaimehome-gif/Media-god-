@@ -112,7 +112,7 @@ test("both public hostnames use the same direct media engine regardless of launc
 test("public Sources screens the resolved transport independently of chooser rows",()=>{
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   assert.match(player,/const websiteSourceChoiceAllowed = \(index, item\) => \{\s*if \(!filterDirectChoices\) return true;/);
-  assert.match(player,/const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl/);
+  assert.match(player,/const websiteDirectMediaCheck = publicWebsiteVod && resolvedSourceUrl/);
   assert.match(player,/const presentedSourceEntries = filterDirectChoices/);
 });
 
@@ -215,4 +215,15 @@ test("website catalogue excludes pending releases and unsuitable direct links", 
   assert.equal(websiteTorrentCandidate({url,...item("h264","")}),true);
   assert.equal(websiteTorrentCandidate({url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}}),false);
   assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
+});
+
+test("standard website gate is enforced before either standard direct playback branch",()=>{
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const websiteDirectMediaCheck = publicWebsiteVod && resolvedSourceUrl/);
+  const stage=player.slice(player.indexOf(") : moviSource ? ("));
+  assert.ok(stage.indexOf("websiteDirectMediaCheck?.allowed === false") < stage.indexOf(") : rdOverride ? ("));
+  assert.ok(stage.indexOf("websiteDirectMediaCheck?.allowed === false") < stage.indexOf("<LiveVideo"));
+  assert.match(player,/const publicWebsiteVod = !nativeFireTvPlayer/);
+  for (const value of [item("hevc","aac"),item("h264","ac3"),item("h264","eac3"),item("h264","dts"),item("h264","truehd"),item("h264",""),item("","aac")])
+    assert.equal(check(value).allowed,false);
 });
