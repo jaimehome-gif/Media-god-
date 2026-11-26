@@ -49,3 +49,19 @@ export async function mountSourcesSample({ url, videoCodec, audioCodec, mixedCho
   if (route) flushSync(()=>root.render(<VideoPlayer source={source} onClose={()=>root.render(null)} />));
   return {route,allowed:gate.allowed,reason:gate.reason};
 }
+
+export async function mountStandardSample({url,videoCodec,audioCodec}) {
+  const {default:VideoPlayer}=await import("../../src/components/mg/VideoPlayer.jsx");
+  const {getPlaybackDeviceProfile}=await import("../../src/components/mg/mediaCompatibility.js");
+  const {isPublicWebsiteVod,isWebsiteSourcesPlayback}=await import("../../src/components/mg/websiteDirectMediaPolicy.js");
+  const item={type:"file",src:url,url,label:"Owned synthetic standard player sample",
+    subtitles:EMPTY_SUBTITLES,mediaInfo:{video_tracks:[{codec:videoCodec}],audio_tracks:[{codec:audioCodec}]}};
+  const source={title:"Owned synthetic standard player sample",mediaType:"movie",type:"movie",
+    skipAddonLookup:true,skipRdLookup:true,noRd:true,allowNonPlaybackFallback:false,
+    verifiedPlaybackPolicy:"manual",sources:[item],completeSources:[item],src:url,url};
+  const context={hostname:location.hostname,profile:getPlaybackDeviceProfile(),source,active:item,isLive:false};
+  const route=isPublicWebsiteVod(context)&&!isWebsiteSourcesPlayback(context);
+  const gate=checkWebsiteDirectMedia({url,item,...getBrowserMediaCapabilities()});
+  if(route)flushSync(()=>root.render(<VideoPlayer source={source} onClose={()=>root.render(null)}/>));
+  return {route,allowed:gate.allowed};
+}
