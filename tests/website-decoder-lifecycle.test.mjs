@@ -75,3 +75,26 @@ test("audio-only personal file can deliver usable duration metadata", () => {
   assert.equal(metadata,1);
   lifecycle.dispose();
 });
+
+test("late decoder tracks use main English once and honour subsequent manual selection", () => {
+  const player = new EventTarget();
+  player.duration = 120;
+  player.videoWidth = 640;
+  player.audioTracks = [];
+  const lifecycle = attachDecoderLifecycle(player, () => ({}));
+  player.dispatchEvent(new Event("loadedmetadata"));
+  let selected = 0;
+  player.audioTracks = [
+    ["fr", "Main"], ["en", "Commentary"], ["en", "Main"],
+  ].map(([language, label], index) => ({
+    language, label,
+    get enabled() { return selected === index; },
+    set enabled(enable) { if (enable) selected = index; },
+  }));
+  player.dispatchEvent(new Event("loadeddata"));
+  assert.equal(selected, 2);
+  player.audioTracks[1].enabled = true;
+  player.dispatchEvent(new Event("timeupdate"));
+  assert.equal(selected, 1);
+  lifecycle.dispose();
+});

@@ -1,3 +1,5 @@
+import { preferredAudioTrackScore, readTrackPreferences } from "./mediaTrackPreferences.js";
+
 // Media readiness events are notifications, not proof of an absent track.
 // Some decoders publish track information after their first loadeddata event.
 export function attachDecoderLifecycle(player, callbacks) {
@@ -16,8 +18,28 @@ export function attachDecoderLifecycle(player, callbacks) {
   // the metadata notification. Deliver it once when usable duration and track information
   // are present, so the host's resume handler does not seek repeatedly.
   let metadataDelivered = false;
+  let audioPreferenceApplied = false;
+  const selectStartupAudio = () => {
+    if (audioPreferenceApplied) return;
+    const tracks = player.audioTracks;
+    if (!tracks || tracks.length < 2) return;
+    audioPreferenceApplied = true;
+    const language = readTrackPreferences().audioLanguage;
+    let bestTrack;
+    let bestScore = -Infinity;
+    for (const track of tracks) {
+      const score = preferredAudioTrackScore(track, language);
+      if (score > bestScore || (score === bestScore && track.enabled)) {
+        bestTrack = track;
+        bestScore = score;
+      }
+    }
+    if (bestTrack && !bestTrack.enabled) bestTrack.enabled = true;
+  };
   const metadata = event => {
-    if (closed || failed || metadataDelivered) return;
+    if (closed || failed) return;
+    selectStartupAudio();
+    if (metadataDelivered) return;
     if (!(Number(player.duration) > 0 && Number.isFinite(Number(player.duration)) &&
           (Number(player.videoWidth) > 0 || Number(player.audioTracks?.length) > 0))) return;
     metadataDelivered = true;

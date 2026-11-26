@@ -88,7 +88,7 @@ try {
     ["sample.mp4","h264","aac","127.0.0.1",false],
     ["sample.webm","vp9","opus","127.0.0.1",false],
     ["sample.m3u8","h264","aac","127.0.0.1",false],
-    ["sample.mp4","h264","","underworldhub.co.uk",true],
+    ["sample.mp4","h264","aac","underworldhub.co.uk",true],
     ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,true],
     ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false,"format"]),
     ...["account-match","seedless","cooldown","cooldown-repeat","library","unknown","fallback","preparing","ranked","incompatible"].map(mode => ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,false,false,mode]),
@@ -188,8 +188,8 @@ try {
         if (input.mixedChoices) {
           await page.click('[data-mg-open-in-player-sources="true"]');
           const choices = await page.$$eval('[data-mg-source-choice]',rows=>rows.map(r=>r.textContent));
-          assert.equal(choices.length,3);
-          assert.ok(choices.some(label=>label.includes("Unknown audio fixture")));
+          assert.equal(choices.length,1);
+          assert.ok(choices.every(label=>!label.includes("Unknown audio fixture") && !label.includes("Unsupported audio fixture")));
           await page.click('[aria-label="Return to video player"]');
         }
         if (strict) {

@@ -33,6 +33,8 @@ import {
   buildMediaSources,
 } from "@/components/mg/PlayerProvider";
 import StreamSourcesBox from "@/components/mg/StreamSourcesBox";
+import PersonalBrowserVerification from "@/components/mg/PersonalBrowserVerification";
+import { canOpenPersonalMovi } from "@/components/mg/PersonalMoviSource";
 import MediaDownloadPicker from "@/components/mg/MediaDownloadPicker";
 import { addToWatchlistItem } from "@/components/mg/watchlistActions";
 import { Image } from "@/components/ui/image";
@@ -1874,6 +1876,13 @@ export default function DetailModal({
               }
               mediaType="movie"
             /></div>
+          )}
+
+          {canOpenPersonalMovi() && (
+            <details key={`personal-browser-test:${itemId}`} className="mt-4 rounded-lg border border-white/10 bg-mg-card p-3" data-mg-catalogue-browser-test="true">
+              <summary className="cursor-pointer text-sm font-semibold text-white">Test website picture and sound (personal file)</summary>
+              <PersonalBrowserVerification />
+            </details>
           )}
 
           {watchmodeData && (
