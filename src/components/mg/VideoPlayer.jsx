@@ -960,7 +960,7 @@ export default function VideoPlayer({
     useState(0);
   // The Sources button in OnlyFlix explicitly requests our own player
   // with the source list already open. A normal Play never sets this flag.
-  const autoCheckWebsiteSources = Boolean(source?.openSourcesDrawer && !source?.manualSourceSelection &&
+  const autoCheckWebsiteSources = Boolean((source?.openSourcesDrawer || source?.debridManual) && !source?.manualSourceSelection &&
     isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
       source, isLive: source?.type === "live" }));
   const [inPlayerSourcesOpen, setInPlayerSourcesOpen] = useState(
@@ -9179,8 +9179,9 @@ export default function VideoPlayer({
       websiteScanState.current = null;
     };
   }, [autoCheckWebsiteSources, scanRequestKey]);
-  // The chooser contains resolver inputs as well as directly playable files.
-  const filterDirectChoices = publicWebsiteVod && (!websiteSourcesPlayback || websiteRateLimitHold);
+  // Resolver inputs remain in the internal candidate pool; the public chooser
+  // publishes only verified playback choices (or the explicit saved-file status).
+  const filterDirectChoices = publicWebsiteVod;
   const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer && !publicWebsiteVod && !isLive && !active?.drm && !rdOverride?.drm &&
     !Object.keys(rdOverride?.headers || active?.headers || active?.requestHeaders || {}).length &&
     (source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc) &&
@@ -10717,6 +10718,11 @@ export default function VideoPlayer({
     if (websiteRateLimitHold) return false;
     if (websitePersonalPendingChoice(index, item)) return true;
     const rendition = Number(index) === activeIdx && rdOverride?.src ? rdOverride : item;
+    if (websiteSourcesPlayback) {
+      return !failedSources.has(index) && !item.diagnostic &&
+        !["provider", "external", "youtube", "status", "live", "embed"].includes(String(item.type || "").toLowerCase()) &&
+        websiteRenditionAllowed(getSourceUrl(rendition), item, rendition);
+    }
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
       failed: failedSources.has(index), ...getBrowserMediaCapabilities(),
@@ -11948,7 +11954,7 @@ export default function VideoPlayer({
           )}
 
           {filterDirectChoices && selectableSourceCount === 0 && (
-            <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : "No verified browser-compatible sources are ready."}</p>
+            <p role="status" className="text-xs text-white/70">{websiteRateLimitHold ? "The upstream service is temporarily rate limiting requests. Wait before trying again; source choices are paused." : websiteSourcesPlayback && websiteScanMessage ? websiteScanMessage : "No verified browser-compatible sources are ready."}</p>
           )}
           {selectableSourceCount > 0 && (
             <label className="min-w-[12rem] flex-1 basis-[16rem]">
