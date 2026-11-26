@@ -239,3 +239,17 @@ test("incomplete personal-media listings survive discovery but never bypass rend
   }
   assert.equal(websiteRenditionAllowed(url,candidates[4],item()),false);
 });
+
+// Keep lookup inputs distinct from the public compatible-file list, and make
+// Combined Debrid opt into the same website-only automatic decoder checks.
+test("Combined Debrid retains discovery candidates and only presents verified website playback choices", () => {
+  const player = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  const box = readFileSync(new URL("../src/components/mg/MediaStreamSourcesBox.jsx",import.meta.url),"utf8");
+  assert.match(player,/const autoCheckWebsiteSources = Boolean\(\(source\?\.openSourcesDrawer \|\| source\?\.debridManual\) && !source\?\.manualSourceSelection/);
+  assert.match(player,/const filterDirectChoices = publicWebsiteVod;/);
+  assert.match(player,/if \(websiteSourcesPlayback\) \{[\s\S]*?websiteRenditionAllowed\(getSourceUrl\(rendition\), item, rendition\)/);
+  assert.match(player,/const candidates = selectableSourceEntries\.filter/);
+  assert.match(box,/const displayedAddonStreams = useMemo\(\(\) => websiteCatalogue[\s\S]*?websiteRenditionAllowed/);
+  assert.match(box,/\.\.\.displayedAddonStreams\.slice/);
+  assert.match(box,/const playCombinedDebrid =[\s\S]*?completeSources: mediaType === "live"\s*\? visibleAddonStreams\s*: visibleAddonStreams/);
+});
