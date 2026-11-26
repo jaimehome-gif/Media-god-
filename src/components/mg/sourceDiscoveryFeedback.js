@@ -42,5 +42,10 @@ export const emptyPlaybackSourceMessage = (diagnostics = {}) => {
     return "Media God could not identify this title for its source addons. Check the title details or try again later.";
   }
 
+  const candidates = Number(diagnostics?.cacheCandidateCount || 0);
+  if (candidates > 0) {
+    return `Found ${candidates} torrent candidate${candidates === 1 ? "" : "s"}. No playable video link is available yet. Verified cached: ${Number(diagnostics?.cachedSourceCount || 0)}. Pending or uncached: ${Number(diagnostics?.pendingSourceCount || 0)}.`;
+  }
+
   return "No video source was returned for this title. Check Addons for another source or try again later.";
 };
