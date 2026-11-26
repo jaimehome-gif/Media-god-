@@ -36,7 +36,7 @@ function selectedEpisodeSource({
   const context = {
     player: { play: async (payload) => { captured.push(payload); return true; } },
     setMessage: () => {}, setRdSearching: () => {},
-    hasDebrid, rdSearching: false, websiteCatalogue: false,
+    hasDebrid, rdSearching: false,
     isFireTvRuntime: () => tvBox, isNativeFireTvPlayerAvailable: () => native, classifyTvBoxSource,
     sourceHasPendingCacheSignal, sourceIsConfirmedCachedForPlayback,
     tmdbId: 1234, resolvedImdb: "tt123456", imdbId: "",
