@@ -1,7 +1,7 @@
 name: Website direct media browser smoke
 on:
   pull_request:
-    branches: [fix/website-sources-browser-only-20261124, test/in-app-movi-decoder-20261125, repair/decoder-metadata-event-order]
+    branches: [fix/website-sources-browser-only-20261124, test/in-app-movi-decoder-20261125, repair/decoder-metadata-event-order, repair/personal-browser-playback-verification]
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,6 +18,8 @@ jobs:
       - run: npm ci
       - name: Verify decoder event lifecycle
         run: node --test tests/website-decoder-lifecycle.test.mjs
+      - name: Verify personal web control logic
+        run: node --test tests/personal-web-player-controls.test.mjs
       - name: Verify direct-media policy
         run: node --test tests/website-direct-codecs.test.mjs
       - name: Install synthetic media fixture tools
