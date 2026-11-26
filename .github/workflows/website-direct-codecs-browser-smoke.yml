@@ -1,14 +1,14 @@
 name: Website direct media browser smoke
 on:
   pull_request:
-    branches: [fix/website-sources-browser-only-20261124]
+    branches: [fix/website-sources-browser-only-20261124, test/in-app-movi-decoder-20261125]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   browser-codecs:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -16,6 +16,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify decoder event lifecycle
+        run: node --test tests/website-decoder-lifecycle.test.mjs
       - name: Verify direct-media policy
         run: node --test tests/website-direct-codecs.test.mjs
       - name: Install synthetic media fixture tools
@@ -25,5 +27,5 @@ jobs:
           google-chrome --version
       - name: Verify actual browser decoded frames and non-silent audio
         run: node scripts/website-direct-codecs-browser-smoke.mjs
-      - name: Verify actual Media God HTML5/HLS component
+      - name: Verify actual Media God player with generated media
         run: node scripts/website-direct-player-integration.mjs

@@ -24,6 +24,7 @@ try {
   const policy = await readFile(new URL("../src/components/mg/websiteDirectMediaPolicy.js",import.meta.url));
   const files = new Map([
     ["/",["text/html",await readFile(join(dir,"index.html"))]],
+    ["/sourceCacheVisibility.js",["text/javascript",await readFile(new URL("../src/components/mg/sourceCacheVisibility.js",import.meta.url))]],
     ["/policy.mjs",["text/javascript",policy]],
     ["/sample.mp4",["video/mp4",await readFile(join(dir,"sample.mp4"))]],
     ["/sample.webm",["video/webm",await readFile(join(dir,"sample.webm"))]],

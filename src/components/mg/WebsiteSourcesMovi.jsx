@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { attachDecoderLifecycle } from "./websiteDecoderLifecycle.js";
 
 const decoderModule = "/decoder-lab/vendor/element.js";
 
@@ -9,14 +10,8 @@ export default function WebsiteSourcesMovi({ url, onMetadata, onProgress, onFail
 
   useEffect(() => {
     let closed = false;
-    let failed = false;
     let player;
-    const fail = () => {
-      if (closed || failed) return;
-      failed = true;
-      player?.pause();
-      callbacks.current.onFailure();
-    };
+    let lifecycle;
     async function open() {
       await import(/* @vite-ignore */ decoderModule);
       if (closed) return;
@@ -26,23 +21,19 @@ export default function WebsiteSourcesMovi({ url, onMetadata, onProgress, onFail
       player.setAttribute("engine", "wasm");
       player.setAttribute("crossorigin", "anonymous");
       player.className = "absolute inset-0 block h-full w-full";
-      player.addEventListener("error", fail);
-      player.addEventListener("loadedmetadata", event => {
-        if (!closed && !failed) callbacks.current.onMetadata(event);
-      });
-      player.addEventListener("loadeddata", () => {
-        if (!player.audioTracks.length || !player.videoWidth) fail();
-      }, { once: true });
-      player.addEventListener("timeupdate", event => {
-        if (!closed && !failed) callbacks.current.onProgress(event);
-      });
+      lifecycle = attachDecoderLifecycle(player, () => callbacks.current);
       container.current.appendChild(player);
       player.src = url;
     }
-    open().catch(fail);
+    open().catch(() => {
+      if (closed) return;
+      if (lifecycle) lifecycle.fail();
+      else callbacks.current.onFailure?.();
+    });
     return () => {
       closed = true;
-      player?.pause();
+      lifecycle?.dispose();
+      try { player?.pause(); } catch { /* decoder may not have opened */ }
       player?.remove();
     };
   }, [url]);

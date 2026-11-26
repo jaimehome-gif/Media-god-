@@ -1884,7 +1884,7 @@ export default function StreamSourcesBox({
           ...primarySourceRows.filter(row =>
             row.kind === "rd" || row.kind === "addon-stream"),
           ...primarySourceRows.filter(row =>
-            row.kind !== "rd" && row.kind !== "addon-stream"),
+            row.kind !== "media-god" && row.kind !== "rd" && row.kind !== "addon-stream"),
           ...(showNonVlcBackups ? rows.filter(isNonVlcBackup) : [])
         ]
       : rows;
