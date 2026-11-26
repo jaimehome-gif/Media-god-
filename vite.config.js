@@ -19,5 +19,5 @@ export default defineConfig({
       ],
     }),
   ],
-  build: { outDir: 'dist' }
+  build: { outDir: 'dist', rollupOptions: { input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), combinedDebridTest: fileURLToPath(new URL('./combined-debrid-test.html', import.meta.url)) } } }
 });
