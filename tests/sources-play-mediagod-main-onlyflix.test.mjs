@@ -12,14 +12,17 @@ const functionBody = (start,end) => {
   return sources.slice(a,b);
 };
 const createSources = ({
-  hasDebrid=true, mediaType="movie", resumeAt=120, savedSources=[]
+  hasDebrid=true, mediaType="movie", resumeAt=120, savedSources=[],
+  returnedSources=savedSources, websiteCatalogue=true, launchResult=true, launchError=null
 }={})=>{
-  const calls=[],messages=[],combined=[];
+  const calls=[],messages=[],combined=[],notices=[];
   const vars={
-    player:{play:async request=>{calls.push(request);return true;}},
+    player:{play:async request=>{calls.push(request);if(launchError)throw launchError;return launchResult;}},
     visibleAddonStreams:savedSources,
-    addonStreams:savedSources,
-    websiteCatalogue:true,
+    addonStreams:returnedSources,
+    websiteCatalogue,
+    noWebsiteTorrentMatch:"No compatible website source found.",
+    setWebsitePlayerNotice:x=>notices.push(x),
     classifyTvBoxSource,
     setMessage:x=>messages.push(x),
     setRdSearching:()=>{},
@@ -39,7 +42,7 @@ const createSources = ({
   const playAddonStream=vm.runInNewContext(
     functionBody("  const playAddonStream =","  const pasteMagnet =")+"\nplayAddonStream",vars
   );
-  return {playInMediaGod,playAddonStream,calls,messages,combined};
+  return {playInMediaGod,playAddonStream,calls,messages,combined,notices};
 };
 test("main movie Play remains OnlyFlix first and no longer uses the web-player override",()=>{
   const card=read("src/components/mg/MediaCard.jsx");
@@ -129,4 +132,26 @@ test("Live TV preserves original provider route and has no new Source Play short
   assert.match(sources,/\.\.\.\(mediaType === "live" \? \[\] : \[\{/);
   assert.match(sources,/label: "Play in Media God"/);
   assert.match(sources,/onClick: playInMediaGod/);
+});
+
+test("website player reports filtered results without attempting an ineligible file",async()=>{
+  const ctx=createSources({returnedSources:[{type:"url",src:"https://example.invalid/page.html"}]});
+  await ctx.playInMediaGod();
+  assert.equal(ctx.calls.length,0);
+  assert.equal(ctx.notices.at(-1).reason,"no-file");
+  assert.equal(ctx.notices.at(-1).total,1);
+  assert.match(sources,/PersonalMoviSource defaultOpen/);
+});
+test("website player reports an unsuccessful launch and leaves native behavior unchanged",async()=>{
+  const direct={type:"url",src:"https://example.invalid/authorized.mp4"};
+  for(const [options,reason] of [[{launchResult:false},"not-opened"],[{launchError:Error("Synthetic failure")},"launch-error"]]){
+    const ctx=createSources({savedSources:[direct],...options});
+    await ctx.playInMediaGod();
+    assert.equal(ctx.calls.length,1);
+    assert.equal(ctx.notices.at(-1).reason,reason);
+  }
+  const native=createSources({websiteCatalogue:false,savedSources:[direct],launchResult:false});
+  await native.playInMediaGod();
+  assert.equal(native.calls.length,1);
+  assert.equal(native.notices.length,0);
 });
