@@ -12,7 +12,8 @@ export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
 
 export const isWebsiteSourcesPlayback = context =>
   isPublicWebsiteVod(context) &&
-  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
+  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection ||
+    context.source?.debridManual || context.active?.preferNativeVlc);
 
 // A transient upstream limit must not reopen a legacy/unfiltered error menu.
 // A TV layout heuristic alone is not evidence of an installed native app.
