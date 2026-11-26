@@ -1,10 +1,21 @@
-import { attachMediaGodControls } from "./media-god-controls.js";
+import { attachMediaGodControls, resumePoint } from "./media-god-controls.js";
 const input = document.getElementById("file");
 const clear = document.getElementById("close");
 const status = document.getElementById("status");
 const stage = document.getElementById("stage");
 let detachControls = null;
+let activeFile = null;
+const sessionPositions = new Map();
+const fileKey = file => JSON.stringify([file.name,file.size,file.lastModified]);
 function reset() {
+  if(activeFile){
+    const {key,player}=activeFile;
+    const point=resumePoint(player.currentTime,player.duration);
+    if(point){sessionPositions.delete(key);sessionPositions.set(key,point);}
+    else if(player.ended || player.currentTime>0)sessionPositions.delete(key);
+    while(sessionPositions.size>32)sessionPositions.delete(sessionPositions.keys().next().value);
+    activeFile=null;
+  }
   detachControls?.(); detachControls = null;
   for (const child of stage.children) child.pause?.();
   stage.replaceChildren();
@@ -35,7 +46,9 @@ try {
     player.addEventListener("play", () => { status.textContent = file.name + " — playing."; });
     player.addEventListener("error", () => { status.textContent = "Movi could not decode this file."; });
     stage.appendChild(player);
-    detachControls = attachMediaGodControls(player, stage, status);
+    const key=fileKey(file);
+    activeFile={key,player};
+    detachControls = attachMediaGodControls(player, stage, status,{resumeAt:sessionPositions.get(key)||0});
     clear.disabled = false;
     try {
       player.src = file;
