@@ -12,10 +12,25 @@ export function attachDecoderLifecycle(player, callbacks) {
     try { player.pause(); } catch { /* decoder may not have opened */ }
     callbacks().onFailure?.();
   };
-  const metadata = event => notify("onMetadata", event);
-  const progress = event => notify("onProgress", event);
+  // Some browser decoder builds deliver loadeddata before metadata or omit
+  // the metadata notification. Deliver it once when usable duration/picture
+  // are present, so the host's resume handler does not seek repeatedly.
+  let metadataDelivered = false;
+  const metadata = event => {
+    if (closed || failed || metadataDelivered) return;
+    if (!(Number(player.duration) > 0 && Number.isFinite(Number(player.duration)) &&
+          Number(player.videoWidth) > 0)) return;
+    metadataDelivered = true;
+    notify("onMetadata", event);
+  };
+  const progress = event => {
+    metadata(event);
+    notify("onProgress", event);
+  };
   player.addEventListener("error", fail);
   player.addEventListener("loadedmetadata", metadata);
+  player.addEventListener("loadeddata", metadata);
+  player.addEventListener("durationchange", metadata);
   player.addEventListener("timeupdate", progress);
   return {
     fail,
@@ -23,6 +38,8 @@ export function attachDecoderLifecycle(player, callbacks) {
       closed = true;
       player.removeEventListener("error", fail);
       player.removeEventListener("loadedmetadata", metadata);
+      player.removeEventListener("loadeddata", metadata);
+      player.removeEventListener("durationchange", metadata);
       player.removeEventListener("timeupdate", progress);
     },
   };
