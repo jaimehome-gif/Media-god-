@@ -19,6 +19,15 @@ test("only the website Sources path changes, never native or ordinary Play",()=>
   assert.equal(isWebsiteSourcesPlayback({...context,hostname:"example.test"}),false);
   assert.equal(isWebsiteSourcesPlayback({...context,profile:{}}),false);
 });
+test("Combined Debrid retains its website decoder when a resolver replaces the selected row", () => {
+  const resolved = { ...context, hostname: "www.underworldhub.co.uk",
+    source: { preferRd: true, debridManual: true }, active: { type: "file", url } };
+  assert.equal(isWebsiteSourcesPlayback(resolved), true);
+  assert.equal(isWebsiteSourcesPlayback({ ...resolved, source: { preferRd: true } }), false);
+  assert.equal(isWebsiteSourcesPlayback({ ...resolved, profile: { nativePlayerAvailable: true } }), false);
+  assert.equal(isWebsiteSourcesPlayback({ ...resolved, isLive: true }), false);
+});
+
 test("inspected compatible direct media passes browser capability checks",()=>{
   assert.equal(check(item()).allowed,true);
   assert.equal(check(item(),"https://media.example.test/owned-sample.m3u8").allowed,true);
