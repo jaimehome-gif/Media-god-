@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import PersonalBrowserVerification from "./PersonalBrowserVerification.jsx";
 import { isAndroidMobileRuntime, isFireTvRuntime } from "@/components/mg/runtimePlatform";
 
 export function canOpenPersonalMovi() {
@@ -21,6 +22,7 @@ export default function PersonalMoviSource({ defaultOpen = false }) {
       {open && <iframe title="Personal media Movi player" src="/decoder-lab/personal.html"
         sandbox="allow-scripts" allow="fullscreen; autoplay" allowFullScreen
         className="mt-4 h-[min(85vh,760px)] min-h-[480px] w-full rounded-xl border border-white/10 bg-black" />}
+      <PersonalBrowserVerification />
     </section>
   );
 }
