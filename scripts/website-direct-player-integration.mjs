@@ -84,6 +84,38 @@ try {
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=no-user-gesture-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
   strictBrowser = await puppeteer.launch({executablePath:process.env.CHROME_BIN || "/usr/bin/google-chrome",
     headless:true,acceptInsecureCerts:true,args:["--no-sandbox","--disable-dev-shm-usage","--autoplay-policy=document-user-activation-required","--no-proxy-server","--host-resolver-rules=MAP underworldhub.co.uk 127.0.0.1, MAP www.underworldhub.co.uk 127.0.0.1"]});
+  // Exercise the actual personal-file web page and new native-style controls.
+  // All requests remain within the synthetic fixture server.
+  {
+    const page=await browser.newPage();
+    const origin="https://www.underworldhub.co.uk:"+vite.httpServer.address().port;
+    await page.setRequestInterception(true);
+    page.on("request",request=>void (request.url().startsWith(origin+"/")||
+      /^(blob:|data:)/.test(request.url())?request.continue():request.abort()));
+    try{
+      await page.goto(origin+"/decoder-lab/personal.html");
+      await page.waitForFunction(()=>document.querySelector("#file")?.disabled===false);
+      await (await page.$("#file")).uploadFile(join(dir,"ac3.mkv"));
+      await page.waitForSelector(".mg-web-controls");
+      const click=async label=>{
+        const handle=await page.evaluateHandle(text=>[...document.querySelectorAll(".mg-web-controls button")].find(b=>b.textContent===text),label);
+        assert.ok(handle.asElement(),"Control exists: "+label);
+        await handle.asElement().click();
+      };
+      await click("Play");
+      await page.waitForFunction(()=>{const p=document.querySelector("movi-player");return p?.currentTime>0.5&&p.videoWidth>0&&p.getVideoPlaybackQuality().totalVideoFrames>0;},{timeout:30000});
+      await click("Pause");
+      await page.waitForFunction(()=>document.querySelector("movi-player")?.paused);
+      await click("Mute");
+      assert.equal(await page.evaluate(()=>document.querySelector("movi-player").muted),true);
+      await click("Unmute");
+      assert.equal(await page.evaluate(()=>document.querySelector("movi-player").muted),false);
+      await page.click("#close");
+      assert.equal(await page.$(".mg-web-controls"),null);
+      assert.equal(await page.$("movi-player"),null);
+      console.log("PASS: personal file web controls play, pause, mute and clean up actual decoder.");
+    }finally{await page.close();}
+  }
   const cases = [
     ["sample.mp4","h264","aac","127.0.0.1",false],
     ["sample.webm","vp9","opus","127.0.0.1",false],
