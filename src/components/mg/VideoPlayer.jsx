@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { noWebsiteTorrentMatch, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { noWebsiteTorrentMatch, websiteTorrentCandidate, websiteRenditionAllowed, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -948,8 +948,8 @@ export default function VideoPlayer({
     }
   );
 
-  const filterWebsiteTorrents = (source?.openSourcesDrawer || source?.manualSourceSelection) &&
-    !String(source?.id || "").startsWith("debrid-source:") &&
+  const filterWebsiteTorrents = (source?.openSourcesDrawer || source?.manualSourceSelection || source?.debridManual ||
+    mergedSources.some(item => item?.preferNativeVlc)) &&
     isPublicWebsiteVod({ hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(),
       source, isLive: source?.type === "live" });
   const sources = filterWebsiteTorrents ? mergedSources.filter(websiteTorrentCandidate) : mergedSources;
@@ -9072,13 +9072,10 @@ export default function VideoPlayer({
   const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
-    ? checkWebsiteDirectMedia({ url: resolvedSourceUrl, item: rdOverride || active, originalItem: active,
-        ...getBrowserMediaCapabilities() })
+    ? { allowed: websiteRenditionAllowed(resolvedSourceUrl, active, rdOverride),
+        reason: "The resolved file does not have a verified website playback format." }
     : null;
-  const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
-    canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride) &&
-    (!filterWebsiteTorrents || !rdOverride?.mediaInfo || rdOverride.audioRescue?.used || rdOverride.videoRescue?.used ||
-      websiteTorrentCandidate({ ...active, mediaInfo: rdOverride.mediaInfo }));
+  const moviSource = websiteSourcesPlayback && !websiteRateLimitHold && websiteDirectMediaCheck?.allowed;
   // Source discovery may publish more rows while a decoder is opening. Read
   // the latest ranked pool without restarting the active candidate's timeout.
   const websiteScanRef = useRef(null);

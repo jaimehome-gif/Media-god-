@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteRenditionAllowed, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -38,7 +38,7 @@ test("public website rejects before existing browser playback and keeps native r
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
   assert.match(player,/const useBrowserSourceVlc = !websiteSourcesPlayback && !nativeFireTvPlayer/);
   assert.match(player,/websiteDirectMediaCheck\?\.allowed === false[\s\S]*?Return to Sources[\s\S]*?useBrowserSourceVlc \?/);
-  assert.match(player,/item: rdOverride \|\| active/);
+  assert.match(player,/websiteRenditionAllowed\(resolvedSourceUrl, active, rdOverride\)/);
   assert.match(player,/useNativePlayback \? \(/);
 });
 
@@ -59,7 +59,7 @@ test("original protected source remains excluded even when resolved rendition la
   assert.match(result.reason,/Protected media/);
   assert.equal(checkWebsiteDirectMedia({url,item:item(),originalItem:item(),...caps}).allowed,true);
   const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
-  assert.match(player,/item: rdOverride \|\| active, originalItem: active/);
+  assert.match(player,/websiteRenditionAllowed\(resolvedSourceUrl, active, rdOverride\)/);
 });
 
 
@@ -190,15 +190,17 @@ test("website catalogue torrents need compatible video evidence before resolutio
   const candidate = label => websiteTorrentCandidate({type:"rd",label});
   for (const label of ["Trusted Cached · 4K · HDR · HEVC", "1080p", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
     assert.equal(candidate(label),false,label);
-  for (const label of ["release.1080p.x264.AAC", "720p H.264 DD+", "1080p VP9 Opus", "1080p x265 AAC", "AV1 Opus", "XviD MP3", "VP8 Vorbis", "H264 FLAC"])
+  for (const label of ["release.1080p.x264.AAC.mp4", "1080p VP9 Opus.webm", "1080p x265 AAC.mkv", "AV1 Opus.mkv", "XviD MP3.mkv", "VP8 Vorbis.webm", "H264 FLAC.mkv"])
     assert.equal(candidate(label),true,label);
-  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("hevc","aac")}),true);
-  assert.equal(websiteTorrentCandidate({type:"rd",label:"unknown",...item("h264","dts")}),true);
-  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264",...item("h264","truehd")}),false);
+  for (const label of ["x264 AAC.avi", "x264 DTS.mp4", "x264 AAC", "x264.mkv", "VP9 MP3.webm"])
+    assert.equal(candidate(label),false,label);
+  assert.equal(websiteRenditionAllowed(url,{label:"x264 AAC.mp4"},{}),false);
+  assert.equal(websiteRenditionAllowed(url,item(),item("h264","dts")),false);
+  assert.equal(websiteRenditionAllowed(url,item(),item()),true);
   for (const track of [{height:2160}, {bit_depth:10}, {color_transfer:"smpte2084"}, {pix_fmt:"yuv420p10le"}])
     assert.equal(websiteTorrentCandidate({type:"rd",mediaInfo:{video_tracks:[{codec:"hevc",...track}],audio_tracks:[{codec:"aac"}]}}),false);
   assert.equal(candidate("1080p MPEG-4 container"),false);
-  assert.equal(websiteTorrentCandidate({type:"url",url}),true);
+  assert.equal(websiteTorrentCandidate({type:"url",url}),false);
 });
 
 test("website catalogue excludes pending releases and unsuitable direct links", () => {
@@ -211,8 +213,7 @@ test("website catalogue excludes pending releases and unsuitable direct links", 
       {url,mimeType:"text/html"}, {url,headers:{Referer:"private"}}, {url,...item("h264","truehd")}]) {
     assert.equal(websiteTorrentCandidate(source),false);
   }
-  // A present track with incomplete labels can still be inspected by the decoder.
-  assert.equal(websiteTorrentCandidate({url,...item("h264","")}),true);
+  assert.equal(websiteTorrentCandidate({url,...item("h264","")}),false);
   assert.equal(websiteTorrentCandidate({url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}}),false);
-  assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
+  assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),false);
 });
