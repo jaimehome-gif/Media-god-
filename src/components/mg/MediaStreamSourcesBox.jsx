@@ -1041,11 +1041,6 @@ export default function StreamSourcesBox({
           debridManual:
             true,
 
-          ...(websiteCatalogue ? {
-            openSourcesDrawer: !readyOnly,
-            allowNonPlaybackFallback: false,
-          } : {}),
-
           // When a viewer picked an uncached TV torrent, use the same
           // successful Combined Debrid lookup automatically. Do not
           // immediately re-add its unavailable hash (which can trigger

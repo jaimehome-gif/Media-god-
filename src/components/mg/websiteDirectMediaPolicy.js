@@ -12,8 +12,7 @@ export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
 
 export const isWebsiteSourcesPlayback = context =>
   isPublicWebsiteVod(context) &&
-  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection ||
-    context.source?.debridManual || context.active?.preferNativeVlc);
+  Boolean(context.source?.openSourcesDrawer || context.source?.manualSourceSelection || context.active?.preferNativeVlc);
 
 // A transient upstream limit must not reopen a legacy/unfiltered error menu.
 // A TV layout heuristic alone is not evidence of an installed native app.
@@ -118,17 +117,9 @@ export function websiteTorrentCandidate(item) {
     item.debridProvider || item.viaRealDebrid || /^(rd|rd_torrent|torrent|magnet)$/.test(item.type) ||
     /^magnet:/i.test(item.src || item.url || "") ||
     /torrentio|mediafusion|comet|aiostreams/i.test(item.addon || "");
-  if (item.drm) return false;
-  const pending = item.cacheRequired === true || item.debridCacheCheckState === "uncached" ||
-    (item.debridCacheChecked === true && item.debridCached === false) || sourceHasPendingCacheSignal(item);
-  if (pending) {
-    // A compatible torrent can enter the resolver or the preparation chooser
-    // before a stream URL exists. A cache hint alone cannot identify a torrent.
-    const hasHash = [item.infoHash, item.info_hash, item.magnet, item.magnetLink, item.src, item.url]
-      .some(value => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value || "") ||
-        /^magnet:\?[^#]*[?&:]btih:(?:[a-f0-9]{40}|[a-f0-9]{64})(?:&|$)/i.test(value || ""));
-    if (!isTorrent || !(hasHash || item.rdTorrentId)) return false;
-  }
+  if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached" ||
+      (item.debridCacheChecked === true && item.debridCached === false)) return false;
+  if (isTorrent && sourceHasPendingCacheSignal(item)) return false;
   if (!isTorrent) {
     if (["provider", "external", "youtube", "embed", "live"].includes(String(item.type || "").toLowerCase())) return false;
     const url = item.src || item.url;

@@ -19,15 +19,6 @@ test("only the website Sources path changes, never native or ordinary Play",()=>
   assert.equal(isWebsiteSourcesPlayback({...context,hostname:"example.test"}),false);
   assert.equal(isWebsiteSourcesPlayback({...context,profile:{}}),false);
 });
-test("Combined Debrid retains its website decoder when a resolver replaces the selected row", () => {
-  const resolved = { ...context, hostname: "www.underworldhub.co.uk",
-    source: { preferRd: true, debridManual: true }, active: { type: "file", url } };
-  assert.equal(isWebsiteSourcesPlayback(resolved), true);
-  assert.equal(isWebsiteSourcesPlayback({ ...resolved, source: { preferRd: true } }), false);
-  assert.equal(isWebsiteSourcesPlayback({ ...resolved, profile: { nativePlayerAvailable: true } }), false);
-  assert.equal(isWebsiteSourcesPlayback({ ...resolved, isLive: true }), false);
-});
-
 test("inspected compatible direct media passes browser capability checks",()=>{
   assert.equal(check(item()).allowed,true);
   assert.equal(check(item(),"https://media.example.test/owned-sample.m3u8").allowed,true);
@@ -210,17 +201,7 @@ test("website catalogue torrents need compatible video evidence before resolutio
   assert.equal(websiteTorrentCandidate({type:"url",url}),true);
 });
 
-test("identifiable pending torrents can be resolved or prepared while codec restrictions still apply", () => {
-  const hash = "ac".repeat(20);
-  const pending = { type: "rd", label: "1080p x264 AAC", resolutionStrategy: "rd_magnet" };
-  for (const id of [{ infoHash: hash }, { src: "magnet:?xt=urn:btih:" + hash }, { rdTorrentId: "existing" }]) {
-    assert.equal(websiteTorrentCandidate({ ...pending, ...id }), true);
-    assert.equal(websiteTorrentCandidate({ ...pending, ...id, cacheRequired: true }), true);
-    assert.equal(websiteTorrentCandidate({ ...pending, ...id, label: "4K HDR HEVC" }), false);
-    assert.equal(websiteTorrentCandidate({ ...pending, ...id, drm: true }), false);
-  }
-});
-test("website catalogue excludes unidentifiable pending releases and unsuitable direct links", () => {
+test("website catalogue excludes pending releases and unsuitable direct links", () => {
   const torrent = {type:"rd", label:"1080p H264 AAC"};
   for (const state of [{label:"Uncached 1080p H264 AAC"}, {rdStatus:"downloading"}, {cometUncached:true},
       {debridCacheChecked:true,debridCached:false}]) {
