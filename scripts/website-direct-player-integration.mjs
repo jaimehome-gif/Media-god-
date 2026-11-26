@@ -157,8 +157,9 @@ try {
         }
         await page.waitForFunction(()=>Array.from(document.querySelectorAll("button")).some(button=>
           button.innerText.includes("Owned Test Clip 2025 English")));
-        const button = await page.evaluateHandle(()=>Array.from(document.querySelectorAll("button"))
-          .find(row=>row.innerText.includes("Play in Media God")));
+        const launchLabel = torrentMode === "ranked" ? "Combined Debrid" : "Play in Media God";
+        const button = await page.evaluateHandle(label => Array.from(document.querySelectorAll("button"))
+          .find(row => row.innerText.trim().startsWith(label)), launchLabel);
         panelLookupCount = await page.evaluate(()=>window.fixtureLookups);
         await button.asElement().click();
         if (torrentMode === "cooldown-repeat") {
