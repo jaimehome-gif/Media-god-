@@ -117,7 +117,7 @@ function testedWebsiteFormat(item, url, inspectedOnly, allowIncomplete = false) 
   const info = item.mediaInfo || item.media_info || {};
   const videos = info.video_tracks || info.videoTracks;
   const audios = info.audio_tracks || info.audioTracks;
-  const filename = info.filename || item.filename || item.file || item.behaviorHints?.filename || item.label || "";
+  const filename = info.filename || item.filename || item.file || (!inspectedOnly && (item.behaviorHints?.filename || item.label)) || "";
   const hints = [filename, item.label, item.quality, item.description].filter(Boolean).join(" ").replace(/_/g, " ");
   // Release names and advertised quality are discovery hints, not proof of
   // the resolved file\'s actual resolution, bit depth or colour transfer.
@@ -222,9 +222,9 @@ export function websiteTorrentCandidate(item) {
     const path = new URL(url).pathname;
     const info = item.mediaInfo || item.media_info;
     if (!Array.isArray(info?.video_tracks || info?.videoTracks) && !/\.(mp4|m4v|mkv|webm|m3u8|avi)$/i.test(path) &&
-        !/^video\/|mpegurl/.test(mime)) return false;
+        !/^video\/|mpegurl/.test(mime) && !["file","direct"].includes(String(item.type || "").toLowerCase())) return false;
   }
-  return testedWebsiteFormat(item, item.src || item.url, false, true);
+  return websiteRenditionMayInspect(item.src || item.url, item, item);
 }
 
 // Check the resolved transport separately from discovery and codec metadata.
