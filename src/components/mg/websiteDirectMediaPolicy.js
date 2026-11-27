@@ -1,5 +1,3 @@
-import { sourceHasPendingCacheSignal } from "./sourceCacheVisibility.js";
-
 // Web-only direct-media screening. It does not discover or resolve streams,
 // alter DRM/access controls, or make claims about rights to a media URL.
 // The public browser engine must not depend on a particular launch button.
@@ -121,7 +119,9 @@ function testedWebsiteFormat(item, url, inspectedOnly, allowIncomplete = false) 
   const audios = info.audio_tracks || info.audioTracks;
   const filename = info.filename || item.filename || item.file || item.behaviorHints?.filename || item.label || "";
   const hints = [filename, item.label, item.quality, item.description].filter(Boolean).join(" ").replace(/_/g, " ");
-  if (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080) return false;
+  // Release names and advertised quality are discovery hints, not proof of
+  // the resolved file\'s actual resolution, bit depth or colour transfer.
+  if (!inspectedOnly && (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080)) return false;
   const ext = value => /\.([a-z0-9]{2,5})$/i.exec(String(value || ""))?.[1]?.toLowerCase();
   const path = /^https?:/i.test(url || "") ? String(url).split(/[?#]/)[0] : "";
   const container = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
@@ -163,8 +163,8 @@ export function websiteRenditionAllowed(url, original, rendition) {
 }
 
 const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
-export const websiteTorrentFilterDescription = "Website playback requires a tested container and verified video and audio codecs up to 1080p SDR. Incomplete source metadata is checked after resolution.";
-export const noWebsiteTorrentMatch = "No eligible website source found. No available result passed the initial source checks.";
+export const websiteTorrentFilterDescription = "Website playback checks the resolved file for a tested container and compatible audio/video tracks. Unverified discovery labels are not playback results.";
+export const noWebsiteTorrentMatch = "Sources were found, but no verified playable file is ready.";
 
 function standardRangeTrack(track) {
   const transfer = String(track?.color_transfer || track?.colour_transfer || "").toLowerCase();
@@ -182,9 +182,24 @@ export function websiteTorrentCandidate(item) {
     item.debridProvider || item.viaRealDebrid || /^(rd|rd_torrent|torrent|magnet)$/.test(item.type) ||
     /^magnet:/i.test(item.src || item.url || "") ||
     /torrentio|mediafusion|comet|aiostreams/i.test(item.addon || "");
+  // An inspected, secure, already-resolved file is stronger evidence than
+  // stale cache labels copied from a discovery row. Never apply this exception
+  // to an unresolved magnet or a file with unverified media tracks.
+  const resolvedUrl = item.src || item.url;
+  if (item.launchQualified === true && websiteRenditionAllowed(resolvedUrl, item, item)) return true;
   if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached" ||
       (item.debridCacheChecked === true && item.debridCached === false)) return false;
-  if (isTorrent && sourceHasPendingCacheSignal(item)) return false;
+  // A guessed pending strategy (e.g. rd_magnet) or a provider label is
+  // not a confirmed cache miss. Keep it eligible for the existing account
+  // resolver; explicit cache misses above still cannot autoplay.
+  if (isTorrent) {
+    const info = item.mediaInfo || item.media_info;
+    if (Array.isArray(info?.video_tracks || info?.videoTracks) &&
+        Array.isArray(info?.audio_tracks || info?.audioTracks)) {
+      return testedWebsiteFormat(item, item.src || item.url, true, true);
+    }
+    return true;
+  }
   if (!isTorrent) {
     if (["provider", "external", "youtube", "embed", "live"].includes(String(item.type || "").toLowerCase())) return false;
     const url = item.src || item.url;

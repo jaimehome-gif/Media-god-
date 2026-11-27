@@ -186,14 +186,14 @@ test("explicitly saved personal torrent is pending, never treated as a verified 
   assert.match(player,/awaiting compatibility check/);
 });
 
-test("website discovery excludes known incompatible files but retains incomplete metadata for inspection", () => {
+test("website discovery does not treat release-name guesses as actual codec inspection", () => {
   const candidate = label => websiteTorrentCandidate({type:"rd",label});
   for (const label of ["Trusted Cached · 4K · HDR · HEVC", "2160p x264", "1080p AV1 HDR", "x264 Hi10P", "x264 TrueHD"])
-    assert.equal(candidate(label),false,label);
+    assert.equal(candidate(label),true,label);
   for (const label of ["release.1080p.x264.AAC.mp4", "1080p VP9 Opus.webm", "1080p x265 AAC.mkv", "AV1 Opus.mkv", "XviD MP3.mkv", "VP8 Vorbis.webm", "H264 FLAC.mkv"])
     assert.equal(candidate(label),true,label);
   for (const label of ["x264 AAC.avi", "x264 DTS.mp4", "VP9 MP3.webm"])
-    assert.equal(candidate(label),false,label);
+    assert.equal(candidate(label),true,label);
   assert.equal(websiteRenditionAllowed(url,{label:"x264 AAC.mp4"},{}),false);
   assert.equal(websiteRenditionAllowed(url,item(),item("h264","dts")),false);
   assert.equal(websiteRenditionAllowed(url,item(),item()),true);
@@ -205,10 +205,12 @@ test("website discovery excludes known incompatible files but retains incomplete
   assert.equal(websiteRenditionAllowed(url,{type:"url",url},{}),false);
 });
 
-test("website catalogue excludes pending releases and unsuitable direct links", () => {
+test("website catalogue distinguishes guessed pending status from confirmed cache misses", () => {
   const torrent = {type:"rd", label:"1080p H264 AAC"};
-  for (const state of [{label:"Uncached 1080p H264 AAC"}, {rdStatus:"downloading"}, {cometUncached:true},
-      {debridCacheChecked:true,debridCached:false}]) {
+  for (const state of [{label:"Uncached 1080p H264 AAC"}, {rdStatus:"downloading"}, {cometUncached:true}, {resolutionStrategy:"rd_magnet",debridCacheCheckState:"unknown"}]) {
+    assert.equal(websiteTorrentCandidate({...torrent,...state}),true);
+  }
+  for (const state of [{cacheRequired:true},{debridCacheChecked:true,debridCached:false},{debridCacheCheckState:"uncached"}]) {
     assert.equal(websiteTorrentCandidate({...torrent,...state}),false);
   }
   for (const source of [{url:"http://example.test/movie.mp4"}, {url,type:"embed"},
@@ -252,4 +254,32 @@ test("Combined Debrid retains discovery candidates and only presents verified we
   assert.match(box,/const displayedAddonStreams = useMemo\(\(\) => websiteCatalogue[\s\S]*?websiteRenditionAllowed/);
   assert.match(box,/\.\.\.displayedAddonStreams\.slice/);
   assert.match(box,/const playCombinedDebrid =[\s\S]*?completeSources: mediaType === "live"\s*\? visibleAddonStreams\s*: visibleAddonStreams/);
+});
+
+// An already inspected personal-library file must not disappear because stale
+// discovery metadata described the earlier, unresolved torrent.
+test("verified library renditions survive stale cache flags but unresolved files do not", () => {
+  const stale = {type:"rd",debridCacheChecked:true,debridCached:false,debridCacheCheckState:"uncached",cacheRequired:true};
+  const verified = {...stale,...item(),type:"file",src:url,launchQualified:true};
+  assert.equal(websiteTorrentCandidate(verified),true);
+  assert.equal(websiteTorrentCandidate({...verified,src:"magnet:?xt=demo"}),false);
+  assert.equal(websiteTorrentCandidate({...verified,mediaInfo:undefined}),false);
+  assert.equal(websiteTorrentCandidate({...verified,drm:true}),false);
+  assert.equal(websiteTorrentCandidate({...verified,headers:{Authorization:"fixture"}}),false);
+  assert.equal(websiteTorrentCandidate({...verified,...item("h264","truehd")}),false);
+  assert.equal(websiteTorrentCandidate({...verified,launchQualified:false}),false);
+});
+test("website Combined Debrid checks the account library even with an empty initial candidate pool", () => {
+  const provider = readFileSync(new URL("../src/components/mg/MediaPlayerProvider.jsx",import.meta.url),"utf8");
+  assert.match(provider,/const websiteAccountLibraryLookup = \(request\?\.openSourcesDrawer \|\| request\?\.debridManual\)/);
+  assert.match(provider,/if \(hasRd && !request\?\.noRd && !request\?\.skipRdLookup && websiteAccountLibraryLookup &&\s*initialPlayableSources\.every/);
+  assert.match(provider,/cached\?\.launchQualified && websiteTorrentCandidate\(cached\)/);
+});
+
+test("actual compatible media tracks take precedence over stale filename hints",()=>{
+  const file={...item(),src:url,label:"Original 4K HDR TrueHD",height:2160};
+  assert.equal(websiteRenditionAllowed(url,file,file),true);
+  assert.equal(websiteRenditionAllowed(url,file,{...file,...item("h264","truehd")}),false);
+  const high={...file,mediaInfo:{video_tracks:[{codec:"h264",height:2160}],audio_tracks:[{codec:"aac"}]}};
+  assert.equal(websiteRenditionAllowed(url,file,high),false);
 });

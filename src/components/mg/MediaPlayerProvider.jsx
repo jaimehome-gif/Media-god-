@@ -3045,9 +3045,14 @@ export function PlayerProvider({
         // A panel of unresolved magnets can omit a completed file already in
         // the viewer's account. Give the existing title/track inspection first
         // chance before submitting a new torrent, with a bounded startup wait.
-        if (hasRd && !request?.noRd && !request?.skipRdLookup && websitePanelSources.length &&
-            initialPlayableSources.length && initialPlayableSources.every(item =>
-              isMagnetSource(item) && !item.rdTorrentId && !sourceIsConfirmedCachedForPlayback(item))) {
+        const websiteAccountLibraryLookup = (request?.openSourcesDrawer || request?.debridManual) &&
+          !request?.manualSourceSelection && isPublicWebsiteVod({
+            hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(), source: request, isLive,
+          });
+        if (hasRd && !request?.noRd && !request?.skipRdLookup && websiteAccountLibraryLookup &&
+            initialPlayableSources.every(item =>
+              !websiteTorrentCandidate(item) ||
+              (isMagnetSource(item) && !item.rdTorrentId && !sourceIsConfirmedCachedForPlayback(item)))) {
           let timeout;
           const lookup = await Promise.race([
             findRdLibrarySource({

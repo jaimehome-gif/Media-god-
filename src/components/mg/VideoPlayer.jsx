@@ -3358,7 +3358,10 @@ export default function VideoPlayer({
    * suppressing resolution leaves a bare spinner and Try Again forever.
    */
   const sourcesPlayback = playbackMediaType !== "live" && Boolean(
-    source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc
+    source?.openSourcesDrawer || source?.manualSourceSelection || active?.preferNativeVlc ||
+    (source?.debridManual && isPublicWebsiteVod({
+      hostname: globalThis.location?.hostname, profile: getPlaybackDeviceProfile(), source, isLive,
+    }))
   );
   const [requestedCacheJob, setRequestedCacheJob] = useState("");
   const cacheJobKey = JSON.stringify([source?.playRequestId, rdMediaContextKey, activeResolutionKey]);
