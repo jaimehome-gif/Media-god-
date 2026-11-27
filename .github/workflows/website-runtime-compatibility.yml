@@ -1,0 +1,24 @@
+name: Website runtime compatibility browser test
+on:
+  pull_request:
+    paths:
+      - 'src/components/mg/VideoPlayer.jsx'
+      - 'src/components/mg/websiteDirectMediaPolicy.js'
+      - 'tests/fixtures/website-direct-player.jsx'
+      - 'scripts/website-direct-player-integration.mjs'
+      - '.github/workflows/website-runtime-compatibility.yml'
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node --test tests/website-direct-codecs.test.mjs
+      - run: MG_RUNTIME_INSPECTION_ONLY=1 node scripts/website-direct-player-integration.mjs
