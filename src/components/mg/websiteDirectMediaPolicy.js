@@ -149,6 +149,27 @@ export function websiteTorrentCandidate(item) {
     catalogueVideoCodec.test(String(item.videoCodec || item.video_codec || ""));
 }
 
+// A resolved rendition is a different evidence stage from a catalogue label.
+// Keep existing access/cache restrictions, but evaluate the actual inspected
+// tracks, not the original release name. Missing metadata remains pending;
+// the decoder must still demonstrate picture and sound before auto-selection.
+export function resolvedWebsiteMediaCandidate(original, rendition) {
+  if (!rendition || original?.drm || rendition.drm) return false;
+  if (original?.cacheRequired === true || original?.debridCacheCheckState === "uncached" ||
+      (original?.debridCacheChecked === true && original?.debridCached === false) ||
+      sourceHasPendingCacheSignal(original)) return false;
+  const info = rendition.mediaInfo || rendition.media_info;
+  if (!info) return true;
+  if (rendition.hdr === true || info.hdr === true || Number(rendition.height || info.height) > 1080) return false;
+  const videos = info.video_tracks || info.videoTracks;
+  const audios = info.audio_tracks || info.audioTracks;
+  if (Array.isArray(videos) && !videos.some(track => track && standardRangeTrack(track) &&
+      (!codec(track) || catalogueVideoCodec.test(codec(track))))) return false;
+  if (Array.isArray(audios) && !audios.some(track => track &&
+      (!codec(track) || catalogueAudioCodec.test(codec(track))))) return false;
+  return true;
+}
+
 // Check the resolved transport separately from discovery and codec metadata.
 export function canOpenWebsiteMovi(url, original, rendition) {
   if (original?.drm || rendition?.drm) return false;

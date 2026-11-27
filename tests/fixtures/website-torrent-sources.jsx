@@ -29,6 +29,15 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
       audio_tracks: [{codec:audioCodec,language:"English"}],
     };
   }
+  if (mode === "late-codec") {
+    // The actual generated MP4 has H264 and AAC; only the inspection label is late.
+    // Keep the original valid catalogue candidate and verify actual decoder output.
+    item.rdTorrentId = ready.torrent_id;
+    ready.media_info = {
+      video_tracks: [{codec:"",height:180}],
+      audio_tracks: [{codec:"aac",language:"English"}],
+    };
+  }
   const streams = ["ranked","seedless"].includes(mode) ? [
     { ...item, id: "incompatible", label: "Owned Test Clip 2025 English 4K HDR HEVC",
       infoHash: "ef".repeat(20), rdTorrentId: "must-never-resolve" },
