@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { websiteRenditionAllowed, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteRenditionMayInspect, websiteRenditionAllowed, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -282,4 +282,33 @@ test("actual compatible media tracks take precedence over stale filename hints",
   assert.equal(websiteRenditionAllowed(url,file,{...file,...item("h264","truehd")}),false);
   const high={...file,mediaInfo:{video_tracks:[{codec:"h264",height:2160}],audio_tracks:[{codec:"aac"}]}};
   assert.equal(websiteRenditionAllowed(url,file,high),false);
+});
+
+test("secure resolved files with missing track metadata may be inspected but are not verified choices",()=>{
+  for(const source of [{type:"file",src:url},{type:"file",src:url,mediaInfo:{video_tracks:[{codec:"h264"}]}},{type:"file",src:"https://media.example.test/opaque"}]) {
+    assert.equal(websiteRenditionMayInspect(source.src,source,source),true);
+    assert.equal(websiteRenditionAllowed(source.src,source,source),false);
+  }
+  for(const source of [{...item("h264","truehd"),src:url},{src:url,drm:true},{src:url,headers:{Authorization:"fixture"}},{src:url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}},{src:url,type:"embed"},{src:"magnet:?xt=demo"},{src:"http://media.example.test/sample.mp4"}]) {
+    assert.equal(websiteRenditionMayInspect(source.src,source,source),false);
+  }
+  assert.equal(websiteRenditionAllowed("https://media.example.test/sample.m4v",item(),item()),true);
+});
+test("website scan only admits inspected compatible renditions to the decoder and chooser",()=>{
+  const player = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/allowed: websiteRenditionAllowed\(resolvedSourceUrl, active, rdOverride\),/);
+  assert.equal(player.includes("websiteRenditionMayInspect(resolvedSourceUrl"),false);
+  assert.match(player,/websiteRenditionAllowed\(getSourceUrl\(rendition\), item, rendition\)/);
+  assert.match(player,/mediaInfo: multiData.media_info \|\| multiData.mediaInfo \|\| null/);
+});
+test("confirmed format matrix is the only eligible resolved playback matrix",()=>{
+  const matrix={mp4:{h264:["aac"]},m3u8:{h264:["aac"]},webm:{vp9:["opus"],vp8:["vorbis"]},mkv:{h264:["aac","ac3","eac3","dts","flac","mp3"],hevc:["aac"],av1:["opus"],mpeg4:["mp3"]}};
+  for(const [container,formats] of Object.entries(matrix)) {
+    const path="https://media.example.test/owned-sample."+container;
+    for(const v of ["h264","hevc","vp9","vp8","av1","mpeg4","unknown"]) {
+      for(const a of ["aac","ac3","eac3","dts","flac","mp3","opus","vorbis","truehd","unknown",""]) {
+        assert.equal(websiteRenditionAllowed(path,{},item(v,a)),Boolean(formats[v]?.includes(a)),container+" "+v+" "+a);
+      }
+    }
+  }
 });

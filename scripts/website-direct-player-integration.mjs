@@ -95,7 +95,13 @@ try {
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
-  for (const [name,v,a,host,full,mobile,strict,torrentMode] of cases) {
+  const runtimeOnly = process.env.MG_RUNTIME_INSPECTION_ONLY === "1";
+  const selectedCases = runtimeOnly ? [
+    ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false],
+    ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false]),
+    ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]].map(([file,a])=>[file,file.endsWith(".webm")?"vp9":"h264",a,"www.underworldhub.co.uk",true,true,false]),
+  ] : cases;
+  for (const [name,v,a,host,full,mobile,strict,torrentMode] of selectedCases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -109,8 +115,10 @@ try {
       if (/Maximum update depth exceeded|Too many re-renders|Encountered two children with the same key/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
     });
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
+    const rejectedFixtureRequests = [];
     await page.setRequestInterception(true);
     page.on("request",request=>{
+      if (runtimeOnly && /\/(?:unavailable|unsupported-audio)\.mp4(?:[?#]|$)/.test(request.url())) rejectedFixtureRequests.push(request.url());
       if (request.url().startsWith(base.slice(0,base.indexOf("/__mg_fixture/"))+"/") || request.url().startsWith("blob:") || request.url().startsWith("data:")) {
         void request.continue();
       } else {
@@ -135,9 +143,10 @@ try {
       // mount without activation, using CDP explicitly with userGesture:false.
       const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
       input.automaticFallback = full && !mobile && name === "ac3.mkv";
-      const mount = async ({name,v,a,full,mixedChoices,automaticFallback})=>{
+      input.runtimeInspection = runtimeOnly;
+      const mount = async ({name,v,a,full,mixedChoices,automaticFallback,runtimeInspection})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback,runtimeInspection});
       };
       let gate;
       let panelLookupCount;
@@ -205,6 +214,15 @@ try {
               return samples.some(sample=>Math.abs(sample)>0.005);
             });
         },{timeout:30000});
+        if (runtimeOnly) {
+          await page.waitForFunction(file=>document.querySelector("movi-player")?.src?.includes(file),{},name);
+          assert.deepEqual(rejectedFixtureRequests, [], "unknown or unsupported file must not be requested by the decoder");
+          await page.click('[data-mg-open-in-player-sources="true"]');
+          const verifiedChoices = await page.evaluate(()=>Array.from(document.querySelectorAll('[data-mg-source-choice]'),row=>row.textContent));
+          assert.equal(verifiedChoices.length,1);
+          assert.ok(verifiedChoices[0].includes("Verified owned sample"));
+          console.log("PASS verified format "+name+" rendered frames and non-silent audio; unverified and unsupported alternatives excluded.");
+        }
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
           if (torrentMode === "cooldown") {

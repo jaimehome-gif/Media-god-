@@ -117,16 +117,17 @@ function testedWebsiteFormat(item, url, inspectedOnly, allowIncomplete = false) 
   const info = item.mediaInfo || item.media_info || {};
   const videos = info.video_tracks || info.videoTracks;
   const audios = info.audio_tracks || info.audioTracks;
-  const filename = info.filename || item.filename || item.file || item.behaviorHints?.filename || item.label || "";
+  const filename = info.filename || item.filename || item.file || (!inspectedOnly && (item.behaviorHints?.filename || item.label)) || "";
   const hints = [filename, item.label, item.quality, item.description].filter(Boolean).join(" ").replace(/_/g, " ");
   // Release names and advertised quality are discovery hints, not proof of
   // the resolved file\'s actual resolution, bit depth or colour transfer.
   if (!inspectedOnly && (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080)) return false;
   const ext = value => /\.([a-z0-9]{2,5})$/i.exec(String(value || ""))?.[1]?.toLowerCase();
   const path = /^https?:/i.test(url || "") ? String(url).split(/[?#]/)[0] : "";
-  const container = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
+  const detectedContainer = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
     "video/x-matroska":"mkv", "application/vnd.apple.mpegurl":"m3u8", "application/x-mpegurl":"m3u8" })[
       String(item.mimeType || item.mime_type || item.contentType || "").toLowerCase().split(";")[0]];
+  const container = detectedContainer === "m4v" ? "mp4" : detectedContainer;
   // A missing container is not a negative codec result. Discovery may keep
   // an eligible file pending inspection; the actual decoder gate may not.
   if (container && !Object.prototype.hasOwnProperty.call(testedFormats, container)) return false;
@@ -160,6 +161,19 @@ export function websiteRenditionAllowed(url, original, rendition) {
   const file = rendition || original;
   if ((file?.audioRescue?.used || file?.videoRescue?.used) && !(file.mediaInfo || file.media_info)?.rendition_verified) return false;
   return Boolean(file && testedWebsiteFormat(file, url, true));
+}
+
+// Inspect secure resolved media with incomplete metadata using the same decoder
+// that plays the file. This is not a verified chooser entry; known incompatible
+// tracks, explicit missing tracks, DRM and unsafe transport remain rejected.
+export function websiteRenditionMayInspect(url, original, rendition) {
+  if (!canOpenWebsiteMovi(url, original, rendition)) return false;
+  const file = rendition || original;
+  if (!file || file.live || file.diagnostic ||
+      ["provider","external","youtube","embed","live","status"].includes(String(file.type || "").toLowerCase())) return false;
+  const info = file.mediaInfo || file.media_info;
+  if ((file.audioRescue?.used || file.videoRescue?.used) && !info?.rendition_verified) return false;
+  return testedWebsiteFormat(file, url, true, true);
 }
 
 const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
@@ -208,9 +222,9 @@ export function websiteTorrentCandidate(item) {
     const path = new URL(url).pathname;
     const info = item.mediaInfo || item.media_info;
     if (!Array.isArray(info?.video_tracks || info?.videoTracks) && !/\.(mp4|m4v|mkv|webm|m3u8|avi)$/i.test(path) &&
-        !/^video\/|mpegurl/.test(mime)) return false;
+        !/^video\/|mpegurl/.test(mime) && !["file","direct"].includes(String(item.type || "").toLowerCase())) return false;
   }
-  return testedWebsiteFormat(item, item.src || item.url, false, true);
+  return websiteRenditionMayInspect(item.src || item.url, item, item);
 }
 
 // Check the resolved transport separately from discovery and codec metadata.

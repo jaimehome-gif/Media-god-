@@ -5863,6 +5863,7 @@ export default function VideoPlayer({
                     multiData.filename ||
                     "",
                   provider: multiData.provider || debridProvider,
+                  mediaInfo: multiData.media_info || multiData.mediaInfo || null,
                   sourceUrl: magnet,
                 });
                 setRdFiles(
@@ -9107,13 +9108,20 @@ export default function VideoPlayer({
       scan.proven = false;
       scan.decoderFailed = false;
       scan.noPeersSince = null;
+      scan.firstFrameTime = null;
     }
     const player = stageRef.current?.querySelector("movi-player");
-    if (!scan.decoderFailed && player?.videoWidth && player.audioTracks?.length &&
-        player.getVideoPlaybackQuality?.().totalVideoFrames > 1 && player.currentTime > 0.25) {
-      scan.proven = true;
-      setWebsiteScanMessage("");
-      return;
+    const tracks = player?.audioTracks;
+    const hasAudioTrack = Boolean(tracks?.length && Array.from(tracks).some(track => track && track.enabled !== false));
+    const frameTime = Number(player?.currentTime);
+    if (!scan.decoderFailed && !player?.paused && player?.videoWidth && player.videoHeight <= 1080 && hasAudioTrack &&
+        player.getVideoPlaybackQuality?.().totalVideoFrames > 1 && Number.isFinite(frameTime)) {
+      if (scan.firstFrameTime == null) scan.firstFrameTime = frameTime;
+      if (frameTime - scan.firstFrameTime > 0.25) {
+        scan.proven = true;
+        setWebsiteScanMessage("");
+        return;
+      }
     }
     if (scan.proven && !scan.decoderFailed) return;
     // A resolved file can be ready while the browser waits for a user gesture.
