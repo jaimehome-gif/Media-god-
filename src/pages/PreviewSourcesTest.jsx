@@ -27,6 +27,7 @@ export default function PreviewSourcesTest() {
         <h1 className="text-2xl font-bold">Media God — Sources test preview</h1>
         <p className="text-sm text-white/70">Isolated playback review. This is the actual Sources panel and player, with two generated test clips and simulated catalogue responses. No production accounts or external media are used.</p>
         <p className="text-sm">Open a source using the usual controls, confirm moving picture and an audible tone, then choose the other source manually. The AAC clip intentionally has incomplete initial codec metadata.</p>
+        <Link className="block text-mg-green font-semibold" to="/open-film-sources">Try real openly licensed film Sources</Link>
         <Link className="text-mg-green text-sm font-semibold" to="/browser-decoder-test">Compare standalone decoder test</Link>
         <div ref={mount} />
       </div>
