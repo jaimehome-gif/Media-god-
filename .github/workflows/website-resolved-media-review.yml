@@ -1,0 +1,31 @@
+name: Website resolved media browser review
+on:
+  push:
+    branches: [repair/website-resolved-media-inspection-20261127]
+  pull_request:
+    branches: [review/website-restored-baseline-185dbf0]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+concurrency:
+  group: website-resolved-media-review
+  cancel-in-progress: true
+jobs:
+  generated_media_browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install media fixture tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Verify Chrome
+        run: google-chrome --version
+      - name: Verify targeted website policy and decoder lifecycle
+        run: node --test tests/website-direct-codecs.test.mjs tests/website-decoder-lifecycle.test.mjs
+      - name: Browser integration with generated authorised media
+        run: node scripts/website-direct-player-integration.mjs
