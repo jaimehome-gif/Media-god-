@@ -95,7 +95,9 @@ try {
     ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]]
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
-  for (const [name,v,a,host,full,mobile,strict,torrentMode] of cases) {
+  const runtimeOnly = process.env.MG_RUNTIME_INSPECTION_ONLY === "1";
+  const selectedCases = runtimeOnly ? [["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false]] : cases;
+  for (const [name,v,a,host,full,mobile,strict,torrentMode] of selectedCases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
     if (mobile) {
@@ -135,9 +137,10 @@ try {
       // mount without activation, using CDP explicitly with userGesture:false.
       const input = {name,v,a,full,mixedChoices: full && !mobile && !strict && host === "underworldhub.co.uk"};
       input.automaticFallback = full && !mobile && name === "ac3.mkv";
-      const mount = async ({name,v,a,full,mixedChoices,automaticFallback})=>{
+      input.runtimeInspection = runtimeOnly;
+      const mount = async ({name,v,a,full,mixedChoices,automaticFallback,runtimeInspection})=>{
         const harness = await import("/tests/fixtures/website-direct-player.jsx");
-        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback});
+        return (full ? harness.mountSourcesSample : harness.mountSample)({url:new URL(name,location.href).href,videoCodec:v,audioCodec:a,mixedChoices,automaticFallback,runtimeInspection});
       };
       let gate;
       let panelLookupCount;
@@ -205,6 +208,10 @@ try {
               return samples.some(sample=>Math.abs(sample)>0.005);
             });
         },{timeout:30000});
+        if (runtimeOnly) {
+          await page.waitForFunction(()=>document.querySelector("movi-player")?.src?.includes("sample.mp4"));
+          console.log("PASS missing-metadata owned media rendered frames and non-silent audio after a failed candidate.");
+        }
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
           if (torrentMode === "cooldown") {
