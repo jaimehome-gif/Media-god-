@@ -192,7 +192,14 @@ export function websiteTorrentCandidate(item) {
   // A guessed pending strategy (e.g. rd_magnet) or a provider label is
   // not a confirmed cache miss. Keep it eligible for the existing account
   // resolver; explicit cache misses above still cannot autoplay.
-  if (isTorrent) return true;
+  if (isTorrent) {
+    const info = item.mediaInfo || item.media_info;
+    if (Array.isArray(info?.video_tracks || info?.videoTracks) &&
+        Array.isArray(info?.audio_tracks || info?.audioTracks)) {
+      return testedWebsiteFormat(item, item.src || item.url, true, true);
+    }
+    return true;
+  }
   if (!isTorrent) {
     if (["provider", "external", "youtube", "embed", "live"].includes(String(item.type || "").toLowerCase())) return false;
     const url = item.src || item.url;
