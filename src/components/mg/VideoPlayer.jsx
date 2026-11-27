@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { noWebsiteTorrentMatch, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { noWebsiteTorrentMatch, websiteTorrentCandidate, resolvedWebsiteMediaCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -9078,7 +9078,7 @@ export default function VideoPlayer({
   const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&
     canOpenWebsiteMovi(resolvedSourceUrl, active, rdOverride) &&
     (!filterWebsiteTorrents || !rdOverride?.mediaInfo || rdOverride.audioRescue?.used || rdOverride.videoRescue?.used ||
-      websiteTorrentCandidate({ ...active, mediaInfo: rdOverride.mediaInfo }));
+      resolvedWebsiteMediaCandidate(active, rdOverride));
   // Source discovery may publish more rows while a decoder is opening. Read
   // the latest ranked pool without restarting the active candidate's timeout.
   const websiteScanRef = useRef(null);
