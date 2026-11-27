@@ -3,6 +3,9 @@ on:
   push:
     branches: [test/website-sources-review-20261127]
     paths: ['.github/workflows/preview-sources-origin-review.yml']
+  pull_request:
+    branches: [repair/website-resolved-media-inspection-20261127]
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 jobs:
