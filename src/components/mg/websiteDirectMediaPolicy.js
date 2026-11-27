@@ -182,6 +182,11 @@ export function websiteTorrentCandidate(item) {
     item.debridProvider || item.viaRealDebrid || /^(rd|rd_torrent|torrent|magnet)$/.test(item.type) ||
     /^magnet:/i.test(item.src || item.url || "") ||
     /torrentio|mediafusion|comet|aiostreams/i.test(item.addon || "");
+  // An inspected, secure, already-resolved file is stronger evidence than
+  // stale cache labels copied from a discovery row. Never apply this exception
+  // to an unresolved magnet or a file with unverified media tracks.
+  const resolvedUrl = item.src || item.url;
+  if (item.launchQualified === true && websiteRenditionAllowed(resolvedUrl, item, item)) return true;
   if (item.drm || item.cacheRequired === true || item.debridCacheCheckState === "uncached" ||
       (item.debridCacheChecked === true && item.debridCached === false)) return false;
   if (isTorrent && sourceHasPendingCacheSignal(item)) return false;
