@@ -34,8 +34,9 @@ export async function mountSourcesSample({ url, videoCodec, audioCodec, mixedCho
     mediaInfo:{video_tracks:[{codec:videoCodec}],audio_tracks:[{codec:audioCodec}]}};
   const brokenUrl = new URL("unavailable.mp4", url).href;
   const choices = runtimeInspection ? [
-    { ...item, src: brokenUrl, url: brokenUrl, label: "Unavailable fixture" },
-    { ...item, label: "Owned sample awaiting decoder inspection", mediaInfo: undefined },
+    { ...item, src: brokenUrl, url: brokenUrl, label: "Unverified fixture", mediaInfo: undefined },
+    { ...item, src: new URL("unsupported-audio.mp4", url).href, url: new URL("unsupported-audio.mp4", url).href, label: "Unsupported audio fixture", mediaInfo: { video_tracks: [{codec:"h264"}], audio_tracks: [{codec:"truehd"}] } },
+    { ...item, label: "Verified owned sample" },
   ] : automaticFallback ? [
     { ...item, src: brokenUrl, url: brokenUrl, label: "Unavailable fixture" }, item,
   ] : mixedChoices ? [
