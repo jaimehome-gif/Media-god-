@@ -253,3 +253,23 @@ test("Combined Debrid retains discovery candidates and only presents verified we
   assert.match(box,/\.\.\.displayedAddonStreams\.slice/);
   assert.match(box,/const playCombinedDebrid =[\s\S]*?completeSources: mediaType === "live"\s*\? visibleAddonStreams\s*: visibleAddonStreams/);
 });
+
+// An already inspected personal-library file must not disappear because stale
+// discovery metadata described the earlier, unresolved torrent.
+test("verified library renditions survive stale cache flags but unresolved files do not", () => {
+  const stale = {type:"rd",debridCacheChecked:true,debridCached:false,debridCacheCheckState:"uncached",cacheRequired:true};
+  const verified = {...stale,...item(),type:"file",src:url,launchQualified:true};
+  assert.equal(websiteTorrentCandidate(verified),true);
+  assert.equal(websiteTorrentCandidate({...verified,src:"magnet:?xt=demo"}),false);
+  assert.equal(websiteTorrentCandidate({...verified,mediaInfo:undefined}),false);
+  assert.equal(websiteTorrentCandidate({...verified,drm:true}),false);
+  assert.equal(websiteTorrentCandidate({...verified,headers:{Authorization:"fixture"}}),false);
+  assert.equal(websiteTorrentCandidate({...verified,...item("h264","truehd")}),false);
+  assert.equal(websiteTorrentCandidate({...verified,launchQualified:false}),false);
+});
+test("website Combined Debrid checks the account library even with an empty initial candidate pool", () => {
+  const provider = readFileSync(new URL("../src/components/mg/MediaPlayerProvider.jsx",import.meta.url),"utf8");
+  assert.match(provider,/const websiteAccountLibraryLookup = \(request\?\.openSourcesDrawer \|\| request\?\.debridManual\)/);
+  assert.match(provider,/if \(hasRd && !request\?\.noRd && !request\?\.skipRdLookup && websiteAccountLibraryLookup &&\s*initialPlayableSources\.every/);
+  assert.match(provider,/cached\?\.launchQualified && websiteTorrentCandidate\(cached\)/);
+});
