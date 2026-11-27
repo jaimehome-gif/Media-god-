@@ -294,10 +294,21 @@ test("secure resolved files with missing track metadata may be inspected but are
   }
   assert.equal(websiteRenditionAllowed("https://media.example.test/sample.m4v",item(),item()),true);
 });
-test("website scan distinguishes decoder inspection from runtime-proven file display",()=>{
+test("website scan only admits inspected compatible renditions to the decoder and chooser",()=>{
   const player = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
-  assert.match(player,/autoCheckWebsiteSources && websiteRenditionMayInspect\(resolvedSourceUrl, active, rdOverride\)/);
-  assert.match(player,/frameTime - scan.firstFrameTime > 0.25/);
-  assert.match(player,/setWebsiteProvenFile\(websiteProofKey\)/);
-  assert.match(player,/websiteProvenFile === websiteProofKey &&\s*websiteRenditionMayInspect/);
+  assert.match(player,/allowed: websiteRenditionAllowed\(resolvedSourceUrl, active, rdOverride\),/);
+  assert.equal(player.includes("websiteRenditionMayInspect(resolvedSourceUrl"),false);
+  assert.match(player,/websiteRenditionAllowed\(getSourceUrl\(rendition\), item, rendition\)/);
+  assert.match(player,/mediaInfo: multiData.media_info \|\| multiData.mediaInfo \|\| null/);
+});
+test("confirmed format matrix is the only eligible resolved playback matrix",()=>{
+  const matrix={mp4:{h264:["aac"]},m3u8:{h264:["aac"]},webm:{vp9:["opus"],vp8:["vorbis"]},mkv:{h264:["aac","ac3","eac3","dts","flac","mp3"],hevc:["aac"],av1:["opus"],mpeg4:["mp3"]}};
+  for(const [container,formats] of Object.entries(matrix)) {
+    const path="https://media.example.test/owned-sample."+container;
+    for(const v of ["h264","hevc","vp9","vp8","av1","mpeg4","unknown"]) {
+      for(const a of ["aac","ac3","eac3","dts","flac","mp3","opus","vorbis","truehd","unknown",""]) {
+        assert.equal(websiteRenditionAllowed(path,{},item(v,a)),Boolean(formats[v]?.includes(a)),container+" "+v+" "+a);
+      }
+    }
+  }
 });
