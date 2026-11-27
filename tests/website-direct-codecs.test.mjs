@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { websiteRenditionAllowed, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteRenditionMayInspect, websiteRenditionAllowed, websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -282,4 +282,22 @@ test("actual compatible media tracks take precedence over stale filename hints",
   assert.equal(websiteRenditionAllowed(url,file,{...file,...item("h264","truehd")}),false);
   const high={...file,mediaInfo:{video_tracks:[{codec:"h264",height:2160}],audio_tracks:[{codec:"aac"}]}};
   assert.equal(websiteRenditionAllowed(url,file,high),false);
+});
+
+test("secure resolved files with missing track metadata may be inspected but are not verified choices",()=>{
+  for(const source of [{type:"file",src:url},{type:"file",src:url,mediaInfo:{video_tracks:[{codec:"h264"}]}},{type:"file",src:"https://media.example.test/opaque"}]) {
+    assert.equal(websiteRenditionMayInspect(source.src,source,source),true);
+    assert.equal(websiteRenditionAllowed(source.src,source,source),false);
+  }
+  for(const source of [{...item("h264","truehd"),src:url},{src:url,drm:true},{src:url,headers:{Authorization:"fixture"}},{src:url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}},{src:url,type:"embed"},{src:"magnet:?xt=demo"},{src:"http://media.example.test/sample.mp4"}]) {
+    assert.equal(websiteRenditionMayInspect(source.src,source,source),false);
+  }
+  assert.equal(websiteRenditionAllowed("https://media.example.test/sample.m4v",item(),item()),true);
+});
+test("website scan distinguishes decoder inspection from runtime-proven file display",()=>{
+  const player = readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/autoCheckWebsiteSources && websiteRenditionMayInspect\(resolvedSourceUrl, active, rdOverride\)/);
+  assert.match(player,/frameTime - scan.firstFrameTime > 0.25/);
+  assert.match(player,/setWebsiteProvenFile\(websiteProofKey\)/);
+  assert.match(player,/websiteProvenFile === websiteProofKey &&\s*websiteRenditionMayInspect/);
 });
