@@ -115,8 +115,10 @@ try {
       if (/Maximum update depth exceeded|Too many re-renders|Encountered two children with the same key/i.test(message.text())) renderErrors.push(message.text().slice(0,240));
     });
     page.on("requestfailed",request=>console.error("Fixture request failed:",new URL(request.url()).pathname,request.failure()?.errorText));
+    const rejectedFixtureRequests = [];
     await page.setRequestInterception(true);
     page.on("request",request=>{
+      if (runtimeOnly && /\/(?:unavailable|unsupported-audio)\.mp4(?:[?#]|$)/.test(request.url())) rejectedFixtureRequests.push(request.url());
       if (request.url().startsWith(base.slice(0,base.indexOf("/__mg_fixture/"))+"/") || request.url().startsWith("blob:") || request.url().startsWith("data:")) {
         void request.continue();
       } else {
@@ -214,6 +216,11 @@ try {
         },{timeout:30000});
         if (runtimeOnly) {
           await page.waitForFunction(file=>document.querySelector("movi-player")?.src?.includes(file),{},name);
+          assert.deepEqual(rejectedFixtureRequests, [], "unknown or unsupported file must not be requested by the decoder");
+          await page.click('[data-mg-open-in-player-sources="true"]');
+          const verifiedChoices = await page.$eval('[data-mg-source-choice]',rows=>rows.map(row=>row.textContent));
+          assert.equal(verifiedChoices.length,1);
+          assert.ok(verifiedChoices[0].includes("Verified owned sample"));
           console.log("PASS verified format "+name+" rendered frames and non-silent audio; unverified and unsupported alternatives excluded.");
         }
         if (torrentMode) {
