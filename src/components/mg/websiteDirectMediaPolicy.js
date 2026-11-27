@@ -6,7 +6,7 @@ import { sourceHasPendingCacheSignal } from "./sourceCacheVisibility.js";
 // Installed native apps, including those using the public hostname, are excluded.
 export const isPublicWebsiteVod = ({ hostname, profile, source, isLive }) =>
   !isLive && source?.mediaType !== "live" &&
-  /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
+  /^(?:(?:www\.)?underworldhub\.co\.uk|media-god-audio-test-preview-production\.up\.railway\.app)$/i.test(String(hostname || "")) &&
   profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
   !profile?.nativeFireTv && !profile?.mobileApp && !profile?.fireTv;
 
@@ -18,7 +18,7 @@ export const isWebsiteSourcesPlayback = context =>
 // A TV layout heuristic alone is not evidence of an installed native app.
 export function isWebsiteRateLimitHold({ hostname, profile, source, isLive, error } = {}) {
   return !isLive && source?.mediaType !== "live" &&
-    /^(?:www\.)?underworldhub\.co\.uk$/i.test(String(hostname || "")) &&
+    /^(?:(?:www\.)?underworldhub\.co\.uk|media-god-audio-test-preview-production\.up\.railway\.app)$/i.test(String(hostname || "")) &&
     profile?.nativePlayerAvailable === false && !profile?.nativeAndroidMobile &&
     !profile?.nativeFireTv && !profile?.mobileApp && !profile?.nativePlatform &&
     /(?:rate[\s-]*limit|too many requests|\b429\b)/i.test(String(error || ""));
