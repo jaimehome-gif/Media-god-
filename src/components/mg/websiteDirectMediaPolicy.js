@@ -124,9 +124,10 @@ function testedWebsiteFormat(item, url, inspectedOnly, allowIncomplete = false) 
   if (!inspectedOnly && (highRangeRelease.test(hints) || item.hdr === true || Number(item.height || item.resolution) > 1080)) return false;
   const ext = value => /\.([a-z0-9]{2,5})$/i.exec(String(value || ""))?.[1]?.toLowerCase();
   const path = /^https?:/i.test(url || "") ? String(url).split(/[?#]/)[0] : "";
-  const container = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
+  const detectedContainer = ext(path) || ext(filename) || ({ "video/mp4":"mp4", "video/webm":"webm",
     "video/x-matroska":"mkv", "application/vnd.apple.mpegurl":"m3u8", "application/x-mpegurl":"m3u8" })[
       String(item.mimeType || item.mime_type || item.contentType || "").toLowerCase().split(";")[0]];
+  const container = detectedContainer === "m4v" ? "mp4" : detectedContainer;
   // A missing container is not a negative codec result. Discovery may keep
   // an eligible file pending inspection; the actual decoder gate may not.
   if (container && !Object.prototype.hasOwnProperty.call(testedFormats, container)) return false;
@@ -160,6 +161,19 @@ export function websiteRenditionAllowed(url, original, rendition) {
   const file = rendition || original;
   if ((file?.audioRescue?.used || file?.videoRescue?.used) && !(file.mediaInfo || file.media_info)?.rendition_verified) return false;
   return Boolean(file && testedWebsiteFormat(file, url, true));
+}
+
+// Inspect secure resolved media with incomplete metadata using the same decoder
+// that plays the file. This is not a verified chooser entry; known incompatible
+// tracks, explicit missing tracks, DRM and unsafe transport remain rejected.
+export function websiteRenditionMayInspect(url, original, rendition) {
+  if (!canOpenWebsiteMovi(url, original, rendition)) return false;
+  const file = rendition || original;
+  if (!file || file.live || file.diagnostic ||
+      ["provider","external","youtube","embed","live","status"].includes(String(file.type || "").toLowerCase())) return false;
+  const info = file.mediaInfo || file.media_info;
+  if ((file.audioRescue?.used || file.videoRescue?.used) && !info?.rendition_verified) return false;
+  return testedWebsiteFormat(file, url, true, true);
 }
 
 const highRangeRelease = /\b(?:2160p?|4320p?|4k|8k|uhd|hdr(?:10)?|dolby[ .-]?vision|dovi|dv|(?:10|12)[ .-]?bit|hi10p|main[ .-]?10)\b/i;
