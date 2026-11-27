@@ -1,7 +1,7 @@
 import BrowserSourceVlc from "./BrowserSourceVlc";
 import WebsiteSourcesMovi from "./WebsiteSourcesMovi.jsx";
 import WebsiteAudioDiagnostic from "./WebsiteAudioDiagnostic.jsx";
-import { noWebsiteTorrentMatch, websiteTorrentCandidate, websiteRenditionAllowed, websiteRenditionMayInspect, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
+import { noWebsiteTorrentMatch, websiteTorrentCandidate, websiteRenditionAllowed, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, getBrowserMediaCapabilities, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "./websiteDirectMediaPolicy.js";
 import React, {
   useCallback,
   useEffect,
@@ -5863,6 +5863,7 @@ export default function VideoPlayer({
                     multiData.filename ||
                     "",
                   provider: multiData.provider || debridProvider,
+                  mediaInfo: multiData.media_info || multiData.mediaInfo || null,
                   sourceUrl: magnet,
                 });
                 setRdFiles(
@@ -9075,8 +9076,7 @@ export default function VideoPlayer({
   const publicWebsiteVod = !nativeFireTvPlayer && (isPublicWebsiteVod(websitePlaybackContext) || websiteRateLimitHold);
   const websiteSourcesPlayback = !nativeFireTvPlayer && isWebsiteSourcesPlayback(websitePlaybackContext);
   const websiteDirectMediaCheck = websiteSourcesPlayback && resolvedSourceUrl
-    ? { allowed: websiteRenditionAllowed(resolvedSourceUrl, active, rdOverride) ||
-        (autoCheckWebsiteSources && websiteRenditionMayInspect(resolvedSourceUrl, active, rdOverride)),
+    ? { allowed: websiteRenditionAllowed(resolvedSourceUrl, active, rdOverride),
         reason: "The resolved file does not have a verified website playback format." }
     : null;
   const moviSource = websiteSourcesPlayback && !websiteRateLimitHold && websiteDirectMediaCheck?.allowed;
@@ -9084,11 +9084,9 @@ export default function VideoPlayer({
   // the latest ranked pool without restarting the active candidate's timeout.
   const websiteScanRef = useRef(null);
   const [websiteScanMessage, setWebsiteScanMessage] = useState("");
-  const [websiteProvenFile, setWebsiteProvenFile] = useState("");
   const scanSourceKey = activeResolutionKey;
   const scanRequestKey = JSON.stringify([source?.playRequestId, source?.tmdbId, source?.title,
     source?.season, source?.episode, source?.startTime]);
-  const websiteProofKey = JSON.stringify([scanRequestKey, scanSourceKey, resolvedSourceUrl]);
 
   websiteScanRef.current = () => {
     const scan = websiteScanState.current;
@@ -9121,12 +9119,10 @@ export default function VideoPlayer({
       if (scan.firstFrameTime == null) scan.firstFrameTime = frameTime;
       if (frameTime - scan.firstFrameTime > 0.25) {
         scan.proven = true;
-        setWebsiteProvenFile(websiteProofKey);
         setWebsiteScanMessage("");
         return;
       }
     }
-    if (scan.decoderFailed && websiteProvenFile === websiteProofKey) setWebsiteProvenFile("");
     if (scan.proven && !scan.decoderFailed) return;
     // A resolved file can be ready while the browser waits for a user gesture.
     // Give the viewer time to press Play without consuming the startup timeout.
@@ -10736,9 +10732,7 @@ export default function VideoPlayer({
     if (websiteSourcesPlayback) {
       return !failedSources.has(index) && !item.diagnostic &&
         !["provider", "external", "youtube", "status", "live", "embed"].includes(String(item.type || "").toLowerCase()) &&
-        (websiteRenditionAllowed(getSourceUrl(rendition), item, rendition) ||
-          (Number(index) === activeIdx && websiteProvenFile === websiteProofKey &&
-            websiteRenditionMayInspect(resolvedSourceUrl, item, rendition)));
+        websiteRenditionAllowed(getSourceUrl(rendition), item, rendition);
     }
     return isWebsiteDirectSourceChoice({
       item: rendition, originalItem: item, url: getSourceUrl(rendition),
