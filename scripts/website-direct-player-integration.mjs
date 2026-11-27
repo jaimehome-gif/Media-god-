@@ -96,7 +96,11 @@ try {
       .map(([file,audio])=>[file,file.endsWith(".webm")?"vp9":"h264",audio,"www.underworldhub.co.uk",true]),
   ];
   const runtimeOnly = process.env.MG_RUNTIME_INSPECTION_ONLY === "1";
-  const selectedCases = runtimeOnly ? [["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false]] : cases;
+  const selectedCases = runtimeOnly ? [
+    ["sample.mp4","h264","aac","www.underworldhub.co.uk",true,true,false],
+    ...additionalFormats.map(([file,v,a])=>[file,v,a,"www.underworldhub.co.uk",true,true,false]),
+    ...[["ac3.mkv","ac3"],["eac3.mkv","eac3"],["dts.mkv","dts"],["sample.webm","opus"],["sample.m3u8","aac"]].map(([file,a])=>[file,file.endsWith(".webm")?"vp9":"h264",a,"www.underworldhub.co.uk",true,true,false]),
+  ] : cases;
   for (const [name,v,a,host,full,mobile,strict,torrentMode] of selectedCases) {
     const base = "https://"+host+":"+vite.httpServer.address().port+"/__mg_fixture/";
     const page = await (strict ? strictBrowser : browser).newPage();
@@ -209,8 +213,8 @@ try {
             });
         },{timeout:30000});
         if (runtimeOnly) {
-          await page.waitForFunction(()=>document.querySelector("movi-player")?.src?.includes("sample.mp4"));
-          console.log("PASS missing-metadata owned media rendered frames and non-silent audio after a failed candidate.");
+          await page.waitForFunction(file=>document.querySelector("movi-player")?.src?.includes(file),{},name);
+          console.log("PASS verified format "+name+" rendered frames and non-silent audio; unverified and unsupported alternatives excluded.");
         }
         if (torrentMode) {
           const actions = await page.evaluate(()=>window.fixtureDebridActions);
