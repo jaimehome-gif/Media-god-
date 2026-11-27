@@ -218,7 +218,7 @@ try {
           await page.waitForFunction(file=>document.querySelector("movi-player")?.src?.includes(file),{},name);
           assert.deepEqual(rejectedFixtureRequests, [], "unknown or unsupported file must not be requested by the decoder");
           await page.click('[data-mg-open-in-player-sources="true"]');
-          const verifiedChoices = await page.$eval('[data-mg-source-choice]',rows=>rows.map(row=>row.textContent));
+          const verifiedChoices = await page.evaluate(()=>Array.from(document.querySelectorAll('[data-mg-source-choice]'),row=>row.textContent));
           assert.equal(verifiedChoices.length,1);
           assert.ok(verifiedChoices[0].includes("Verified owned sample"));
           console.log("PASS verified format "+name+" rendered frames and non-silent audio; unverified and unsupported alternatives excluded.");
