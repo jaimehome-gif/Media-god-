@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { websiteTorrentCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
+import { websiteTorrentCandidate, resolvedWebsiteMediaCandidate, canOpenWebsiteMovi, isWebsiteRateLimitHold, isPublicWebsiteVod, isWebsiteSourcesPlayback, checkWebsiteDirectMedia, isWebsiteDirectSourceChoice, isWebsiteSavedPersonalPendingChoice } from "../src/components/mg/websiteDirectMediaPolicy.js";
 
 const profile = {nativePlayerAvailable:false};
 const context = {hostname:"underworldhub.co.uk",profile,source:{openSourcesDrawer:true},isLive:false};
@@ -215,4 +215,38 @@ test("website catalogue excludes pending releases and unsuitable direct links", 
   assert.equal(websiteTorrentCandidate({url,...item("h264","")}),true);
   assert.equal(websiteTorrentCandidate({url,mediaInfo:{video_tracks:[{codec:"h264"}],audio_tracks:[]}}),false);
   assert.equal(websiteTorrentCandidate({url:"https://example.test/opaque",...item("h264","aac")}),true);
+});
+
+
+test("resolved personal-media inspection uses the actual tracks rather than stale catalogue labels", () => {
+  const original = { type:"url", url, label:"Owned test clip" };
+  const ready = item("h264","aac");
+  assert.equal(resolvedWebsiteMediaCandidate(original, ready), true);
+  assert.equal(resolvedWebsiteMediaCandidate({...original, label:"Old label 4K HDR"}, ready), true);
+  for (const mediaInfo of [
+    {video_tracks:[{codec:"h264"}]},
+    {video_tracks:[{codec:"h264"}], audio_tracks:[{}]},
+    {audio_tracks:[{codec:"aac"}]},
+  ]) {
+    const pending = {mediaInfo};
+    assert.equal(resolvedWebsiteMediaCandidate(original, pending), true);
+    assert.equal(checkWebsiteDirectMedia({url,item:pending,originalItem:original,...caps}).allowed,false);
+  }
+  for (const mediaInfo of [
+    {video_tracks:[],audio_tracks:[{codec:"aac"}]},
+    {video_tracks:[{codec:"h264"}],audio_tracks:[]},
+    {video_tracks:[{codec:"h264"}],audio_tracks:[{codec:"truehd"}]},
+    {video_tracks:[{codec:"hevc",height:2160}],audio_tracks:[{codec:"aac"}]},
+  ]) assert.equal(resolvedWebsiteMediaCandidate(original,{mediaInfo}),false);
+  assert.equal(resolvedWebsiteMediaCandidate({...original,drm:true},ready),false);
+  assert.equal(resolvedWebsiteMediaCandidate({...original,cacheRequired:true},ready),false);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p"}),false);
+  assert.equal(websiteTorrentCandidate({type:"rd",label:"1080p H264 AAC"}),true);
+});
+
+test("resolved inspection stays in the website Sources path", () => {
+  const player=readFileSync(new URL("../src/components/mg/VideoPlayer.jsx",import.meta.url),"utf8");
+  assert.match(player,/const moviSource = websiteSourcesPlayback && !websiteRateLimitHold &&/);
+  assert.match(player,/resolvedWebsiteMediaCandidate\(active, rdOverride\)/);
+  assert.match(player,/mergedSources\.filter\(websiteTorrentCandidate\)/);
 });
