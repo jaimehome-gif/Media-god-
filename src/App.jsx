@@ -132,14 +132,6 @@ const AuthenticatedApp = () => {
 };
 
 function App() {
-  // The existing Railway test service is intentionally credential-free.
-  // No catalogue, account providers or playback resolution on that host.
-  if (globalThis.location?.hostname === "media-god-audio-test-preview-production.up.railway.app") {
-    return <Router><Routes>
-      <Route path="/browser-decoder-test" element={<Suspense fallback={<p>Loading decoder test…</p>}><BrowserDecoderTest /></Suspense>} />
-      <Route path="*" element={<Navigate to="/browser-decoder-test" replace />} />
-    </Routes></Router>;
-  }
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
