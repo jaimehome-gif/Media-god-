@@ -49,7 +49,9 @@ export default function PreviewAccountSources() {
   const change=(key,value)=>setForm(f=>({...f,[key]:value}));
   const find=e=>{
     e.preventDefault();
-    if(!account||!authorised||!form.title.trim()||!(/^tt\d+$/.test(form.imdbId.trim())||/^\d+$/.test(form.tmdbId.trim())))return;
+    if(!account||!authorised)return;
+    if(!form.title.trim()||!(/^tt\d+$/.test(form.imdbId.trim())||/^\d+$/.test(form.tmdbId.trim()))){setMessage("Enter a title and a valid IMDb or TMDB ID.");return;}
+    setMessage("");
     setSelected({...form,title:form.title.trim(),imdbId:form.imdbId.trim(),tmdbId:form.tmdbId.trim() ? Number(form.tmdbId) : undefined,requestId:Date.now()});
   };
   if(!onPreview)return null;
@@ -77,7 +79,7 @@ export default function PreviewAccountSources() {
           <button disabled={!authorised} className="rounded bg-mg-green text-black font-semibold p-3 disabled:opacity-50">Find Sources</button>
         </form>
         <QueryClientProvider client={queryClientInstance}><PlayerProvider>
-          {selected&&authorised&&<Sources key={selected.requestId} title={selected.title} tmdbId={selected.tmdbId} imdbId={selected.imdbId} rdYear={selected.year} mediaType={selected.mediaType} season={selected.mediaType==="tv"?Number(selected.season):null} episode={selected.mediaType==="tv"?Number(selected.episode):null} providers={[]} torrentOnly />}
+          {selected&&authorised&&<Sources key={selected.requestId} title={selected.title} tmdbId={selected.tmdbId} imdbId={selected.imdbId} rdYear={selected.year} mediaType={selected.mediaType} season={selected.mediaType==="tv"?Number(selected.season):null} episode={selected.mediaType==="tv"?Number(selected.episode):null} providers={[]} />}
         </PlayerProvider></QueryClientProvider>
       </>}
       {message&&<p role="status">{message}</p>}
