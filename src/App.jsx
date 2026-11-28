@@ -26,6 +26,7 @@ const PersonalSourcesPage = lazy(() => import("@/pages/PersonalSourcesPage"));
 const BrowserDecoderTest = lazy(() => import("@/pages/BrowserDecoderTest"));
 const PreviewSourcesTest = lazy(() => import("@/pages/PreviewSourcesTest"));
 const PreviewOpenFilmSources = lazy(() => import("@/pages/PreviewOpenFilmSources"));
+const PreviewAccountSources = lazy(() => import("@/pages/PreviewAccountSources"));
 const UpdatesHistory = lazy(() => import("@/components/mg/UpdatesView"));
 
 const AuthenticatedApp = () => {
@@ -140,6 +141,7 @@ function App() {
     return <Router><Routes>
       <Route path="/browser-decoder-test" element={<Suspense fallback={<p>Loading decoder test…</p>}><BrowserDecoderTest /></Suspense>} />
       <Route path="/open-film-sources" element={<Suspense fallback={<p>Loading live open-film sources…</p>}><PreviewOpenFilmSources /></Suspense>} />
+      <Route path="/account-sources" element={<Suspense fallback={<p>Loading account Sources…</p>}><PreviewAccountSources /></Suspense>} />
       <Route path="/sources-test" element={<Suspense fallback={<p>Loading Sources test…</p>}><PreviewSourcesTest /></Suspense>} />
       <Route path="*" element={<Navigate to="/sources-test" replace />} />
     </Routes></Router>;
