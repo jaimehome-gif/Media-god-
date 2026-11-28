@@ -4,7 +4,7 @@ import { base44 } from "../../src/api/base44Client";
 import { PlayerProvider } from "../../src/components/mg/PlayerProvider";
 import Sources from "../../src/components/mg/MediaStreamSourcesBox";
 
-export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
+export function mountTorrentTitle({ url, mode, videoCodec, audioCodec, container = document.querySelector("#root") }) {
   const hash = "ac".repeat(20);
   const magnet = "magnet:?xt=urn:btih:" + hash;
   const item = {
@@ -29,7 +29,7 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
       audio_tracks: [{codec:audioCodec,language:"English"}],
     };
   }
-  if (mode === "late-codec") {
+  if (mode === "late-codec" || mode === "preview") {
     // The actual generated MP4 has H264 and AAC; only the inspection label is late.
     // Keep the original valid catalogue candidate and verify actual decoder output.
     item.rdTorrentId = ready.torrent_id;
@@ -44,6 +44,12 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
     { ...item, rdTorrentId: "broken" },
     { ...item, id: "second", label: "Owned Test Clip 2025 English 720p x264 AAC", infoHash: "bd".repeat(20),
       src: "magnet:?xt=urn:btih:" + "bd".repeat(20), url: "", magnet: "", rdTorrentId: "working" },
+  ] : mode === "preview" ? [
+    item,
+    { ...item, id:"second-audio", label:"Owned Test Clip 2025 English 720p x264 AC3",
+      infoHash:"bd".repeat(20), src:"magnet:?xt=urn:btih:"+"bd".repeat(20),
+      url:"magnet:?xt=urn:btih:"+"bd".repeat(20), magnet:"magnet:?xt=urn:btih:"+"bd".repeat(20),
+      rdTorrentId:"owned-ac3-fixture" },
   ] : [item];
   window.fixtureLookups = 0;
   window.fixtureDebridActions = [];
@@ -85,15 +91,18 @@ export function mountTorrentTitle({ url, mode, videoCodec, audioCodec }) {
         return { data: { status: "preparing", torrent_id: ready.torrent_id, rd_status: "downloading",
           torrent_progress: { progress: 95, status: "downloading" } } };
       }
+      if (mode === "preview" && params.torrent_id === "owned-ac3-fixture") return {data:{...ready, torrent_id:"owned-ac3-fixture", filename:"Owned AC3 clip.mkv", stream_url:new URL("ac3.mkv",url).href, media_info:{video_tracks:[{codec:"h264",height:180}],audio_tracks:[{codec:"ac3",language:"English"}]}}};
       if (["torrent_info", "resolve_best", "adopt_hash"].includes(params.action)) {
         return { data: ready };
       }
     }
     return { data: {} };
   };
-  createRoot(document.querySelector("#root")).render(
+  const root = createRoot(container);
+  root.render(
     <PlayerProvider>
       <Sources title="Owned Test Clip" imdbId="tt9999999" tmdbId={9999999} rdYear={2025} mediaType="movie" />
     </PlayerProvider>
   );
+  return () => { root.unmount(); base44.functions.invoke = invoke; };
 }

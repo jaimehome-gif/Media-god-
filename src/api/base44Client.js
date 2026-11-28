@@ -48,7 +48,7 @@ const playbackRateLimitError = seconds => {
 };
 const call = async (endpoint, path, { method="GET", body, token=getIndependentSessionToken(), timeoutMs=20000 }={}) => {
   const playbackRequest = endpoint === RD_API && path === "/functions/realDebrid";
-  const website = /^(?:www\.)?underworldhub\.co\.uk$/i.test(globalThis.location?.hostname || "") &&
+  const website = /^(?:(?:www\.)?underworldhub\.co\.uk|media-god-audio-test-preview-production\.up\.railway\.app)$/i.test(globalThis.location?.hostname || "") &&
     !globalThis.window?.MediaGodNative;
   if (playbackRequest) {
     let until = playbackCooldown.session === token ? playbackCooldown.until : 0;

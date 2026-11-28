@@ -1,0 +1,38 @@
+name: Preview Sources origin verification
+on:
+  push:
+    branches: [test/website-sources-review-20261127]
+    paths: ['.github/workflows/preview-sources-origin-review.yml']
+  pull_request:
+    branches: [repair/website-resolved-media-inspection-20261127]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  verify_preview_origins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check existing API CORS permission without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin='https://media-god-audio-test-preview-production.up.railway.app'
+          failed=0
+          for endpoint in \
+            'https://media-god-identity-api-production.up.railway.app/auth/login' \
+            'https://media-god-rd-independent-api-production.up.railway.app/functions/realDebrid' \
+            'https://media-god-metadata-api-production-71e5c33c.up.railway.app/functions/getTmdbMovies'; do
+            printf '\nEndpoint: %s\n' "$endpoint"
+            headers="$(mktemp)"
+            if status="$(curl -sS --max-time 15 -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: authorization,content-type' "$endpoint")"; then
+              allowed="$(awk 'tolower($1)=="access-control-allow-origin:" {gsub(/\r/,"",$2);print $2}' "$headers")"
+              printf 'Status: %s; allowed origin: %s\n' "$status" "$allowed"
+              if [[ "$status" != 2* || "$allowed" != "$origin" ]]; then failed=1; fi
+            else
+              echo 'Network request failed'
+              failed=1
+            fi
+            rm -f "$headers"
+          done
+          exit "$failed"
